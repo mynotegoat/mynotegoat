@@ -1,0 +1,1618 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useBillingMacros } from "@/hooks/use-billing-macros";
+import { useEncounterNotes } from "@/hooks/use-encounter-notes";
+import { useMacroTemplates } from "@/hooks/use-macro-templates";
+import { useOfficeSettings } from "@/hooks/use-office-settings";
+import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
+import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
+import {
+  encounterSections,
+  normalizeEncounterDateInput,
+  type EncounterMacroRunRecord,
+  type EncounterSection,
+} from "@/lib/encounter-notes";
+import {
+  renderMacroTemplate,
+  type MacroAnswerMap,
+  type MacroTemplate,
+} from "@/lib/macro-templates";
+import { patients } from "@/lib/mock-data";
+import { appointmentStatusOptions, type AppointmentStatus } from "@/lib/schedule-appointments";
+
+type EncounterWorkspaceProps = {
+  initialPatientId?: string;
+  initialEncounterId?: string;
+};
+
+function getNames(fullName: string) {
+  const [lastName = "", firstName = ""] = fullName.split(",").map((value) => value.trim());
+  return { firstName, lastName };
+}
+
+function normalizeLookupText(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function toUsDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-");
+    return `${month}/${day}/${year}`;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(trimmed)) {
+    const [month, day, year2] = trimmed.split("/");
+    return `${month}/${day}/20${year2}`;
+  }
+
+  return "";
+}
+
+function parseUsDate(value: string) {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (!month || !day || !year) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getFullYear() !== year
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function getAgeFromDob(dob: string) {
+  const parsed = parseUsDate(toUsDate(dob));
+  if (!parsed) {
+    return "";
+  }
+  const now = new Date();
+  let age = now.getFullYear() - parsed.getFullYear();
+  const monthDiff = now.getMonth() - parsed.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < parsed.getDate())) {
+    age -= 1;
+  }
+  return age > 0 ? `${age}` : "";
+}
+
+function getPronouns(sex?: string) {
+  const normalized = (sex ?? "").toLowerCase();
+  if (normalized === "female") {
+    return { heShe: "she", himHer: "her", hisHer: "her" };
+  }
+  if (normalized === "male") {
+    return { heShe: "he", himHer: "him", hisHer: "his" };
+  }
+  return { heShe: "they", himHer: "them", hisHer: "their" };
+}
+
+function getHonorifics(sex?: string, maritalStatus?: string, lastName?: string) {
+  const normalizedSex = (sex ?? "").toLowerCase();
+  const normalizedMarital = (maritalStatus ?? "").toLowerCase();
+  let formal = "Mx.";
+  let neutral = "Mx.";
+  if (normalizedSex === "male") {
+    formal = "Mr.";
+    neutral = "Mr.";
+  } else if (normalizedSex === "female") {
+    formal = normalizedMarital === "married" ? "Mrs." : "Ms.";
+    neutral = "Ms.";
+  }
+  const safeLastName = (lastName ?? "").trim();
+  return {
+    mrMrsMs: formal,
+    mrMs: neutral,
+    mrMrsMsLastName: safeLastName ? `${formal} ${safeLastName}` : formal,
+    mrMsLastName: safeLastName ? `${neutral} ${safeLastName}` : neutral,
+  };
+}
+
+function toSortStamp(encounterDate: string) {
+  const parsedDate = parseUsDate(encounterDate);
+  if (!parsedDate) {
+    return 0;
+  }
+  const stamp = new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate(),
+    0,
+    0,
+    0,
+    0,
+  ).getTime();
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+const sectionLabels: Record<EncounterSection, string> = {
+  subjective: "Subjective",
+  objective: "Objective",
+  assessment: "Assessment",
+  plan: "Plan",
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatSoapText(text: string) {
+  const safe = escapeHtml(text.trim() || "-");
+  return safe.replace(/\n/g, "<br />");
+}
+
+function buildSoapPrintHtml(config: {
+  officeName: string;
+  officeAddress: string;
+  officePhone: string;
+  officeFax: string;
+  officeEmail: string;
+  logoDataUrl: string;
+  patientName: string;
+  encounters: Array<{
+    id: string;
+    encounterDate: string;
+    provider: string;
+    appointmentType: string;
+    signed: boolean;
+    soap: Record<EncounterSection, string>;
+  }>;
+}) {
+  const logoMarkup = config.logoDataUrl.trim()
+    ? `<img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" class="logo" />`
+    : "";
+  const encounterMarkup = config.encounters
+    .map((encounter) => {
+      return `<section class="encounter">
+  <h2>${escapeHtml(encounter.encounterDate)} • ${escapeHtml(encounter.appointmentType)}</h2>
+  <p class="meta">Provider: ${escapeHtml(encounter.provider)} • Status: ${
+        encounter.signed ? "Closed" : "Open"
+      }</p>
+  <div class="soap-grid">
+    <article><h3>Subjective</h3><p>${formatSoapText(encounter.soap.subjective)}</p></article>
+    <article><h3>Objective</h3><p>${formatSoapText(encounter.soap.objective)}</p></article>
+    <article><h3>Assessment</h3><p>${formatSoapText(encounter.soap.assessment)}</p></article>
+    <article><h3>Plan</h3><p>${formatSoapText(encounter.soap.plan)}</p></article>
+  </div>
+</section>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SOAP Notes - ${escapeHtml(config.patientName)}</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px;
+        background: #fff;
+        color: #13293d;
+        font-family: "Georgia", "Times New Roman", serif;
+      }
+      .wrapper {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      .header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .logo {
+        max-height: 90px;
+        width: auto;
+        object-fit: contain;
+        display: block;
+      }
+      .office p {
+        margin: 0 0 4px 0;
+      }
+      .title {
+        margin: 14px 0 4px 0;
+        font-size: 26px;
+      }
+      .subtitle {
+        margin: 0 0 14px 0;
+        color: #45617a;
+      }
+      .encounter {
+        border: 1px solid #d4e1ed;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 14px;
+        break-inside: avoid;
+      }
+      .encounter h2 {
+        margin: 0 0 2px 0;
+        font-size: 19px;
+      }
+      .meta {
+        margin: 0 0 10px 0;
+        color: #45617a;
+        font-size: 13px;
+      }
+      .soap-grid {
+        display: grid;
+        gap: 10px;
+      }
+      .soap-grid article {
+        border: 1px solid #e4edf5;
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .soap-grid h3 {
+        margin: 0 0 4px 0;
+        font-size: 14px;
+      }
+      .soap-grid p {
+        margin: 0;
+        white-space: normal;
+        word-break: break-word;
+        line-height: 1.45;
+        font-size: 14px;
+      }
+      @page {
+        size: Letter;
+        margin: 0.55in;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrapper">
+      <header class="header">
+        <div class="office">
+          <p><strong>${escapeHtml(config.officeName)}</strong></p>
+          <p>${escapeHtml(config.officeAddress)}</p>
+          <p>T. ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` &nbsp; F. ${escapeHtml(config.officeFax)}` : ""}</p>
+          <p>${escapeHtml(config.officeEmail)}</p>
+        </div>
+        ${logoMarkup}
+      </header>
+      <h1 class="title">SOAP Notes</h1>
+      <p class="subtitle">Patient: ${escapeHtml(config.patientName)}</p>
+      ${encounterMarkup || "<p>No encounters found for this patient.</p>"}
+    </main>
+  </body>
+</html>`;
+}
+
+function printHtmlWithIframeFallback(printableHtml: string) {
+  const popup = window.open("", "_blank");
+  if (popup) {
+    popup.document.open();
+    popup.document.write(printableHtml);
+    popup.document.close();
+    if (popup.document.readyState === "complete") {
+      setTimeout(() => {
+        popup.focus();
+        popup.print();
+      }, 80);
+    } else {
+      popup.onload = () => {
+        setTimeout(() => {
+          popup.focus();
+          popup.print();
+        }, 80);
+      };
+    }
+    return true;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.opacity = "0";
+  iframe.style.pointerEvents = "none";
+  iframe.style.border = "0";
+  document.body.appendChild(iframe);
+
+  const frameDocument = iframe.contentDocument ?? iframe.contentWindow?.document;
+  const frameWindow = iframe.contentWindow;
+  if (!frameDocument || !frameWindow) {
+    iframe.remove();
+    return false;
+  }
+
+  frameDocument.open();
+  frameDocument.write(printableHtml);
+  frameDocument.close();
+
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    iframe.remove();
+  };
+
+  frameWindow.onafterprint = cleanup;
+  setTimeout(cleanup, 6000);
+  setTimeout(() => {
+    try {
+      frameWindow.focus();
+      frameWindow.print();
+    } catch {
+      cleanup();
+    }
+  }, 120);
+  return true;
+}
+
+export function EncounterWorkspace({ initialPatientId, initialEncounterId }: EncounterWorkspaceProps) {
+  const { macroLibrary } = useMacroTemplates();
+  const { billingMacros } = useBillingMacros();
+  const { officeSettings } = useOfficeSettings();
+  const { appointmentTypes } = useScheduleAppointmentTypes();
+  const { scheduleAppointments, updateAppointment } = useScheduleAppointments();
+  const {
+    encountersByNewest,
+    updateEncounter,
+    setSoapSection,
+    addMacroRun,
+    updateMacroRun,
+    appendSoapSection,
+    addCharge,
+    updateCharge,
+    removeCharge,
+    setSigned,
+    deleteEncounter,
+  } = useEncounterNotes();
+
+  const initialEncounterSearchValue = useMemo(() => {
+    if (!initialPatientId) {
+      return "";
+    }
+    return patients.find((entry) => entry.id === initialPatientId)?.fullName ?? "";
+  }, [initialPatientId]);
+
+  const [activeSection, setActiveSection] = useState<EncounterSection>("subjective");
+  const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(initialEncounterId ?? null);
+  const [encounterSearch, setEncounterSearch] = useState(initialEncounterSearchValue);
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
+  const [message, setMessage] = useState("");
+  const [printSelectionByPatient, setPrintSelectionByPatient] = useState<Record<string, string[]>>({});
+  const [openChargesPanel, setOpenChargesPanel] = useState(false);
+  const [chargeSearch, setChargeSearch] = useState("");
+
+  const [runMacroId, setRunMacroId] = useState<string | null>(null);
+  const [editingMacroRunId, setEditingMacroRunId] = useState<string | null>(null);
+  const [runMacroAnswers, setRunMacroAnswers] = useState<MacroAnswerMap>({});
+  const [saltSourceEncounterIdDraft, setSaltSourceEncounterIdDraft] = useState("");
+
+  const selectedEncounterPatientId = useMemo(() => {
+    if (!selectedEncounterId) {
+      return null;
+    }
+    return encountersByNewest.find((entry) => entry.id === selectedEncounterId)?.patientId ?? null;
+  }, [encountersByNewest, selectedEncounterId]);
+
+  const filteredEncounterList = useMemo(() => {
+    const query = normalizeLookupText(encounterSearch);
+    if (!query) {
+      return [];
+    }
+    const scopedEntries = encountersByNewest
+      .filter((entry) => {
+        if (statusFilter === "open") {
+          return !entry.signed;
+        }
+        if (statusFilter === "closed") {
+          return entry.signed;
+        }
+        return true;
+      })
+      .filter((entry) => {
+        return normalizeLookupText(entry.patientName).includes(query);
+      });
+    if (!scopedEntries.length) {
+      return [];
+    }
+
+    const activePatientId =
+      selectedEncounterPatientId &&
+      scopedEntries.some((entry) => entry.patientId === selectedEncounterPatientId)
+        ? selectedEncounterPatientId
+        : scopedEntries[0]?.patientId ?? null;
+    if (!activePatientId) {
+      return [];
+    }
+
+    return scopedEntries
+      .filter((entry) => entry.patientId === activePatientId)
+      .sort((left, right) => {
+        const byDate = toSortStamp(right.encounterDate) - toSortStamp(left.encounterDate);
+        if (byDate !== 0) {
+          return byDate;
+        }
+        return right.updatedAt.localeCompare(left.updatedAt);
+      });
+  }, [encounterSearch, encountersByNewest, selectedEncounterPatientId, statusFilter]);
+
+  const initialPatientEncounterId = useMemo(() => {
+    if (!initialPatientId) {
+      return null;
+    }
+    return encountersByNewest.find((entry) => entry.patientId === initialPatientId)?.id ?? null;
+  }, [encountersByNewest, initialPatientId]);
+
+  const resolvedEncounterId =
+    selectedEncounterId && encountersByNewest.some((entry) => entry.id === selectedEncounterId)
+      ? selectedEncounterId
+      : initialPatientEncounterId && filteredEncounterList.some((entry) => entry.id === initialPatientEncounterId)
+        ? initialPatientEncounterId
+        : filteredEncounterList[0]?.id ?? null;
+
+  const selectedEncounter = useMemo(
+    () => encountersByNewest.find((entry) => entry.id === resolvedEncounterId) ?? null,
+    [encountersByNewest, resolvedEncounterId],
+  );
+
+  const selectedPatient = useMemo(
+    () =>
+      (selectedEncounter
+        ? patients.find((entry) => entry.id === selectedEncounter.patientId)
+        : null) ?? null,
+    [selectedEncounter],
+  );
+  const priorPatientEncounters = useMemo(() => {
+    if (!selectedEncounter) {
+      return [];
+    }
+    return encountersByNewest
+      .filter(
+        (entry) =>
+          entry.patientId === selectedEncounter.patientId &&
+          entry.id !== selectedEncounter.id,
+      )
+      .sort((left, right) => {
+        const byDate = toSortStamp(right.encounterDate) - toSortStamp(left.encounterDate);
+        if (byDate !== 0) {
+          return byDate;
+        }
+        return right.updatedAt.localeCompare(left.updatedAt);
+      });
+  }, [encountersByNewest, selectedEncounter]);
+  const filteredEncounterListByOldest = useMemo(
+    () =>
+      [...filteredEncounterList].sort((left, right) => {
+        const byDate = toSortStamp(left.encounterDate) - toSortStamp(right.encounterDate);
+        if (byDate !== 0) {
+          return byDate;
+        }
+        return left.updatedAt.localeCompare(right.updatedAt);
+      }),
+    [filteredEncounterList],
+  );
+  const filteredEncounterPatientId = filteredEncounterList[0]?.patientId ?? null;
+  const filteredEncounterPatientName = filteredEncounterList[0]?.patientName ?? "";
+  const appointmentTypeOptions = useMemo(() => {
+    const names = appointmentTypes.map((entry) => entry.name);
+    if (selectedEncounter && !names.includes(selectedEncounter.appointmentType)) {
+      return [selectedEncounter.appointmentType, ...names];
+    }
+    return names;
+  }, [appointmentTypes, selectedEncounter]);
+  const linkedAppointmentsForEncounter = useMemo(() => {
+    if (!selectedEncounter) {
+      return [];
+    }
+    return scheduleAppointments
+      .filter(
+        (entry) =>
+          entry.patientId === selectedEncounter.patientId &&
+          toUsDate(entry.date) === selectedEncounter.encounterDate,
+      )
+      .sort((left, right) => left.startTime.localeCompare(right.startTime));
+  }, [scheduleAppointments, selectedEncounter]);
+  const linkedAppointmentForStatus = useMemo(() => {
+    if (!selectedEncounter) {
+      return null;
+    }
+    return (
+      linkedAppointmentsForEncounter.find(
+        (entry) => entry.appointmentType.toLowerCase() === selectedEncounter.appointmentType.toLowerCase(),
+      ) ??
+      linkedAppointmentsForEncounter[0] ??
+      null
+    );
+  }, [linkedAppointmentsForEncounter, selectedEncounter]);
+  const scheduleStatusValue: AppointmentStatus = linkedAppointmentForStatus?.status ?? "Scheduled";
+  const selectedSoapPrintEncounterIds = useMemo(() => {
+    if (!filteredEncounterPatientId) {
+      return [];
+    }
+    const explicit = printSelectionByPatient[filteredEncounterPatientId];
+    if (explicit) {
+      const allowedIds = new Set(filteredEncounterListByOldest.map((entry) => entry.id));
+      return explicit.filter((entryId) => allowedIds.has(entryId));
+    }
+    return filteredEncounterListByOldest.map((entry) => entry.id);
+  }, [filteredEncounterListByOldest, filteredEncounterPatientId, printSelectionByPatient]);
+  const resolvedSaltSourceEncounterId = priorPatientEncounters.some(
+    (entry) => entry.id === saltSourceEncounterIdDraft,
+  )
+    ? saltSourceEncounterIdDraft
+    : "";
+  const saltSourceEncounter = useMemo(
+    () =>
+      priorPatientEncounters.find(
+        (entry) => entry.id === resolvedSaltSourceEncounterId,
+      ) ?? null,
+    [priorPatientEncounters, resolvedSaltSourceEncounterId],
+  );
+
+  const sectionMacros = useMemo(
+    () =>
+      macroLibrary.templates.filter(
+        (entry) => entry.section === activeSection && entry.active,
+      ),
+    [activeSection, macroLibrary.templates],
+  );
+
+  const activeTreatments = useMemo(
+    () => billingMacros.treatments.filter((entry) => entry.active),
+    [billingMacros.treatments],
+  );
+
+  const filteredActiveTreatments = useMemo(() => {
+    const query = chargeSearch.trim().toLowerCase();
+    if (!query) {
+      return activeTreatments;
+    }
+    return activeTreatments.filter((entry) => {
+      return (
+        entry.name.toLowerCase().includes(query) ||
+        entry.procedureCode.toLowerCase().includes(query)
+      );
+    });
+  }, [activeTreatments, chargeSearch]);
+
+  const runMacro = useMemo(
+    () => macroLibrary.templates.find((entry) => entry.id === runMacroId) ?? null,
+    [macroLibrary.templates, runMacroId],
+  );
+  const sectionMacroRuns = useMemo(() => {
+    if (!selectedEncounter) {
+      return [];
+    }
+    return selectedEncounter.macroRuns
+      .filter((entry) => entry.section === activeSection)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }, [activeSection, selectedEncounter]);
+  const editingMacroRun = useMemo(() => {
+    if (!editingMacroRunId) {
+      return null;
+    }
+    return sectionMacroRuns.find((entry) => entry.id === editingMacroRunId) ?? null;
+  }, [editingMacroRunId, sectionMacroRuns]);
+
+  const buildMacroContext = (patientId: string) => {
+    const patient = patients.find((entry) => entry.id === patientId);
+    const names = getNames(patient?.fullName ?? "");
+    const pronouns = getPronouns(patient?.sex);
+    const honorifics = getHonorifics(patient?.sex, patient?.maritalStatus, names.lastName);
+    return {
+      FIRST_NAME: names.firstName,
+      LAST_NAME: names.lastName,
+      FULL_NAME: `${names.firstName} ${names.lastName}`.trim(),
+      AGE: getAgeFromDob(patient?.dob ?? ""),
+      SEX: patient?.sex ?? "",
+      DOB: toUsDate(patient?.dob ?? ""),
+      INJURY_DATE: toUsDate(patient?.dateOfLoss ?? ""),
+      ATTORNEY: patient?.attorney ?? "",
+      HE_SHE: pronouns.heShe,
+      HIM_HER: pronouns.himHer,
+      HIS_HER: pronouns.hisHer,
+      MR_MRS_MS: honorifics.mrMrsMs,
+      MR_MRS_MS_LAST_NAME: honorifics.mrMrsMsLastName,
+      MR_MS_LAST_NAME: honorifics.mrMsLastName,
+    };
+  };
+
+  const applyMacroTemplate = (
+    macro: MacroTemplate,
+    answers: MacroAnswerMap,
+    existingRun?: EncounterMacroRunRecord | null,
+  ) => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to add SOAP macro text.");
+      return;
+    }
+    const context = buildMacroContext(selectedEncounter.patientId);
+    const generatedText = renderMacroTemplate(macro.body, answers, context);
+    if (!generatedText.trim()) {
+      setMessage("Generated macro output was empty.");
+      return;
+    }
+    if (existingRun) {
+      const currentSectionText = selectedEncounter.soap[activeSection];
+      const existingSnippet = existingRun.generatedText;
+      const existingIndex = existingSnippet ? currentSectionText.indexOf(existingSnippet) : -1;
+      const nextSectionText =
+        existingIndex >= 0
+          ? `${currentSectionText.slice(0, existingIndex)}${generatedText}${currentSectionText.slice(
+              existingIndex + existingSnippet.length,
+            )}`
+          : currentSectionText.trim()
+            ? `${currentSectionText.trim()}\n\n${generatedText}`
+            : generatedText;
+      setSoapSection(selectedEncounter.id, activeSection, nextSectionText);
+      updateMacroRun(selectedEncounter.id, existingRun.id, {
+        answers: { ...answers },
+        generatedText,
+      });
+      setMessage(`${sectionLabels[activeSection]} macro updated: ${macro.buttonName}.`);
+      return;
+    }
+
+    appendSoapSection(selectedEncounter.id, activeSection, generatedText);
+    addMacroRun(selectedEncounter.id, {
+      section: activeSection,
+      macroId: macro.id,
+      macroName: macro.buttonName,
+      body: macro.body,
+      answers: { ...answers },
+      generatedText,
+    });
+    setMessage(`${sectionLabels[activeSection]} updated from macro: ${macro.buttonName}.`);
+  };
+
+  const handleRunMacroClick = (macro: MacroTemplate) => {
+    if (!selectedEncounter) {
+      setMessage("Select an encounter first.");
+      return;
+    }
+    if (!macro.questions.length) {
+      applyMacroTemplate(macro, {});
+      return;
+    }
+    const initialAnswers: MacroAnswerMap = {};
+    macro.questions.forEach((question) => {
+      if (question.multiSelect) {
+        initialAnswers[question.id] = [];
+        return;
+      }
+      initialAnswers[question.id] = question.options[0] ?? "";
+    });
+    setEditingMacroRunId(null);
+    setRunMacroAnswers(initialAnswers);
+    setRunMacroId(macro.id);
+  };
+
+  const handleEditExistingMacroRun = (run: EncounterMacroRunRecord) => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to edit macro answers.");
+      return;
+    }
+    const macro = macroLibrary.templates.find((entry) => entry.id === run.macroId);
+    if (!macro || !macro.active) {
+      setMessage("This macro is unavailable. It may have been removed or deactivated.");
+      return;
+    }
+    const initialAnswers: MacroAnswerMap = {};
+    macro.questions.forEach((question) => {
+      const savedValue = run.answers[question.id];
+      if (question.multiSelect) {
+        if (Array.isArray(savedValue)) {
+          initialAnswers[question.id] = savedValue;
+        } else if (typeof savedValue === "string" && savedValue.trim()) {
+          initialAnswers[question.id] = [savedValue.trim()];
+        } else {
+          initialAnswers[question.id] = [];
+        }
+        return;
+      }
+      if (Array.isArray(savedValue)) {
+        initialAnswers[question.id] = savedValue[0] ?? question.options[0] ?? "";
+        return;
+      }
+      initialAnswers[question.id] = savedValue ?? question.options[0] ?? "";
+    });
+    setEditingMacroRunId(run.id);
+    setRunMacroAnswers(initialAnswers);
+    setRunMacroId(macro.id);
+  };
+
+  const handleConfirmMacroRun = () => {
+    if (!runMacro) {
+      return;
+    }
+    applyMacroTemplate(runMacro, runMacroAnswers, editingMacroRun);
+    setRunMacroId(null);
+    setEditingMacroRunId(null);
+    setRunMacroAnswers({});
+  };
+
+  const handleCopyActiveSectionFromSelected = () => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to copy prior SOAP text.");
+      return;
+    }
+    if (!saltSourceEncounter) {
+      setMessage("Select a prior encounter first.");
+      return;
+    }
+    const sourceText = saltSourceEncounter.soap[activeSection].trim();
+    if (!sourceText) {
+      setMessage(`No ${sectionLabels[activeSection]} text found in selected prior encounter.`);
+      return;
+    }
+    const currentText = selectedEncounter.soap[activeSection].trim();
+    if (currentText && currentText !== sourceText) {
+      const confirmed = window.confirm(
+        `Replace current ${sectionLabels[activeSection]} text with the selected prior encounter note?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    setSoapSection(selectedEncounter.id, activeSection, sourceText);
+    setMessage(`Copied ${sectionLabels[activeSection]} from ${saltSourceEncounter.encounterDate}.`);
+  };
+
+  const handleDeleteEncounter = () => {
+    if (!selectedEncounter) {
+      return;
+    }
+    const confirmed = window.confirm(
+      `Delete encounter for ${selectedEncounter.patientName} on ${selectedEncounter.encounterDate}?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    deleteEncounter(selectedEncounter.id);
+    setMessage("Encounter deleted.");
+  };
+
+  const addChargeFromTreatment = (treatmentMacroId: string) => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to add charges.");
+      return;
+    }
+    const treatment = activeTreatments.find((entry) => entry.id === treatmentMacroId);
+    if (!treatment) {
+      setMessage("Treatment not found.");
+      return;
+    }
+    const added = addCharge(selectedEncounter.id, {
+      treatmentMacroId: treatment.id,
+      name: treatment.name,
+      procedureCode: treatment.procedureCode,
+      unitPrice: treatment.unitPrice,
+      units: treatment.defaultUnits,
+    });
+    setMessage(added ? "Treatment added to encounter charges." : "Unable to add treatment.");
+  };
+
+  const encounterChargeTotal = useMemo(() => {
+    if (!selectedEncounter) {
+      return 0;
+    }
+    return selectedEncounter.charges.reduce((sum, entry) => sum + entry.unitPrice * entry.units, 0);
+  }, [selectedEncounter]);
+
+  const setSoapPrintSelectionForCurrentPatient = (encounterIds: string[]) => {
+    if (!filteredEncounterPatientId) {
+      return;
+    }
+    setPrintSelectionByPatient((current) => ({
+      ...current,
+      [filteredEncounterPatientId]: encounterIds,
+    }));
+  };
+
+  const toggleSoapPrintEncounter = (encounterId: string) => {
+    if (!filteredEncounterPatientId) {
+      return;
+    }
+    const currentSelection = selectedSoapPrintEncounterIds;
+    const nextSelection = currentSelection.includes(encounterId)
+      ? currentSelection.filter((entry) => entry !== encounterId)
+      : [...currentSelection, encounterId];
+    setSoapPrintSelectionForCurrentPatient(nextSelection);
+  };
+
+  const handlePrintSelectedSoapNotes = () => {
+    if (!filteredEncounterPatientId || !filteredEncounterListByOldest.length) {
+      setMessage("Type a patient name and select at least one encounter first.");
+      return;
+    }
+    if (!selectedSoapPrintEncounterIds.length) {
+      setMessage("Select at least one encounter to print.");
+      return;
+    }
+    const selectedSet = new Set(selectedSoapPrintEncounterIds);
+    const printableHtml = buildSoapPrintHtml({
+      officeName: officeSettings.officeName,
+      officeAddress: officeSettings.address,
+      officePhone: officeSettings.phone,
+      officeFax: officeSettings.fax,
+      officeEmail: officeSettings.email,
+      logoDataUrl: officeSettings.logoDataUrl,
+      patientName: filteredEncounterPatientName,
+      encounters: filteredEncounterListByOldest
+        .filter((entry) => selectedSet.has(entry.id))
+        .map((entry) => ({
+          id: entry.id,
+          encounterDate: entry.encounterDate,
+          provider: entry.provider,
+          appointmentType: entry.appointmentType,
+          signed: entry.signed,
+          soap: entry.soap,
+        })),
+    });
+    const opened = printHtmlWithIframeFallback(printableHtml);
+    if (!opened) {
+      setMessage("Could not open print view. Check popup/browser settings and try again.");
+      return;
+    }
+    setMessage("SOAP print view opened in oldest-to-newest order. Use Save as PDF in the print dialog.");
+  };
+
+  const handleEncounterScheduleStatusChange = (nextStatus: AppointmentStatus) => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (!linkedAppointmentForStatus) {
+      setMessage("No linked appointment found on this encounter date.");
+      return;
+    }
+    updateAppointment(linkedAppointmentForStatus.id, (current) => ({
+      ...current,
+      status: nextStatus,
+    }));
+    setMessage(`Schedule status updated to ${nextStatus}.`);
+  };
+
+  return (
+    <div className="space-y-5">
+      <section className="panel-card p-4">
+        <h2 className="text-2xl font-semibold">Encounter / Daily Visit Notes</h2>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          SOAP charting with carry-forward copy tools and treatment charges. Create new encounters from Schedule or Patient File.
+        </p>
+      </section>
+
+      {message && <p className="text-sm font-semibold text-[var(--brand-primary)]">{message}</p>}
+
+      <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
+        <aside className="space-y-4">
+          <article className="panel-card p-4">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="grid flex-1 gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Find Encounter</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(event) => setEncounterSearch(event.target.value)}
+                  placeholder="Type patient name..."
+                  value={encounterSearch}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Status</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(event) => setStatusFilter(event.target.value as "all" | "open" | "closed")}
+                  value={statusFilter}
+                >
+                  <option value="all">All</option>
+                  <option value="open">Open</option>
+                  <option value="closed">Closed</option>
+                  </select>
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[var(--text-muted)]">
+                Printed order: earliest encounter to latest encounter.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                  disabled={!filteredEncounterListByOldest.length}
+                  onClick={() =>
+                    setSoapPrintSelectionForCurrentPatient(
+                      filteredEncounterListByOldest.map((entry) => entry.id),
+                    )
+                  }
+                  type="button"
+                >
+                  Select All
+                </button>
+                <button
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                  disabled={!filteredEncounterListByOldest.length}
+                  onClick={() => setSoapPrintSelectionForCurrentPatient([])}
+                  type="button"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 max-h-[580px] space-y-2 overflow-auto">
+              {!normalizeLookupText(encounterSearch) ? (
+                <p className="text-sm text-[var(--text-muted)]">Type a patient name to load encounters.</p>
+              ) : filteredEncounterList.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">No encounters found for that patient name.</p>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    Showing encounters for {filteredEncounterPatientName}
+                  </p>
+                  {filteredEncounterList.map((entry) => {
+                  const checked = selectedSoapPrintEncounterIds.includes(entry.id);
+                  return (
+                    <div
+                      key={`soap-print-${entry.id}`}
+                      className={`flex items-start gap-2 rounded-xl border px-2 py-2 ${
+                        resolvedEncounterId === entry.id
+                          ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)]"
+                          : "border-[var(--line-soft)] bg-white"
+                      }`}
+                    >
+                      <input
+                        checked={checked}
+                        className="mt-1"
+                        onChange={() => toggleSoapPrintEncounter(entry.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        type="checkbox"
+                      />
+                      <button
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => setSelectedEncounterId(entry.id)}
+                        type="button"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold">{entry.patientName}</p>
+                          <span className={`status-pill ${entry.signed ? "active" : "warning"}`}>
+                            {entry.signed ? "Closed" : "Open"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {entry.encounterDate} • {entry.appointmentType}
+                        </p>
+                      </button>
+                    </div>
+                  );
+                  })}
+                </>
+              )}
+            </div>
+
+            <button
+              className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+              disabled={!filteredEncounterListByOldest.length || !selectedSoapPrintEncounterIds.length}
+              onClick={handlePrintSelectedSoapNotes}
+              type="button"
+            >
+              Print Selected SOAP Notes
+            </button>
+          </article>
+        </aside>
+
+        <article className="panel-card p-4">
+          {!selectedEncounter ? (
+            <p className="text-sm text-[var(--text-muted)]">
+              Select an encounter to start charting. New encounters can be created from Schedule or from a Patient File.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <section className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Current Encounter</p>
+                    <h3 className="text-xl font-semibold">{selectedEncounter.patientName}</h3>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      {selectedEncounter.encounterDate}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      onClick={() => setMessage("Encounter saved.")}
+                      type="button"
+                    >
+                      Save Now
+                    </button>
+                    <button
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      onClick={() => setSigned(selectedEncounter.id, !selectedEncounter.signed)}
+                      type="button"
+                    >
+                      {selectedEncounter.signed ? "Reopen Encounter" : "Close Encounter"}
+                    </button>
+                    <button
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      onClick={handleDeleteEncounter}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="grid gap-1">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">Provider</span>
+                      <input
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                        disabled={selectedEncounter.signed}
+                        onChange={(event) =>
+                          updateEncounter(selectedEncounter.id, { provider: event.target.value })
+                        }
+                        value={selectedEncounter.provider}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">Appointment Type</span>
+                      <select
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                        disabled={selectedEncounter.signed}
+                        onChange={(event) =>
+                          updateEncounter(selectedEncounter.id, { appointmentType: event.target.value })
+                        }
+                        value={selectedEncounter.appointmentType}
+                      >
+                        {appointmentTypeOptions.map((option) => (
+                          <option key={`encounter-appointment-type-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="grid gap-1">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">Date</span>
+                      <input
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                        disabled={selectedEncounter.signed}
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          updateEncounter(selectedEncounter.id, {
+                            encounterDate: normalizeEncounterDateInput(event.target.value),
+                          })
+                        }
+                        value={selectedEncounter.encounterDate}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">Schedule Status</span>
+                      <select
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                        disabled={!linkedAppointmentForStatus}
+                        onChange={(event) =>
+                          handleEncounterScheduleStatusChange(event.target.value as AppointmentStatus)
+                        }
+                        value={scheduleStatusValue}
+                      >
+                        {appointmentStatusOptions.map((option) => (
+                          <option key={`encounter-schedule-status-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {linkedAppointmentForStatus
+                        ? `Linked schedule row: ${linkedAppointmentForStatus.startTime} • ${linkedAppointmentForStatus.appointmentType}`
+                        : "No matching schedule appointment found for this date."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                  <span className={`status-pill ${selectedEncounter.signed ? "active" : "warning"}`}>
+                    {selectedEncounter.signed ? "Closed" : "Open"}
+                  </span>
+                  <span className="status-pill">
+                    Charges: {selectedEncounter.charges.length}
+                  </span>
+                  <span className="status-pill">Total: ${encounterChargeTotal.toFixed(2)}</span>
+                  {selectedPatient && (
+                    <Link
+                      className="status-pill underline"
+                      href={`/patients/${selectedPatient.id}`}
+                    >
+                      Open Patient File
+                    </Link>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                <div className="flex flex-wrap gap-2">
+                  {encounterSections.map((section) => (
+                    <button
+                      key={section}
+                      className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                        activeSection === section
+                          ? "bg-[var(--brand-primary)] text-white"
+                          : "bg-[var(--bg-soft)] text-[var(--text-main)]"
+                      }`}
+                      onClick={() => setActiveSection(section)}
+                      type="button"
+                    >
+                      {sectionLabels[section]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">Compare / Copy From Prior Encounter</p>
+                  </div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      disabled={selectedEncounter.signed || priorPatientEncounters.length === 0}
+                      onChange={(event) => setSaltSourceEncounterIdDraft(event.target.value)}
+                      value={resolvedSaltSourceEncounterId}
+                    >
+                      {priorPatientEncounters.length === 0 ? (
+                        <option value="">No prior encounters for this patient</option>
+                      ) : (
+                        <>
+                          <option value="">Select prior encounter (optional)</option>
+                          {priorPatientEncounters.map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.encounterDate}
+                              {entry.signed ? " • Closed" : " • Open"}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                    <button
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      disabled={
+                        selectedEncounter.signed ||
+                        priorPatientEncounters.length === 0 ||
+                        !saltSourceEncounter
+                      }
+                      onClick={handleCopyActiveSectionFromSelected}
+                      type="button"
+                    >
+                      Copy ({sectionLabels[activeSection]})
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    Choose a prior encounter only when you want to compare or copy this tab&apos;s SOAP section.
+                  </p>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                  <p className="text-sm font-semibold">SOAP Macros: {sectionLabels[activeSection]}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {sectionMacros.map((macro) => (
+                      <button
+                        key={macro.id}
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold"
+                        onClick={() => handleRunMacroClick(macro)}
+                        type="button"
+                      >
+                        {macro.buttonName}
+                      </button>
+                    ))}
+                    {sectionMacros.length === 0 && (
+                      <p className="text-sm text-[var(--text-muted)]">
+                        No active macros in this section yet. Configure them in Settings &gt; SOAP Macro Settings.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                  <p className="text-sm font-semibold">Inserted Macro Inputs (Tap To Edit)</p>
+                  {sectionMacroRuns.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {sectionMacroRuns.map((run) => {
+                        const answerPreview = Object.values(run.answers)
+                          .flatMap((value) => (Array.isArray(value) ? value : [value]))
+                          .map((value) => value.trim())
+                          .filter((value) => value.length > 0)
+                          .slice(0, 2)
+                          .join(" • ");
+                        return (
+                          <button
+                            key={run.id}
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-left text-sm font-semibold"
+                            disabled={selectedEncounter.signed}
+                            onClick={() => handleEditExistingMacroRun(run)}
+                            type="button"
+                          >
+                            <span>{run.macroName}</span>
+                            {answerPreview && (
+                              <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">{answerPreview}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      No macro inserts yet in this section.
+                    </p>
+                  )}
+                </div>
+
+                {saltSourceEncounter ? (
+                  <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                    <label className="grid gap-1">
+                      <span className="text-sm font-semibold text-[var(--text-muted)]">
+                        {sectionLabels[activeSection]} Note
+                      </span>
+                      <textarea
+                        className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                        disabled={selectedEncounter.signed}
+                        onChange={(event) =>
+                          setSoapSection(selectedEncounter.id, activeSection, event.target.value)
+                        }
+                        placeholder="Type directly here, use macros, or mix both."
+                        value={selectedEncounter.soap[activeSection]}
+                      />
+                    </label>
+                    <div className="grid gap-1">
+                      <span className="text-sm font-semibold text-[var(--text-muted)]">
+                        Previous {sectionLabels[activeSection]} ({saltSourceEncounter.encounterDate})
+                      </span>
+                      <div className="min-h-44 whitespace-pre-wrap rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm">
+                        {saltSourceEncounter.soap[activeSection].trim() || "No text in this section for selected prior encounter."}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="mt-3 grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">
+                      {sectionLabels[activeSection]} Note
+                    </span>
+                    <textarea
+                      className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      disabled={selectedEncounter.signed}
+                      onChange={(event) =>
+                        setSoapSection(selectedEncounter.id, activeSection, event.target.value)
+                      }
+                      placeholder="Type directly here, use macros, or mix both."
+                      value={selectedEncounter.soap[activeSection]}
+                    />
+                  </label>
+                )}
+              </section>
+
+              <section>
+                <article className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                  <h4 className="text-lg font-semibold">Encounter Charges</h4>
+                  <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                        onClick={() => setOpenChargesPanel((previous) => !previous)}
+                        type="button"
+                      >
+                        {openChargesPanel ? "Hide Open Charges" : "Open Charges"}
+                      </button>
+                      {openChargesPanel && (
+                        <input
+                          className="min-w-52 flex-1 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                          onChange={(event) => setChargeSearch(event.target.value)}
+                          placeholder="Search charge by name or CPT..."
+                          value={chargeSearch}
+                        />
+                      )}
+                    </div>
+
+                    {openChargesPanel && (
+                      <div className="mt-2 max-h-60 overflow-auto rounded-xl border border-[var(--line-soft)] bg-white p-2">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {filteredActiveTreatments.map((entry) => (
+                            <button
+                              key={entry.id}
+                              className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-left transition hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.08)]"
+                              disabled={selectedEncounter.signed}
+                              onClick={() => addChargeFromTreatment(entry.id)}
+                              type="button"
+                            >
+                              <p className="text-sm font-semibold">{entry.name}</p>
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {entry.procedureCode} • ${entry.unitPrice} x {entry.defaultUnits}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                        {filteredActiveTreatments.length === 0 && (
+                          <p className="text-sm text-[var(--text-muted)]">No active charges match your search.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 max-h-56 space-y-2 overflow-auto rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+                    {selectedEncounter.charges.length === 0 && (
+                      <p className="text-sm text-[var(--text-muted)]">No charges added for this encounter.</p>
+                    )}
+                    {selectedEncounter.charges.map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-2">
+                        <div className="grid gap-2 md:grid-cols-[1.2fr_130px_110px_90px_auto]">
+                          <label className="grid gap-1">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">Treatment</span>
+                            <input
+                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
+                              disabled={selectedEncounter.signed}
+                              onChange={(event) =>
+                                updateCharge(selectedEncounter.id, entry.id, { name: event.target.value })
+                              }
+                              value={entry.name}
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">CPT / Code</span>
+                            <input
+                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
+                              disabled={selectedEncounter.signed}
+                              onChange={(event) =>
+                                updateCharge(selectedEncounter.id, entry.id, { procedureCode: event.target.value })
+                              }
+                              value={entry.procedureCode}
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">Price ($)</span>
+                            <input
+                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
+                              disabled={selectedEncounter.signed}
+                              min={0}
+                              onChange={(event) =>
+                                updateCharge(selectedEncounter.id, entry.id, {
+                                  unitPrice: Number(event.target.value),
+                                })
+                              }
+                              step="0.01"
+                              type="number"
+                              value={entry.unitPrice}
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">Units</span>
+                            <input
+                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
+                              disabled={selectedEncounter.signed}
+                              min={1}
+                              onChange={(event) =>
+                                updateCharge(selectedEncounter.id, entry.id, {
+                                  units: Number(event.target.value),
+                                })
+                              }
+                              step={1}
+                              type="number"
+                              value={entry.units}
+                            />
+                          </label>
+                          <div className="grid gap-1">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">Line Total</span>
+                            <div className="flex items-center gap-2">
+                              <p className="px-1 py-1 text-sm font-semibold">
+                                ${(entry.unitPrice * entry.units).toFixed(2)}
+                              </p>
+                              <button
+                                className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold"
+                                disabled={selectedEncounter.signed}
+                                onClick={() => removeCharge(selectedEncounter.id, entry.id)}
+                                type="button"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold">Encounter Total: ${encounterChargeTotal.toFixed(2)}</p>
+                </article>
+              </section>
+            </div>
+          )}
+        </article>
+      </section>
+
+      {runMacro && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="panel-card max-h-[85vh] w-full max-w-3xl overflow-auto p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-xl font-semibold">
+                {editingMacroRun ? `Edit Macro Answers: ${runMacro.buttonName}` : `Run Macro: ${runMacro.buttonName}`}
+              </h4>
+              <button
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1"
+                onClick={() => {
+                  setRunMacroId(null);
+                  setEditingMacroRunId(null);
+                }}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {runMacro.questions.map((question) => (
+                (() => {
+                  const normalizedOptions = question.options
+                    .map((option) => option.trim())
+                    .filter((option): option is string => Boolean(option));
+                  const answerValue = runMacroAnswers[question.id];
+                  const selectedAnswers = Array.isArray(answerValue)
+                    ? answerValue.map((option) => option.trim()).filter((option) => option.length > 0)
+                    : typeof answerValue === "string" && answerValue.trim()
+                      ? [answerValue.trim()]
+                      : [];
+                  const selectedAnswer = selectedAnswers[0] ?? "";
+                  const freeTextValue = Array.isArray(answerValue) ? answerValue.join(", ") : answerValue ?? "";
+                  const isPainScaleQuestion = question.label.trim().toLowerCase() === "pain scale";
+                  const numericOptions = Array.from(
+                    new Set(
+                      normalizedOptions
+                        .filter((option) => /^\d+$/.test(option))
+                        .map((option) => Number(option)),
+                    ),
+                  ).sort((left, right) => left - right);
+                  const usePainScaleColumns =
+                    isPainScaleQuestion &&
+                    numericOptions.includes(1) &&
+                    numericOptions.includes(10) &&
+                    numericOptions.length >= 10;
+                  const leftPainScaleOptions = usePainScaleColumns
+                    ? [1, 2, 3, 4, 5].filter((value) => numericOptions.includes(value)).map(String)
+                    : [];
+                  const rightPainScaleOptions = usePainScaleColumns
+                    ? [6, 7, 8, 9, 10].filter((value) => numericOptions.includes(value)).map(String)
+                    : [];
+                  const zeroPainScaleOption = usePainScaleColumns && numericOptions.includes(0) ? "0" : null;
+                  const selectableOptions = normalizedOptions.length > 0 ? normalizedOptions : question.options;
+                  const renderOptionRow = (option: string) => (
+                    <label
+                      key={`${question.id}-${option}`}
+                      className="inline-flex w-full items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm"
+                    >
+                      {question.multiSelect ? (
+                        <input
+                          checked={selectedAnswers.includes(option)}
+                          onChange={() =>
+                            setRunMacroAnswers((current) => {
+                              const rawCurrentValues = current[question.id];
+                              const currentValues = Array.isArray(rawCurrentValues) ? rawCurrentValues : [];
+                              const nextValues = currentValues.includes(option)
+                                ? currentValues.filter((entry) => entry !== option)
+                                : [...currentValues, option];
+                              return {
+                                ...current,
+                                [question.id]: nextValues,
+                              };
+                            })
+                          }
+                          type="checkbox"
+                        />
+                      ) : (
+                        <input
+                          checked={selectedAnswer === option}
+                          onChange={() =>
+                            setRunMacroAnswers((current) => ({
+                              ...current,
+                              [question.id]: option,
+                            }))
+                          }
+                          type="radio"
+                        />
+                      )}
+                      {option}
+                    </label>
+                  );
+
+                  return (
+                    <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
+                      <p className="text-sm font-semibold">{question.label}</p>
+                      {question.options.length > 0 ? (
+                        usePainScaleColumns ? (
+                          <div className="mt-2 space-y-2">
+                            {zeroPainScaleOption ? renderOptionRow(zeroPainScaleOption) : null}
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <div className="grid gap-2">{leftPainScaleOptions.map(renderOptionRow)}</div>
+                              <div className="grid gap-2">{rightPainScaleOptions.map(renderOptionRow)}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 grid gap-2">{selectableOptions.map(renderOptionRow)}</div>
+                        )
+                      ) : (
+                        <input
+                          className="mt-2 w-full rounded-xl border border-[var(--line-soft)] px-3 py-2"
+                          onChange={(event) =>
+                            setRunMacroAnswers((current) => ({
+                              ...current,
+                              [question.id]: event.target.value,
+                            }))
+                          }
+                          value={freeTextValue}
+                        />
+                      )}
+                    </div>
+                  );
+                })()
+              ))}
+              {runMacro.questions.length === 0 && (
+                <p className="text-sm text-[var(--text-muted)]">No question prompts for this macro.</p>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={() => {
+                  setRunMacroId(null);
+                  setEditingMacroRunId(null);
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                onClick={handleConfirmMacroRun}
+                type="button"
+              >
+                {editingMacroRun ? "Update Existing Macro Text" : "Insert Into SOAP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

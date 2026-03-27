@@ -1,0 +1,89 @@
+import { contacts as defaultContacts, type ContactRecord } from "@/lib/mock-data";
+import { sanitizeContactCategory } from "@/lib/contact-categories";
+import { formatUsPhoneInput } from "@/lib/phone-format";
+
+const STORAGE_KEY = "casemate.contact-directory.v1";
+
+function normalizeText(value: unknown, fallback = "") {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  return value.trim();
+}
+
+function normalizeCategory(value: unknown): ContactRecord["category"] {
+  const category = normalizeText(value);
+  return sanitizeContactCategory(category);
+}
+
+function normalizeContact(value: unknown): ContactRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const row = value as Partial<ContactRecord>;
+  const id = normalizeText(row.id);
+  const name = normalizeText(row.name);
+  const phone = formatUsPhoneInput(normalizeText(row.phone));
+  const email = normalizeText(row.email);
+  const fax = formatUsPhoneInput(normalizeText(row.fax));
+  const address = normalizeText(row.address);
+  const category = normalizeCategory(row.category);
+
+  if (!id || !name || !phone) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    category,
+    phone,
+    email,
+    fax,
+    address,
+  };
+}
+
+export function getDefaultContactDirectory() {
+  return defaultContacts.map((contact) => ({ ...contact }));
+}
+
+export function normalizeContactDirectory(value: unknown) {
+  if (!Array.isArray(value)) {
+    return getDefaultContactDirectory();
+  }
+
+  const normalized = value
+    .map((entry) => normalizeContact(entry))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+  return normalized.length > 0 ? normalized : getDefaultContactDirectory();
+}
+
+export function loadContactDirectory() {
+  if (typeof window === "undefined") {
+    return getDefaultContactDirectory();
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return getDefaultContactDirectory();
+    }
+    return normalizeContactDirectory(JSON.parse(raw));
+  } catch {
+    return getDefaultContactDirectory();
+  }
+}
+
+export function saveContactDirectory(contacts: ContactRecord[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+}
+
+export function createContactId() {
+  return `CT-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}

@@ -1,26 +1,213 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-canvas: #eef6fb;
+  --bg-panel: #fdfefe;
+  --bg-soft: #e4f0f7;
+  --bg-sidebar: #0f2e46;
+  --line-soft: #d7e6f1;
+  --brand-primary: #0d79bf;
+  --brand-secondary: #1aa0a2;
+  --brand-accent: #f08d3f;
+  --status-active: #1f9d60;
+  --status-warning: #f0a43f;
+  --status-alert: #c9423a;
+  --text-main: #172a3a;
+  --text-muted: #57758b;
+  --font-body:
+    "Avenir Next",
+    "Avenir",
+    "Segoe UI",
+    "Helvetica Neue",
+    "Noto Sans",
+    sans-serif;
+  --font-heading:
+    "Avenir Next Demi Bold",
+    "Avenir Next",
+    "Segoe UI",
+    "Helvetica Neue",
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono",
+    "SFMono-Regular",
+    "Menlo",
+    "Consolas",
+    "Liberation Mono",
+    monospace;
+  --field-bg: linear-gradient(180deg, #ffffff 0%, #f8fcff 100%);
+  --field-border: #c0d8ea;
+  --field-focus: rgba(13, 121, 191, 0.16);
+  --field-shadow: 0 1px 2px rgba(14, 51, 78, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --field-shadow-focus: 0 0 0 4px var(--field-focus), 0 1px 2px rgba(14, 51, 78, 0.1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg-canvas);
+  --color-foreground: var(--text-main);
+  --font-sans: var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(26, 160, 162, 0.16), transparent 34%),
+    radial-gradient(circle at 88% 3%, rgba(240, 141, 63, 0.12), transparent 27%),
+    linear-gradient(140deg, #edf7fb, #ebf2fa 52%, #f5f7fb);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+p {
+  margin: 0;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+select,
+textarea {
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--text-main);
+  border-radius: 14px;
+  box-shadow: var(--field-shadow);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"])::placeholder,
+textarea::placeholder {
+  color: #7f91a4;
+  opacity: 1;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):focus,
+select:focus,
+textarea:focus {
+  border-color: #7cb0d3;
+  box-shadow: var(--field-shadow-focus);
+  background: #ffffff;
+  outline: none;
+}
+
+textarea {
+  line-height: 1.55;
+  letter-spacing: 0.002em;
+  resize: vertical;
+}
+
+select {
+  color: var(--text-main);
+  background-color: #fff;
+}
+
+select option {
+  color: var(--text-main);
+  background-color: #fff;
+}
+
+select option:checked {
+  color: #fff;
+  background-color: var(--brand-primary);
+}
+
+a {
+  color: inherit;
+}
+
+.panel-card {
+  border: 1px solid var(--line-soft);
+  background: var(--bg-panel);
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgba(14, 51, 78, 0.05);
+}
+
+.rich-text-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #7f91a4;
+  pointer-events: none;
+}
+
+.rich-text-editor p {
+  margin: 0 0 0.7em;
+}
+
+.rich-text-editor p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-editor ul,
+.rich-text-editor ol {
+  margin: 0.4em 0 0.8em 1.4em;
+}
+
+.rich-text-editor h1,
+.rich-text-editor h2,
+.rich-text-editor h3 {
+  margin: 0.3em 0 0.45em;
+  line-height: 1.2;
+}
+
+.rich-text-editor h1 {
+  font-size: 1.5rem;
+}
+
+.rich-text-editor h2 {
+  font-size: 1.28rem;
+}
+
+.rich-text-editor h3 {
+  font-size: 1.1rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-pill.active {
+  background: rgba(31, 157, 96, 0.12);
+  color: #186843;
+}
+
+.status-pill.warning {
+  background: rgba(240, 164, 63, 0.16);
+  color: #93570b;
+}
+
+.status-pill.alert {
+  background: rgba(201, 66, 58, 0.16);
+  color: #8f251f;
 }

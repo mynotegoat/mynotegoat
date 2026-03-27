@@ -1,0 +1,410 @@
+export const macroSections = [
+  "subjective",
+  "objective",
+  "assessment",
+  "plan",
+] as const;
+
+export type MacroSection = (typeof macroSections)[number];
+
+export interface MacroQuestion {
+  id: string;
+  label: string;
+  options: string[];
+  multiSelect?: boolean;
+}
+
+export interface MacroTemplate {
+  id: string;
+  section: MacroSection;
+  buttonName: string;
+  body: string;
+  questions: MacroQuestion[];
+  active: boolean;
+}
+
+export interface MacroLibraryConfig {
+  setName: string;
+  enabledAutoFields: MacroAutoField[];
+  saltDefaults: {
+    enabled: boolean;
+    sections: Record<MacroSection, boolean>;
+  };
+  templates: MacroTemplate[];
+}
+
+export type MacroRenderContext = Record<string, string>;
+export type MacroAnswerValue = string | string[];
+export type MacroAnswerMap = Record<string, MacroAnswerValue>;
+
+export const macroSectionLabels: Record<MacroSection, string> = {
+  subjective: "Subjective",
+  objective: "Objective",
+  assessment: "Assessment",
+  plan: "Plan",
+};
+
+export const macroAutoFieldLabels = {
+  FIRST_NAME: "Patient first name",
+  LAST_NAME: "Patient last name",
+  FULL_NAME: "Patient full name",
+  AGE: "Patient age",
+  SEX: "Patient sex",
+  DOB: "Date of birth",
+  INJURY_DATE: "Date of injury",
+  ATTORNEY: "Attorney",
+  HE_SHE: "he/she",
+  HIM_HER: "him/her",
+  HIS_HER: "his/her",
+  MR_MRS_MS: "Mr./Mrs./Ms.",
+  MR_MRS_MS_LAST_NAME: "Mr./Mrs./Ms. Last name",
+  MR_MS_LAST_NAME: "Mr./Ms. Last name",
+} as const;
+
+export type MacroAutoField = keyof typeof macroAutoFieldLabels;
+export const macroAutoFields = Object.keys(macroAutoFieldLabels) as MacroAutoField[];
+
+const STORAGE_KEY = "casemate.macro-library.v1";
+
+const defaultObjectiveBody = `{{FIRST_NAME}} {{LAST_NAME}} is a {{AGE}} year old {{SEX}} who stated that they were the [[where_seated]] in a [[vehicle_type_driven]], wearing their seatbelt involved in a motor vehicle collision with a [[other_vehicle_type]].
+
+Patient describes the collision occurred while {{HE_SHE}} was [[vehicle_motion]].
+{{MR_MRS_MS_LAST_NAME}} stated the area of impact was [[impact_area]].
+{{MR_MRS_MS_LAST_NAME}} states that the vehicle was [[vehicle_pushed]].
+Patient stated that {{HE_SHE}} was [[prepared_for_impact]].
+Upon impact, {{MR_MRS_MS_LAST_NAME}} felt [[thrown_around]].
+{{MR_MRS_MS_LAST_NAME}} mentioned that the airbags [[airbag_deployed]].
+Immediately after impact they felt [[post_impact_feeling]].
+Patient reported that they [[lost_consciousness]].
+{{MR_MRS_MS_LAST_NAME}} stated they [[body_strike]] in the vehicle.
+{{MR_MRS_MS_LAST_NAME}} developed pain [[pain_onset]].
+Since the collision, {{HE_SHE}} has been experiencing [[symptoms_since_collision]].
+Patient reported police [[police_arrival]].
+{{MR_MRS_MS_LAST_NAME}} was seen at emergency/urgent care: [[seen_urgent_care]].
+Taken by ambulance: [[taken_ambulance]].
+Medications prescribed: [[medications_prescribed]].
+Diagnostic imaging taken: [[diagnostic_imaging_taken]].
+
+{{MR_MRS_MS_LAST_NAME}} stated symptoms persisted and continued to get worse. At that time {{HE_SHE}} presented {{HIM_HER}}self for evaluation and treatment.
+{{MR_MRS_MS_LAST_NAME}} stated that {{HE_SHE}} did not have these presenting complaints prior to the collision on {{INJURY_DATE}}.`;
+
+export function createQuestionId(label: string) {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || `question_${Date.now()}`;
+}
+
+function defaultMacroTemplate(
+  id: string,
+  section: MacroSection,
+  buttonName: string,
+  body: string,
+  questions: MacroQuestion[] = [],
+): MacroTemplate {
+  return {
+    id,
+    section,
+    buttonName,
+    body,
+    questions,
+    active: true,
+  };
+}
+
+export function getDefaultMacroLibrary(): MacroLibraryConfig {
+  return {
+    setName: "Prime Spine PI Macros",
+    enabledAutoFields: [...macroAutoFields],
+    saltDefaults: {
+      enabled: true,
+      sections: {
+        subjective: true,
+        objective: true,
+        assessment: true,
+        plan: true,
+      },
+    },
+    templates: [
+      defaultMacroTemplate("macro-objective-mvc-hx", "objective", "MVC HX", defaultObjectiveBody, [
+        {
+          id: "where_seated",
+          label: "Where were you seated?",
+          options: [
+            "driver",
+            "front seat passenger",
+            "rear right seat passenger",
+            "rear left seat passenger",
+            "rear middle seat passenger",
+          ],
+        },
+        { id: "vehicle_type_driven", label: "What type of vehicle were you driving?", options: [] },
+        { id: "other_vehicle_type", label: "What type of vehicle was the other vehicle?", options: [] },
+        { id: "vehicle_motion", label: "Was your vehicle stopped/moving, etc.?", options: [] },
+        { id: "impact_area", label: "Where was the area of impact?", options: [] },
+        { id: "vehicle_pushed", label: "Was your vehicle pushed into another vehicle?", options: [] },
+        { id: "prepared_for_impact", label: "Were you prepared for impact?", options: [] },
+        { id: "thrown_around", label: "Were you thrown around in the vehicle?", options: [] },
+        { id: "airbag_deployed", label: "Did your airbags deploy?", options: [] },
+        { id: "post_impact_feeling", label: "How did you feel after the impact?", options: [] },
+        { id: "lost_consciousness", label: "Did you lose consciousness?", options: [] },
+        { id: "body_strike", label: "Did you strike any part of your body in the vehicle?", options: [] },
+        { id: "pain_onset", label: "When did you develop the pains?", options: [] },
+        { id: "symptoms_since_collision", label: "Symptoms since collision", options: [] },
+        { id: "police_arrival", label: "Did police arrive to the scene?", options: [] },
+        { id: "seen_urgent_care", label: "Were you seen at emergency/urgent care?", options: [] },
+        { id: "taken_ambulance", label: "Were you taken by ambulance?", options: [] },
+        { id: "medications_prescribed", label: "Were medications prescribed?", options: [] },
+        { id: "diagnostic_imaging_taken", label: "Was diagnostic imaging taken?", options: [] },
+      ]),
+      defaultMacroTemplate(
+        "macro-subjective-pain-intake",
+        "subjective",
+        "Pain Intake",
+        "{{MR_MS_LAST_NAME}} reports pain level [[pain_scale]]/10 in the [[pain_region]], with frequency [[frequency]] and aggravating factors [[aggravating_factors]].",
+        [
+          { id: "pain_scale", label: "Pain scale", options: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] },
+          { id: "pain_region", label: "Primary region", options: [] },
+          { id: "frequency", label: "Frequency", options: ["intermittent", "constant", "daily"] },
+          { id: "aggravating_factors", label: "Aggravating factors", options: [] },
+        ],
+      ),
+      defaultMacroTemplate(
+        "macro-assessment-progress",
+        "assessment",
+        "Progress Note",
+        "Patient demonstrates [[progress_level]] progress with ongoing complaints in the [[focus_area]]. Continue monitoring functional limitations.",
+        [
+          { id: "progress_level", label: "Progress level", options: ["improving", "plateau", "worsening"] },
+          { id: "focus_area", label: "Focus area", options: [] },
+        ],
+      ),
+      defaultMacroTemplate(
+        "macro-plan-followup",
+        "plan",
+        "Follow-Up Plan",
+        "Continue care plan with [[treatment_frequency]] visits per week for [[duration_weeks]] weeks. Re-evaluate on [[re_eval_date]].",
+        [
+          { id: "treatment_frequency", label: "Visits per week", options: ["1", "2", "3"] },
+          { id: "duration_weeks", label: "Duration (weeks)", options: ["2", "4", "6", "8"] },
+          { id: "re_eval_date", label: "Re-evaluation date", options: [] },
+        ],
+      ),
+    ],
+  };
+}
+
+function normalizeQuestion(value: unknown): MacroQuestion | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<MacroQuestion>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const label = typeof row.label === "string" ? row.label.trim() : "";
+  if (!id || !label) {
+    return null;
+  }
+  const options =
+    Array.isArray(row.options)
+      ? row.options
+          .map((option) => (typeof option === "string" ? option.trim() : ""))
+          .filter((option) => option.length > 0)
+      : [];
+  const multiSelect = row.multiSelect === true;
+  return { id, label, options, multiSelect };
+}
+
+function normalizeTemplate(value: unknown): MacroTemplate | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<MacroTemplate>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const buttonName = typeof row.buttonName === "string" ? row.buttonName.trim() : "";
+  const body = typeof row.body === "string" ? row.body : "";
+  const section = row.section;
+  if (!id || !buttonName || !body || !section || !macroSections.includes(section)) {
+    return null;
+  }
+  const questions = Array.isArray(row.questions)
+    ? row.questions.map(normalizeQuestion).filter((item): item is MacroQuestion => Boolean(item))
+    : [];
+  return {
+    id,
+    section,
+    buttonName,
+    body,
+    questions,
+    active: row.active !== false,
+  };
+}
+
+function normalizeAutoFields(value: unknown): MacroAutoField[] {
+  if (!Array.isArray(value)) {
+    return [...macroAutoFields];
+  }
+
+  const allowed = new Set<MacroAutoField>(macroAutoFields);
+  const selected: MacroAutoField[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((item) => {
+    if (typeof item !== "string") {
+      return;
+    }
+    const candidate = item.trim() as MacroAutoField;
+    if (!allowed.has(candidate)) {
+      return;
+    }
+    if (seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    selected.push(candidate);
+  });
+
+  return selected.length ? selected : [...macroAutoFields];
+}
+
+function normalizeSaltDefaults(
+  value: unknown,
+  defaults: MacroLibraryConfig["saltDefaults"],
+): MacroLibraryConfig["saltDefaults"] {
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+
+  const row = value as Partial<MacroLibraryConfig["saltDefaults"]> & {
+    sections?: Partial<Record<MacroSection, unknown>>;
+  };
+
+  const enabled = row.enabled !== false;
+  const sectionsInput: Partial<Record<MacroSection, unknown>> = row.sections ?? {};
+
+  const sections: Record<MacroSection, boolean> = {
+    subjective: sectionsInput.subjective !== false,
+    objective: sectionsInput.objective !== false,
+    assessment: sectionsInput.assessment !== false,
+    plan: sectionsInput.plan !== false,
+  };
+
+  return {
+    enabled,
+    sections,
+  };
+}
+
+export function normalizeMacroLibrary(value: unknown): MacroLibraryConfig {
+  const defaults = getDefaultMacroLibrary();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+
+  const row = value as Partial<MacroLibraryConfig>;
+  const setName = typeof row.setName === "string" && row.setName.trim() ? row.setName.trim() : defaults.setName;
+  const templates = Array.isArray(row.templates)
+    ? row.templates.map(normalizeTemplate).filter((item): item is MacroTemplate => Boolean(item))
+    : [];
+
+  return {
+    setName,
+    enabledAutoFields: normalizeAutoFields(row.enabledAutoFields),
+    saltDefaults: normalizeSaltDefaults(row.saltDefaults, defaults.saltDefaults),
+    templates: templates.length ? templates : defaults.templates,
+  };
+}
+
+export function loadMacroLibrary(): MacroLibraryConfig {
+  if (typeof window === "undefined") {
+    return getDefaultMacroLibrary();
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return getDefaultMacroLibrary();
+    }
+    return normalizeMacroLibrary(JSON.parse(raw));
+  } catch {
+    return getDefaultMacroLibrary();
+  }
+}
+
+export function saveMacroLibrary(config: MacroLibraryConfig) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export function insertAutoFieldToken(field: MacroAutoField) {
+  return `{{${field}}}`;
+}
+
+export function insertQuestionToken(questionId: string) {
+  return `[[${questionId}]]`;
+}
+
+export function getQuestionIdsFromBody(body: string) {
+  const matches = body.match(/\[\[\s*([a-zA-Z0-9_-]+)\s*\]\]/g) ?? [];
+  const ids = matches
+    .map((token) => token.replace(/\[\[|\]\]/g, "").trim())
+    .filter((value) => value.length > 0);
+  return Array.from(new Set(ids));
+}
+
+export function renderMacroTemplate(
+  template: string,
+  answers: MacroAnswerMap,
+  context: MacroRenderContext,
+) {
+  const conjunctionFormatter =
+    typeof Intl !== "undefined" && typeof Intl.ListFormat === "function"
+      ? new Intl.ListFormat("en-US", { style: "long", type: "conjunction" })
+      : null;
+
+  const formatAnswerValue = (value: MacroAnswerValue | undefined) => {
+    if (Array.isArray(value)) {
+      const selected = value
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+      if (!selected.length) {
+        return "";
+      }
+      if (selected.length === 1) {
+        return selected[0];
+      }
+      if (conjunctionFormatter) {
+        return conjunctionFormatter.format(selected);
+      }
+      if (selected.length === 2) {
+        return `${selected[0]} and ${selected[1]}`;
+      }
+      return `${selected.slice(0, -1).join(", ")}, and ${selected[selected.length - 1]}`;
+    }
+    return typeof value === "string" ? value : "";
+  };
+
+  const withAutoFields = template.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
+    return context[key] ?? "";
+  });
+
+  const withQuestions = withAutoFields.replace(/\[\[\s*([a-zA-Z0-9_-]+)\s*\]\]/g, (_, key: string) => {
+    return formatAnswerValue(answers[key]);
+  });
+
+  return withQuestions.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function createEmptyMacro(section: MacroSection): MacroTemplate {
+  const timestamp = Date.now();
+  return {
+    id: `macro-${section}-${timestamp}`,
+    section,
+    buttonName: "New Macro",
+    body: "",
+    questions: [],
+    active: true,
+  };
+}

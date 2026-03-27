@@ -1,0 +1,125 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import {
+  createPatientFollowUpOverrideRecord,
+  hasAnyFollowUpOverrideFlags,
+  loadPatientFollowUpOverridesMap,
+  savePatientFollowUpOverridesMap,
+  type FollowUpCategoryOverrideFlags,
+  type FollowUpOverrideCategory,
+  type PatientFollowUpOverrideMap,
+  type PatientFollowUpOverrideRecord,
+} from "@/lib/patient-follow-up-overrides";
+
+type FollowUpOverrideCategoryPatch = Partial<FollowUpCategoryOverrideFlags>;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+export function usePatientFollowUpOverrides() {
+  const [recordsByPatientId, setRecordsByPatientId] = useState<PatientFollowUpOverrideMap>(() =>
+    loadPatientFollowUpOverridesMap(),
+  );
+
+  const updateMap = useCallback((updater: (current: PatientFollowUpOverrideMap) => PatientFollowUpOverrideMap) => {
+    setRecordsByPatientId((current) => {
+      const next = updater(current);
+      savePatientFollowUpOverridesMap(next);
+      return next;
+    });
+  }, []);
+
+  const getRecord = useCallback(
+    (patientId: string): PatientFollowUpOverrideRecord => {
+      const normalizedPatientId = patientId.trim();
+      if (!normalizedPatientId) {
+        return createPatientFollowUpOverrideRecord("");
+      }
+      return recordsByPatientId[normalizedPatientId] ?? createPatientFollowUpOverrideRecord(normalizedPatientId);
+    },
+    [recordsByPatientId],
+  );
+
+  const setCategoryFlags = useCallback(
+    (patientId: string, category: FollowUpOverrideCategory, patch: FollowUpOverrideCategoryPatch) => {
+      const normalizedPatientId = patientId.trim();
+      if (!normalizedPatientId) {
+        return;
+      }
+      updateMap((current) => {
+        const base = current[normalizedPatientId] ?? createPatientFollowUpOverrideRecord(normalizedPatientId);
+        const nextCategory: FollowUpCategoryOverrideFlags = {
+          patientRefused:
+            patch.patientRefused === undefined ? base[category].patientRefused : Boolean(patch.patientRefused),
+          completedPriorCare:
+            patch.completedPriorCare === undefined
+              ? base[category].completedPriorCare
+              : Boolean(patch.completedPriorCare),
+        };
+        const nextRecord: PatientFollowUpOverrideRecord = {
+          ...base,
+          [category]: nextCategory,
+          updatedAt: nowIso(),
+        };
+
+        if (!hasAnyFollowUpOverrideFlags(nextRecord)) {
+          if (!current[normalizedPatientId]) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[normalizedPatientId];
+          return next;
+        }
+
+        return {
+          ...current,
+          [normalizedPatientId]: nextRecord,
+        };
+      });
+    },
+    [updateMap],
+  );
+
+  const setPatientRefused = useCallback(
+    (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { patientRefused: enabled });
+    },
+    [setCategoryFlags],
+  );
+
+  const setCompletedPriorCare = useCallback(
+    (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { completedPriorCare: enabled });
+    },
+    [setCategoryFlags],
+  );
+
+  const clearPatientOverrides = useCallback(
+    (patientId: string) => {
+      const normalizedPatientId = patientId.trim();
+      if (!normalizedPatientId) {
+        return;
+      }
+      updateMap((current) => {
+        if (!current[normalizedPatientId]) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[normalizedPatientId];
+        return next;
+      });
+    },
+    [updateMap],
+  );
+
+  return {
+    recordsByPatientId,
+    getRecord,
+    setCategoryFlags,
+    setPatientRefused,
+    setCompletedPriorCare,
+    clearPatientOverrides,
+  };
+}

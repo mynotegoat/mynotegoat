@@ -1,0 +1,316 @@
+"use client";
+
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+export interface RichTextTemplateEditorHandle {
+  focus: () => void;
+  insertText: (text: string) => void;
+  insertHtml: (html: string) => void;
+}
+
+type RichTextTemplateEditorProps = {
+  value: string;
+  onChange: (nextValue: string) => void;
+  fontFamily?: string;
+  minHeightClassName?: string;
+  className?: string;
+  placeholder?: string;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function looksLikeHtml(value: string) {
+  return /<\/?[a-z][\s\S]*>/i.test(value);
+}
+
+function textToHtml(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function normalizeIncomingValue(value: string) {
+  if (!value.trim()) {
+    return "";
+  }
+  return looksLikeHtml(value) ? value : textToHtml(value);
+}
+
+function normalizeOutgoingValue(value: string) {
+  const normalized = value
+    .replace(/^\s+|\s+$/g, "")
+    .replace(/<div><br><\/div>/gi, "")
+    .replace(/<p><br><\/p>/gi, "")
+    .trim();
+  return normalized;
+}
+
+function isSelectionInsideEditor(editor: HTMLDivElement | null) {
+  if (!editor || typeof window === "undefined") {
+    return false;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+  const range = selection.getRangeAt(0);
+  return editor.contains(range.commonAncestorContainer);
+}
+
+export const RichTextTemplateEditor = forwardRef<
+  RichTextTemplateEditorHandle,
+  RichTextTemplateEditorProps
+>(function RichTextTemplateEditor(
+  {
+    value,
+    onChange,
+    fontFamily,
+    minHeightClassName = "min-h-[320px]",
+    className = "",
+    placeholder = "Start writing...",
+  },
+  ref,
+) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const lastAppliedRef = useRef("");
+
+  const syncEditorWithValue = () => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const nextHtml = normalizeIncomingValue(value);
+    if (editor.innerHTML !== nextHtml) {
+      editor.innerHTML = nextHtml;
+    }
+    lastAppliedRef.current = nextHtml;
+  };
+
+  useEffect(() => {
+    syncEditorWithValue();
+  }, [value]);
+
+  const emitChange = () => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const next = normalizeOutgoingValue(editor.innerHTML);
+    if (next === lastAppliedRef.current) {
+      return;
+    }
+    lastAppliedRef.current = next;
+    onChange(next);
+  };
+
+  const runCommand = (command: string, commandValue?: string) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    if (!isSelectionInsideEditor(editor)) {
+      editor.focus();
+    }
+    document.execCommand(command, false, commandValue);
+    emitChange();
+  };
+
+  const insertText = (text: string) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    if (!isSelectionInsideEditor(editor)) {
+      editor.focus();
+    }
+    document.execCommand("insertText", false, text);
+    emitChange();
+  };
+
+  const insertHtml = (html: string) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    if (!isSelectionInsideEditor(editor)) {
+      editor.focus();
+    }
+    document.execCommand("insertHTML", false, html);
+    emitChange();
+  };
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      editorRef.current?.focus();
+    },
+    insertText,
+    insertHtml,
+  }));
+
+  return (
+    <div className={`rounded-xl border border-[var(--line-soft)] bg-white ${className}`}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+        <span className="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          Editor
+        </span>
+        <select
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+          defaultValue=""
+          onChange={(event) => {
+            const value = event.target.value;
+            if (!value) {
+              return;
+            }
+            runCommand("formatBlock", value);
+            event.currentTarget.value = "";
+          }}
+        >
+          <option value="">Paragraph</option>
+          <option value="<p>">Paragraph</option>
+          <option value="<h1>">Heading 1</option>
+          <option value="<h2>">Heading 2</option>
+          <option value="<h3>">Heading 3</option>
+          <option value="<blockquote>">Quote</option>
+        </select>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("undo")}
+          type="button"
+        >
+          Undo
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("redo")}
+          type="button"
+        >
+          Redo
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("bold")}
+          type="button"
+        >
+          B
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold italic"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("italic")}
+          type="button"
+        >
+          I
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold underline"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("underline")}
+          type="button"
+        >
+          U
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("insertUnorderedList")}
+          type="button"
+        >
+          Bullets
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("insertOrderedList")}
+          type="button"
+        >
+          Numbered
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("justifyLeft")}
+          type="button"
+        >
+          Left
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("justifyCenter")}
+          type="button"
+        >
+          Center
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("justifyRight")}
+          type="button"
+        >
+          Right
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => insertText("    ")}
+          type="button"
+        >
+          Tab
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => insertHtml("<br />")}
+          type="button"
+        >
+          Line Break
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => insertHtml("<p><br /></p>")}
+          type="button"
+        >
+          Paragraph
+        </button>
+        <button
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => runCommand("removeFormat")}
+          type="button"
+        >
+          Clear
+        </button>
+      </div>
+
+      <div
+        ref={editorRef}
+        aria-label="Rich text editor"
+        className={`rich-text-editor ${minHeightClassName} w-full overflow-auto bg-white px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus:outline-none`}
+        contentEditable
+        data-placeholder={placeholder}
+        onBlur={emitChange}
+        onInput={emitChange}
+        spellCheck
+        style={{ fontFamily }}
+        suppressContentEditableWarning
+      />
+    </div>
+  );
+});

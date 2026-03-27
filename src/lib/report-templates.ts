@@ -1,0 +1,238 @@
+import { documentFontOptions } from "@/lib/document-templates";
+
+export interface NarrativeReportPrompt {
+  id: string;
+  label: string;
+  token: string;
+  options: string[];
+  required: boolean;
+}
+
+export interface NarrativeReportTemplate {
+  id: string;
+  name: string;
+  body: string;
+  fontFamily: string;
+  active: boolean;
+  prompts: NarrativeReportPrompt[];
+}
+
+export interface NarrativeReportLibrary {
+  templates: NarrativeReportTemplate[];
+}
+
+export interface NarrativeReportAutoField {
+  token: string;
+  label: string;
+}
+
+const STORAGE_KEY = "casemate.report-templates.v1";
+
+const defaultReportBody = `Narrative Report\n\nPatient: {{PATIENT_FULL_NAME}}\nDOB: {{PATIENT_DOB}}\nDate Of Injury: {{DATE_OF_INJURY}}\nCase #: {{CASE_NUMBER}}\nAttorney: {{ATTORNEY_NAME}}\n\nHistory of Injury:\n{{FIRST_OBJECTIVE}}\n\nClinical Progress (Objective):\n{{ALL_OBJECTIVE}}\n\nAssessment Overview:\n{{ALL_ASSESSMENT}}\n\nPlan Of Care:\n{{ALL_PLAN}}\n\nDiagnoses:\n{{DIAGNOSIS_LIST}}\n\nEncounter Charges:\n{{CHARGE_LEDGER}}\n\nImaging Summary:\n{{IMAGING_SUMMARY}}\n\nX-Ray Findings:\n{{XRAY_FINDINGS}}\n\nMRI / CT Findings:\n{{MRI_CT_FINDINGS}}\n\nSpecialist Summary:\n{{SPECIALIST_SUMMARY}}\n\nSpecialist Recommendations:\n{{SPECIALIST_RECOMMENDATIONS}}\n\nAdditional Notes:\n{{PATIENT_NOTES}}\n\nCustom Input:\n{{PROMPT_CUSTOM_NOTE}}`;
+
+function defaultFontFamily() {
+  return documentFontOptions[0]?.value ?? "Georgia, 'Times New Roman', serif";
+}
+
+function createDefaultTemplate(): NarrativeReportTemplate {
+  return {
+    id: "report-full-narrative",
+    name: "Full Narrative Report",
+    body: defaultReportBody,
+    fontFamily: defaultFontFamily(),
+    active: true,
+    prompts: [
+      {
+        id: "prompt-custom-note",
+        label: "Custom note",
+        token: "PROMPT_CUSTOM_NOTE",
+        options: [],
+        required: false,
+      },
+    ],
+  };
+}
+
+export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
+  { token: "TODAY_DATE", label: "Today Date" },
+  { token: "OFFICE_NAME", label: "Office Name" },
+  { token: "OFFICE_ADDRESS", label: "Office Address" },
+  { token: "OFFICE_PHONE", label: "Office Phone" },
+  { token: "OFFICE_FAX", label: "Office Fax" },
+  { token: "OFFICE_EMAIL", label: "Office Email" },
+  { token: "DOCTOR_NAME", label: "Doctor Name" },
+  { token: "PATIENT_FULL_NAME", label: "Patient Full Name" },
+  { token: "PATIENT_FIRST_NAME", label: "Patient First Name" },
+  { token: "PATIENT_LAST_NAME", label: "Patient Last Name" },
+  { token: "PATIENT_DOB", label: "Patient DOB" },
+  { token: "PATIENT_PHONE", label: "Patient Phone" },
+  { token: "PATIENT_EMAIL", label: "Patient Email" },
+  { token: "DATE_OF_INJURY", label: "Date Of Injury" },
+  { token: "INITIAL_EXAM", label: "Initial Exam" },
+  { token: "CASE_NUMBER", label: "Case #" },
+  { token: "CASE_STATUS", label: "Case Status" },
+  { token: "LIEN_STATUS", label: "Lien / LOP" },
+  { token: "PRIOR_CARE", label: "Prior Care" },
+  { token: "PATIENT_NOTES", label: "Patient File Notes" },
+  { token: "XRAY_FINDINGS", label: "X-Ray Findings" },
+  { token: "MRI_CT_FINDINGS", label: "MRI / CT Findings" },
+  { token: "SPECIALIST_RECOMMENDATIONS", label: "Specialist Recommendations" },
+  { token: "BILLED_AMOUNT", label: "Billed Amount" },
+  { token: "PAID_AMOUNT", label: "Paid Amount" },
+  { token: "PERCENTAGE_PAID", label: "Percentage Paid" },
+  { token: "DISCHARGE_DATE", label: "Discharge Date" },
+  { token: "RB_SENT_DATE", label: "R&B Sent Date" },
+  { token: "PAID_DATE", label: "Paid Date" },
+  { token: "REVIEW_STATUS", label: "Review Status" },
+  { token: "FIRST_ENCOUNTER_DATE", label: "First Encounter Date" },
+  { token: "LATEST_ENCOUNTER_DATE", label: "Latest Encounter Date" },
+  { token: "ENCOUNTER_COUNT", label: "Encounter Count" },
+  { token: "FIRST_SUBJECTIVE", label: "First Subjective" },
+  { token: "FIRST_OBJECTIVE", label: "First Objective" },
+  { token: "FIRST_ASSESSMENT", label: "First Assessment" },
+  { token: "FIRST_PLAN", label: "First Plan" },
+  { token: "LATEST_SUBJECTIVE", label: "Latest Subjective" },
+  { token: "LATEST_OBJECTIVE", label: "Latest Objective" },
+  { token: "LATEST_ASSESSMENT", label: "Latest Assessment" },
+  { token: "LATEST_PLAN", label: "Latest Plan" },
+  { token: "ALL_SUBJECTIVE", label: "All Subjective" },
+  { token: "ALL_OBJECTIVE", label: "All Objective" },
+  { token: "ALL_ASSESSMENT", label: "All Assessment" },
+  { token: "ALL_PLAN", label: "All Plan" },
+  { token: "MACRO_SUBJECTIVE", label: "Macro Subjective" },
+  { token: "MACRO_OBJECTIVE", label: "Macro Objective" },
+  { token: "MACRO_ASSESSMENT", label: "Macro Assessment" },
+  { token: "MACRO_PLAN", label: "Macro Plan" },
+  { token: "ENCOUNTER_TIMELINE", label: "Encounter Timeline" },
+  { token: "DIAGNOSIS_LIST", label: "Diagnosis List" },
+  { token: "DIAGNOSIS_CODES", label: "Diagnosis Codes" },
+  { token: "CHARGE_LEDGER", label: "Charge Ledger" },
+  { token: "TOTAL_CHARGE_AMOUNT", label: "Total Charge Amount" },
+  { token: "XRAY_SUMMARY", label: "X-Ray Summary" },
+  { token: "MRI_CT_SUMMARY", label: "MRI/CT Summary" },
+  { token: "IMAGING_SUMMARY", label: "Imaging Summary" },
+  { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },
+];
+
+function normalizeString(value: unknown) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+function normalizePrompt(value: unknown): NarrativeReportPrompt | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<NarrativeReportPrompt>;
+  const id = normalizeString(row.id);
+  const label = normalizeString(row.label);
+  const token = normalizeString(row.token).toUpperCase();
+  if (!id || !label || !/^[A-Z0-9_]+$/.test(token)) {
+    return null;
+  }
+  const options = Array.isArray(row.options)
+    ? row.options.map((entry) => normalizeString(entry)).filter(Boolean)
+    : [];
+  return {
+    id,
+    label,
+    token,
+    options,
+    required: row.required === true,
+  };
+}
+
+function normalizeTemplate(value: unknown): NarrativeReportTemplate | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<NarrativeReportTemplate>;
+  const id = normalizeString(row.id);
+  const name = normalizeString(row.name);
+  const body = typeof row.body === "string" ? row.body : "";
+  if (!id || !name || !body.trim()) {
+    return null;
+  }
+  const prompts = Array.isArray(row.prompts)
+    ? row.prompts.map(normalizePrompt).filter((entry): entry is NarrativeReportPrompt => Boolean(entry))
+    : [];
+  return {
+    id,
+    name,
+    body,
+    fontFamily: normalizeString(row.fontFamily) || defaultFontFamily(),
+    active: row.active !== false,
+    prompts,
+  };
+}
+
+function normalizeLibrary(value: unknown): NarrativeReportLibrary {
+  const defaults = getDefaultNarrativeReportLibrary();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+  const row = value as Partial<NarrativeReportLibrary>;
+  const templates = Array.isArray(row.templates)
+    ? row.templates.map(normalizeTemplate).filter((entry): entry is NarrativeReportTemplate => Boolean(entry))
+    : [];
+
+  if (!templates.length) {
+    return defaults;
+  }
+
+  return {
+    templates,
+  };
+}
+
+export function getDefaultNarrativeReportLibrary(): NarrativeReportLibrary {
+  return {
+    templates: [createDefaultTemplate()],
+  };
+}
+
+export function loadNarrativeReportLibrary(): NarrativeReportLibrary {
+  if (typeof window === "undefined") {
+    return getDefaultNarrativeReportLibrary();
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return getDefaultNarrativeReportLibrary();
+    }
+    return normalizeLibrary(JSON.parse(raw));
+  } catch {
+    return getDefaultNarrativeReportLibrary();
+  }
+}
+
+export function saveNarrativeReportLibrary(config: NarrativeReportLibrary) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export function createPromptTokenFromLabel(label: string) {
+  const normalized = label
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) {
+    return "PROMPT_FIELD";
+  }
+  if (normalized.startsWith("PROMPT_")) {
+    return normalized;
+  }
+  return `PROMPT_${normalized}`;
+}
+
+export function toPromptOptions(optionDraft: string) {
+  return optionDraft
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}

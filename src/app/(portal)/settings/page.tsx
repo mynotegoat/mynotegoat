@@ -1,0 +1,2718 @@
+"use client";
+
+import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from "react";
+import { BillingMacroSettingsPanel } from "@/components/billing-macro-settings-panel";
+import { DocumentTemplateSettingsPanel } from "@/components/document-template-settings-panel";
+import { MacroSettingsPanel } from "@/components/macro-settings-panel";
+import { PackageBuilderSettingsPanel } from "@/components/package-builder-settings-panel";
+import { ReportTemplateSettingsPanel } from "@/components/report-template-settings-panel";
+import { useCaseStatuses } from "@/hooks/use-case-statuses";
+import { useContactCategories } from "@/hooks/use-contact-categories";
+import { useOfficeSettings } from "@/hooks/use-office-settings";
+import { useQuickStatsSettings } from "@/hooks/use-quick-stats-settings";
+import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
+import { useScheduleRooms } from "@/hooks/use-schedule-rooms";
+import { useScheduleSettings } from "@/hooks/use-schedule-settings";
+import { usePriorityCaseRules } from "@/hooks/use-priority-case-rules";
+import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
+import { quickStatOptions } from "@/lib/quick-stats-settings";
+import { appointmentStatusOptions } from "@/lib/schedule-appointments";
+import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
+import { appointmentIntervalOptions, weekdayLabels } from "@/lib/schedule-settings";
+import { formatUsPhoneInput } from "@/lib/phone-format";
+import { PATIENTS_STORAGE_KEY } from "@/lib/mock-data";
+import type { DocumentTemplateScope } from "@/lib/document-templates";
+
+type SettingsSectionKey =
+  | "office"
+  | "contactCategories"
+  | "schedule"
+  | "dashboard"
+  | "quickStats"
+  | "caseStatuses"
+  | "soapMacros"
+  | "billingMacros"
+  | "packageBuilder"
+  | "documents"
+  | "reports"
+  | "backup"
+  | "security";
+
+const defaultExpandedSections: Record<SettingsSectionKey, boolean> = {
+  office: false,
+  contactCategories: false,
+  schedule: false,
+  dashboard: false,
+  quickStats: false,
+  caseStatuses: false,
+  soapMacros: false,
+  billingMacros: false,
+  packageBuilder: false,
+  documents: false,
+  reports: false,
+  backup: false,
+  security: false,
+};
+
+type BackupModuleId =
+  | "officeSettings"
+  | "contactCategories"
+  | "contacts"
+  | "patients"
+  | "caseStatuses"
+  | "dashboardRules"
+  | "quickStats"
+  | "scheduleSettings"
+  | "roomSettings"
+  | "appointmentTypes"
+  | "keyDates"
+  | "soapMacros"
+  | "billingMacros"
+  | "packageBuilder"
+  | "documentTemplates"
+  | "reportTemplates"
+  | "appointments"
+  | "encounters"
+  | "patientDiagnoses"
+  | "patientBilling";
+
+type BackupModuleDefinition = {
+  id: BackupModuleId;
+  label: string;
+  description: string;
+  keys: string[];
+};
+
+const backupModules: BackupModuleDefinition[] = [
+  {
+    id: "officeSettings",
+    label: "Office Settings",
+    description: "Office name/contact/address/logo",
+    keys: ["casemate.office-settings.v1"],
+  },
+  {
+    id: "contactCategories",
+    label: "Contact Categories",
+    description: "Attorney, Imaging, Ortho, etc.",
+    keys: ["casemate.contact-categories.v1"],
+  },
+  {
+    id: "contacts",
+    label: "Contacts",
+    description: "Attorney/specialist/imaging contacts",
+    keys: ["casemate.contact-directory.v1"],
+  },
+  {
+    id: "patients",
+    label: "Patients",
+    description: "Patient demographics, case status, and case-matrix details",
+    keys: [PATIENTS_STORAGE_KEY],
+  },
+  {
+    id: "caseStatuses",
+    label: "Case Statuses + Lien/LOP",
+    description: "Statuses, colors, Lien/LOP label and options",
+    keys: ["casemate.case-statuses.v1"],
+  },
+  {
+    id: "dashboardRules",
+    label: "Dashboard Priority Rules",
+    description:
+      "Priority status and warning thresholds, tasks, follow-up workspace display settings, and follow-up clear overrides",
+    keys: [
+      "casemate.dashboard-priority-rules.v1",
+      "casemate.dashboard-workspace-settings.v1",
+      "casemate.patient-follow-up-overrides.v1",
+    ],
+  },
+  {
+    id: "quickStats",
+    label: "Quick Stats Settings",
+    description: "Patient-file quick stats visibility options",
+    keys: ["casemate.quick-stats-settings.v1"],
+  },
+  {
+    id: "scheduleSettings",
+    label: "Schedule Settings",
+    description: "Office hours, interval, max slot capacity",
+    keys: ["casemate.schedule-settings.v1"],
+  },
+  {
+    id: "roomSettings",
+    label: "Room Settings",
+    description: "Rooms, colors, and check-in room picker toggle",
+    keys: ["casemate.schedule-rooms.v1"],
+  },
+  {
+    id: "appointmentTypes",
+    label: "Appointment Types",
+    description: "Type names, colors, default duration",
+    keys: ["casemate.schedule-appointment-types.v1"],
+  },
+  {
+    id: "keyDates",
+    label: "Key Dates",
+    description: "Closed/covered key date entries",
+    keys: ["casemate.key-dates.v1"],
+  },
+  {
+    id: "soapMacros",
+    label: "SOAP Macro Settings",
+    description: "SOAP macro library (buttons/questions/templates)",
+    keys: ["casemate.macro-library.v1", "casemate.soap-macros.v1"],
+  },
+  {
+    id: "billingMacros",
+    label: "Billing Macro Settings",
+    description: "Treatment macros, diagnosis codes, bundles",
+    keys: ["casemate.billing-macros.v1"],
+  },
+  {
+    id: "packageBuilder",
+    label: "Package Builder",
+    description: "Cash package definitions using treatment macros and visit counts",
+    keys: ["casemate.billing-macros.v1"],
+  },
+  {
+    id: "documentTemplates",
+    label: "Document Templates",
+    description: "Specialist/Imaging/Letter templates + shared header",
+    keys: ["casemate.document-templates.v1"],
+  },
+  {
+    id: "reportTemplates",
+    label: "Narrative Report Templates",
+    description: "Custom long-form report templates + prompt fields",
+    keys: ["casemate.report-templates.v1"],
+  },
+  {
+    id: "appointments",
+    label: "Schedule Appointments",
+    description: "Booked appointments and recurring schedule items",
+    keys: ["casemate.schedule-appointments.v1"],
+  },
+  {
+    id: "encounters",
+    label: "Encounter Notes",
+    description: "Encounter SOAP notes, charges, macro runs",
+    keys: ["casemate.encounter-notes.v1"],
+  },
+  {
+    id: "patientDiagnoses",
+    label: "Patient Diagnoses",
+    description: "Patient-level diagnosis entries",
+    keys: ["casemate.patient-diagnoses.v1"],
+  },
+  {
+    id: "patientBilling",
+    label: "Patient Billing Close-Out",
+    description: "Billed amount, paid amount/date, named adjustments and balances",
+    keys: ["casemate.patient-billing.v1"],
+  },
+];
+
+type BackupPayload = {
+  app: string;
+  format: "casemate-backup";
+  version: number;
+  exportedAt: string;
+  modules: BackupModuleId[];
+  data: Record<string, unknown>;
+};
+
+type ParsedImportPayload = {
+  data: Record<string, unknown>;
+  source: "backup" | "legacy";
+};
+
+function isSettingsSectionKey(value: string): value is SettingsSectionKey {
+  return Object.prototype.hasOwnProperty.call(defaultExpandedSections, value);
+}
+
+function parseDocumentTemplateScope(value: string | null): DocumentTemplateScope | null {
+  if (
+    value === "specialistReferral" ||
+    value === "imagingRequest" ||
+    value === "generalLetter"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeStorageKey(key: string): string {
+  return key
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token && !/^v\d+$/.test(token))
+    .join("");
+}
+
+const CONTACT_DIRECTORY_STORAGE_KEY = "casemate.contact-directory.v1";
+const KEY_DATES_STORAGE_KEY = "casemate.key-dates.v1";
+
+type LegacyAttorneyContact = {
+  name: string;
+  phone: string;
+};
+
+function cleanText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toString();
+  }
+  return "";
+}
+
+function toIsoDate(value: unknown): string {
+  const raw = cleanText(value);
+  if (!raw) {
+    return "";
+  }
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const isoDateTimeMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoDateTimeMatch) {
+    return `${isoDateTimeMatch[1]}-${isoDateTimeMatch[2]}-${isoDateTimeMatch[3]}`;
+  }
+
+  const usDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (usDateMatch) {
+    const year = usDateMatch[3].length === 2 ? `20${usDateMatch[3]}` : usDateMatch[3];
+    return `${year}-${usDateMatch[1].padStart(2, "0")}-${usDateMatch[2].padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return "";
+}
+
+function normalizeLegacyFieldName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function buildLegacyFieldMap(row: Record<string, unknown>) {
+  const map = new Map<string, unknown>();
+  Object.entries(row).forEach(([key, value]) => {
+    const normalizedKey = normalizeLegacyFieldName(key);
+    if (!normalizedKey || map.has(normalizedKey)) {
+      return;
+    }
+    map.set(normalizedKey, value);
+  });
+  return map;
+}
+
+function readLegacyField(fieldMap: Map<string, unknown>, aliases: string[]): string {
+  for (const alias of aliases) {
+    const value = fieldMap.get(normalizeLegacyFieldName(alias));
+    const clean = cleanText(value);
+    if (clean) {
+      return clean;
+    }
+  }
+  return "";
+}
+
+function toLegacyArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  if (Array.isArray(value.items)) {
+    return value.items;
+  }
+  if (Array.isArray(value.rows)) {
+    return value.rows;
+  }
+  const entries = Object.values(value);
+  if (entries.length > 0 && entries.every((entry) => isRecord(entry))) {
+    return entries;
+  }
+  return null;
+}
+
+function parseLegacyEntryList(entries: unknown[]): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  entries.forEach((entry) => {
+    if (!isRecord(entry)) {
+      return;
+    }
+    const sourceKey = [entry.key, entry.storageKey, entry.name, entry.id].find(
+      (candidate) => typeof candidate === "string" && candidate.trim().length > 0,
+    );
+    if (!sourceKey || typeof sourceKey !== "string") {
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, "value")) {
+      data[sourceKey] = entry.value;
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, "data")) {
+      data[sourceKey] = entry.data;
+    }
+  });
+  return data;
+}
+
+function findLegacyCollection(source: Record<string, unknown>, aliases: string[]): unknown[] | null {
+  const normalizedKeyMap = new Map<string, string>();
+  Object.keys(source).forEach((key) => {
+    const normalized = normalizeLegacyFieldName(key);
+    if (!normalizedKeyMap.has(normalized)) {
+      normalizedKeyMap.set(normalized, key);
+    }
+  });
+
+  for (const alias of aliases) {
+    const matchingKey = normalizedKeyMap.get(normalizeLegacyFieldName(alias));
+    if (!matchingKey) {
+      continue;
+    }
+    const collection = toLegacyArray(source[matchingKey]);
+    if (collection && collection.length > 0) {
+      return collection;
+    }
+  }
+
+  return null;
+}
+
+function mapLegacyCaseStatus(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  if (normalized === "discharged") {
+    return "Discharged";
+  }
+  if (normalized === "ready to submit" || normalized === "readytosubmit") {
+    return "Ready To Submit";
+  }
+  if (normalized === "submitted") {
+    return "Submitted";
+  }
+  if (normalized === "dropped") {
+    return "Dropped";
+  }
+  if (normalized === "paid") {
+    return "Paid";
+  }
+  return "Active";
+}
+
+function mapLegacyPatients(rows: unknown[]) {
+  const patients: Record<string, unknown>[] = [];
+  const attorneyContacts: LegacyAttorneyContact[] = [];
+  const fallbackDate = new Date().toISOString().slice(0, 10);
+
+  rows.forEach((entry, index) => {
+    if (!isRecord(entry)) {
+      return;
+    }
+
+    const fields = buildLegacyFieldMap(entry);
+    const lastName = readLegacyField(fields, ["patient last name", "last name", "lastname"]);
+    const firstName = readLegacyField(fields, ["patient first name", "first name", "firstname"]);
+    const explicitName = readLegacyField(fields, ["patient name", "full name", "fullname", "name"]);
+    const fullName = [lastName, firstName].filter(Boolean).join(", ") || explicitName;
+    if (!fullName) {
+      return;
+    }
+
+    const attorney = readLegacyField(fields, ["attorney", "attorney name", "law firm"]) || "Self";
+    const attorneyPhone = readLegacyField(fields, [
+      "attorney phone",
+      "attorney phone number",
+      "attorney tel",
+      "law firm phone",
+    ]);
+    if (attorney && attorney !== "Self" && attorneyPhone) {
+      attorneyContacts.push({ name: attorney, phone: attorneyPhone });
+    }
+
+    const patientPhone = readLegacyField(fields, ["patient phone", "phone", "phone number", "mobile"]);
+    const patientEmail = readLegacyField(fields, ["patient email", "email"]);
+    const dateOfLossRaw = readLegacyField(fields, ["date of loss", "date of injury", "dol", "injury date"]);
+    const initialExamRaw = readLegacyField(fields, ["initial exam date", "initial exam", "first visit date"]);
+    const xrayInfo = readLegacyField(fields, ["x-ray information", "xray information", "xray info", "x-ray info"]);
+    const mriInfo = readLegacyField(fields, ["mri information", "mri info"]);
+    const specialistInfo = readLegacyField(fields, ["specialist information", "specialist info"]);
+    const notes = readLegacyField(fields, ["notes", "patient notes", "case notes"]);
+    const dischargeRaw = readLegacyField(fields, ["discharge date", "date discharged"]);
+    const rbSentRaw = readLegacyField(fields, ["r&b sent date", "rb sent date", "r and b sent date"]);
+    const billedAmount = readLegacyField(fields, ["billed amount", "billed", "total billed"]);
+    const paidDateRaw = readLegacyField(fields, ["paid date", "date paid"]);
+    const paidAmount = readLegacyField(fields, ["paid amount", "amount paid"]);
+
+    const dateOfLoss = toIsoDate(dateOfLossRaw) || fallbackDate;
+    const initialExamDate = toIsoDate(initialExamRaw) || initialExamRaw;
+    const dischargeDate = toIsoDate(dischargeRaw) || dischargeRaw;
+    const rbSentDate = toIsoDate(rbSentRaw) || rbSentRaw;
+    const paidDate = toIsoDate(paidDateRaw) || paidDateRaw;
+    const lastUpdate = [paidDate, rbSentDate, dischargeDate, initialExamDate, dateOfLoss]
+      .map((value) => toIsoDate(value) || value)
+      .find((value) => Boolean(value)) || dateOfLoss;
+
+    const matrix: Record<string, string> = {};
+    if (patientPhone) {
+      matrix.contact = patientPhone;
+    }
+    if (initialExamDate) {
+      matrix.initialExam = initialExamDate;
+    }
+    if (xrayInfo) {
+      matrix.xrayFindings = xrayInfo;
+    }
+    if (mriInfo) {
+      matrix.mriCtFindings = mriInfo;
+    }
+    if (specialistInfo) {
+      matrix.specialistRecommendations = specialistInfo;
+    }
+    if (dischargeDate) {
+      matrix.discharge = dischargeDate;
+    }
+    if (rbSentDate) {
+      matrix.rbSent = rbSentDate;
+    }
+    if (billedAmount) {
+      matrix.billed = billedAmount;
+    }
+    if (paidDate) {
+      matrix.paidDate = paidDate;
+    }
+    if (paidAmount) {
+      matrix.paidAmount = paidAmount;
+    }
+    const noteSegments = [patientEmail ? `Email: ${patientEmail}` : "", notes].filter(Boolean);
+    if (noteSegments.length > 0) {
+      matrix.notes = noteSegments.join(" | ");
+    }
+
+    const patientId =
+      readLegacyField(fields, ["patient id", "id", "chart number", "case number"]) ||
+      `PT-IMP-${String(index + 1).padStart(4, "0")}`;
+
+    patients.push({
+      id: patientId,
+      fullName,
+      dob: toIsoDate(readLegacyField(fields, ["patient dob", "dob", "date of birth", "birth date"])),
+      phone: patientPhone || "-",
+      attorney,
+      caseStatus: mapLegacyCaseStatus(readLegacyField(fields, ["case status", "status"])),
+      dateOfLoss,
+      lastUpdate: toIsoDate(lastUpdate) || dateOfLoss,
+      priority: "Normal",
+      matrix: Object.keys(matrix).length > 0 ? matrix : undefined,
+    });
+  });
+
+  return { patients, attorneyContacts };
+}
+
+function mapLegacyKeyDates(rows: unknown[]) {
+  const keyDates: Record<string, unknown>[] = [];
+  rows.forEach((entry, index) => {
+    if (!isRecord(entry)) {
+      return;
+    }
+    const fields = buildLegacyFieldMap(entry);
+    const startDate = toIsoDate(
+      readLegacyField(fields, ["start date", "date", "key date", "from", "start"]),
+    );
+    if (!startDate) {
+      return;
+    }
+    const endDate = toIsoDate(readLegacyField(fields, ["end date", "to", "through", "end"])) || startDate;
+    const status = readLegacyField(fields, ["office status", "status"]);
+    const reason = readLegacyField(fields, ["reason", "description", "name", "note"]);
+    const id = readLegacyField(fields, ["id"]) || `KD-IMP-${String(index + 1).padStart(4, "0")}`;
+    keyDates.push({
+      id,
+      startDate,
+      endDate: endDate >= startDate ? endDate : startDate,
+      officeStatus: status.toLowerCase().includes("cover") ? "Covered" : "Closed",
+      reason,
+    });
+  });
+  return keyDates;
+}
+
+function mapLegacyContacts(rows: unknown[], attorneyContacts: LegacyAttorneyContact[]) {
+  const normalized = new Map<
+    string,
+    {
+      name: string;
+      category: string;
+      phone: string;
+      email: string;
+      fax: string;
+      address: string;
+    }
+  >();
+
+  const addContact = (contact: {
+    name: string;
+    category: string;
+    phone: string;
+    email: string;
+    fax: string;
+    address: string;
+  }) => {
+    const key = `${contact.name.toLowerCase()}::${contact.phone.replace(/\D/g, "")}`;
+    if (!contact.name || !contact.phone || normalized.has(key)) {
+      return;
+    }
+    normalized.set(key, contact);
+  };
+
+  rows.forEach((entry) => {
+    if (!isRecord(entry)) {
+      return;
+    }
+    const fields = buildLegacyFieldMap(entry);
+    const name = readLegacyField(fields, ["name", "contact name", "office name", "firm", "company"]);
+    const phone = readLegacyField(fields, ["phone", "phone number", "contact phone", "main phone"]);
+    if (!name || !phone) {
+      return;
+    }
+    addContact({
+      name,
+      phone,
+      category: readLegacyField(fields, ["category", "type"]) || "Attorney",
+      email: readLegacyField(fields, ["email"]),
+      fax: readLegacyField(fields, ["fax"]),
+      address: readLegacyField(fields, ["address"]),
+    });
+  });
+
+  attorneyContacts.forEach((entry) => {
+    addContact({
+      name: entry.name,
+      phone: entry.phone,
+      category: "Attorney",
+      email: "",
+      fax: "",
+      address: "",
+    });
+  });
+
+  return Array.from(normalized.values()).map((entry, index) => ({
+    id: `CT-IMP-${String(index + 1).padStart(4, "0")}`,
+    ...entry,
+  }));
+}
+
+function buildLegacyMigrationData(parsed: Record<string, unknown>) {
+  const sources: Record<string, unknown>[] = [parsed];
+  if (isRecord(parsed.data)) {
+    sources.push(parsed.data);
+  }
+  if (isRecord(parsed.payload)) {
+    sources.push(parsed.payload);
+  }
+
+  const patientRows =
+    sources
+      .map((source) =>
+        findLegacyCollection(source, ["patients", "patient data", "patient list", "case files", "cases"]),
+      )
+      .find((entries) => Boolean(entries)) ?? null;
+  const keyDateRows =
+    sources
+      .map((source) =>
+        findLegacyCollection(source, ["key dates", "keydates", "office closures", "holidays"]),
+      )
+      .find((entries) => Boolean(entries)) ?? null;
+  const contactRows =
+    sources
+      .map((source) =>
+        findLegacyCollection(source, ["contacts", "contact directory", "contact list", "providers"]),
+      )
+      .find((entries) => Boolean(entries)) ?? null;
+
+  const migrated: Record<string, unknown> = {};
+  const patientMigration = patientRows ? mapLegacyPatients(patientRows) : { patients: [], attorneyContacts: [] };
+  if (patientMigration.patients.length > 0) {
+    migrated[PATIENTS_STORAGE_KEY] = patientMigration.patients;
+  }
+
+  const keyDates = keyDateRows ? mapLegacyKeyDates(keyDateRows) : [];
+  if (keyDates.length > 0) {
+    migrated[KEY_DATES_STORAGE_KEY] = keyDates;
+  }
+
+  const contacts = mapLegacyContacts(contactRows ?? [], patientMigration.attorneyContacts);
+  if (contacts.length > 0) {
+    migrated[CONTACT_DIRECTORY_STORAGE_KEY] = contacts;
+  }
+
+  return migrated;
+}
+
+function extractImportPayload(parsed: unknown): ParsedImportPayload | null {
+  if (isRecord(parsed)) {
+    if (parsed.format === "casemate-backup" && isRecord(parsed.data)) {
+      return { data: parsed.data, source: "backup" };
+    }
+
+    const migratedLegacy = buildLegacyMigrationData(parsed);
+    if (Object.keys(migratedLegacy).length > 0) {
+      return {
+        data: {
+          ...(isRecord(parsed.data) ? parsed.data : {}),
+          ...migratedLegacy,
+        },
+        source: "legacy",
+      };
+    }
+
+    if (isRecord(parsed.data)) {
+      return { data: parsed.data, source: "legacy" };
+    }
+    if (isRecord(parsed.localStorage)) {
+      return { data: parsed.localStorage, source: "legacy" };
+    }
+    return { data: parsed, source: "legacy" };
+  }
+
+  if (Array.isArray(parsed)) {
+    const extracted = parseLegacyEntryList(parsed);
+    if (Object.keys(extracted).length > 0) {
+      return { data: extracted, source: "legacy" };
+    }
+
+    const patientMigration = mapLegacyPatients(parsed);
+    const keyDates = mapLegacyKeyDates(parsed);
+    const contacts = mapLegacyContacts(parsed, patientMigration.attorneyContacts);
+    const migrated: Record<string, unknown> = {};
+    if (patientMigration.patients.length > 0) {
+      migrated[PATIENTS_STORAGE_KEY] = patientMigration.patients;
+    }
+    if (keyDates.length > 0) {
+      migrated[KEY_DATES_STORAGE_KEY] = keyDates;
+    }
+    if (contacts.length > 0) {
+      migrated[CONTACT_DIRECTORY_STORAGE_KEY] = contacts;
+    }
+    if (Object.keys(migrated).length > 0) {
+      return { data: migrated, source: "legacy" };
+    }
+  }
+
+  return null;
+}
+
+function buildLegacyStorageMappings(
+  targetKeys: string[],
+  sourceData: Record<string, unknown>,
+): Record<string, { sourceKey: string; value: unknown }> {
+  const targetSet = new Set(targetKeys);
+  const normalizedTargetMap = new Map<string, string>();
+
+  targetKeys.forEach((targetKey) => {
+    const normalized = normalizeStorageKey(targetKey);
+    if (!normalizedTargetMap.has(normalized)) {
+      normalizedTargetMap.set(normalized, targetKey);
+    }
+  });
+
+  const mappings: Record<string, { sourceKey: string; value: unknown }> = {};
+  Object.entries(sourceData).forEach(([sourceKey, value]) => {
+    if (targetSet.has(sourceKey)) {
+      return;
+    }
+    const mappedTarget = normalizedTargetMap.get(normalizeStorageKey(sourceKey));
+    if (!mappedTarget || Object.prototype.hasOwnProperty.call(mappings, mappedTarget)) {
+      return;
+    }
+    mappings[mappedTarget] = { sourceKey, value };
+  });
+
+  return mappings;
+}
+
+type CollapsibleSectionProps = {
+  title: string;
+  description?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  actions?: ReactNode;
+  children: ReactNode;
+};
+
+function CollapsibleSection({
+  title,
+  description,
+  isOpen,
+  onToggle,
+  actions,
+  children,
+}: CollapsibleSectionProps) {
+  return (
+    <section className="panel-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <button
+          aria-expanded={isOpen}
+          className="group flex flex-1 items-start justify-between gap-3 text-left"
+          onClick={onToggle}
+          type="button"
+        >
+          <div>
+            <h3 className="text-xl font-semibold">{title}</h3>
+            {description && <p className="text-sm text-[var(--text-muted)]">{description}</p>}
+          </div>
+          <span
+            aria-hidden
+            className={`mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line-soft)] text-sm transition-transform ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          >
+            ⌄
+          </span>
+        </button>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      {isOpen ? <div className="mt-3">{children}</div> : null}
+    </section>
+  );
+}
+
+export default function SettingsPage() {
+  const {
+    officeSettings,
+    updateOfficeSettings,
+    resetToDefaults: resetOfficeSettingsToDefaults,
+  } = useOfficeSettings();
+  const {
+    categories: contactCategories,
+    addCategory: addContactCategory,
+    removeCategory: removeContactCategory,
+    resetToDefaults: resetContactCategoriesToDefaults,
+  } = useContactCategories();
+  const {
+    caseStatuses,
+    lienLabel,
+    lienOptions,
+    addStatus,
+    removeStatus,
+    toggleDashboardVisibility,
+    setStatusColor,
+    setStatusClosed,
+    setLienLabel,
+    addLienOption,
+    updateLienOption,
+    moveLienOption,
+    removeLienOption,
+    resetLienOptionsToDefaults,
+    resetToDefaults: resetCaseStatusesToDefaults,
+  } = useCaseStatuses();
+  const {
+    priorityRules,
+    toggleStatus,
+    setIncludeMriDue,
+    setMriDueDaysFromInitial,
+    setIncludeNoUpdate,
+    setNoUpdateDaysThreshold,
+    setIncludeRbStatusCheck,
+    setRbStatusCheckDaysThreshold,
+    setMaxItems,
+    resetToDefaults: resetPriorityRulesToDefaults,
+  } = usePriorityCaseRules();
+  const {
+    dashboardWorkspaceSettings,
+    setTasksShowOnDashboard,
+    setTasksOpenOnly,
+    setTasksMaxItems,
+    setFollowUpShowOnDashboard,
+    setFollowUpIncludeXray,
+    setFollowUpIncludeMriCt,
+    setFollowUpIncludeSpecialist,
+    setFollowUpIncludeLienLop,
+    setFollowUpXrayClearWhen,
+    setFollowUpMriCtClearWhen,
+    setFollowUpSpecialistClearWhen,
+    setFollowUpLienLopClearStatuses,
+    setFollowUpStaleDaysThreshold,
+    setFollowUpMaxItems,
+    resetToDefaults: resetDashboardWorkspaceSettingsToDefaults,
+  } = useDashboardWorkspaceSettings();
+  const {
+    quickStatsSettings,
+    setStatVisibility,
+    setAllStatsVisible,
+    resetToDefaults: resetQuickStatsToDefaults,
+  } = useQuickStatsSettings();
+  const {
+    scheduleSettings,
+    setEnforceOfficeHours,
+    setAllowOverride,
+    setAppointmentIntervalMin,
+    setMaxAppointmentsPerSlot,
+    updateOfficeHour,
+    resetToDefaults: resetScheduleSettingsToDefaults,
+  } = useScheduleSettings();
+  const {
+    appointmentTypes,
+    addAppointmentType,
+    updateAppointmentType,
+    setDefaultAppointmentType,
+    removeAppointmentType,
+    resetToDefaults: resetAppointmentTypesToDefaults,
+  } = useScheduleAppointmentTypes();
+  const {
+    rooms,
+    addRoom,
+    updateRoom,
+    removeRoom,
+    scheduleRooms,
+    setEnableRoomSelectionOnCheckIn,
+    resetToDefaults: resetRoomSettingsToDefaults,
+  } = useScheduleRooms();
+
+  const [statusNameDraft, setStatusNameDraft] = useState("");
+  const [statusColorDraft, setStatusColorDraft] = useState("#0d79bf");
+  const [statusCaseClosedDraft, setStatusCaseClosedDraft] = useState(false);
+  const [lienOptionDraft, setLienOptionDraft] = useState("");
+  const [appointmentTypeNameDraft, setAppointmentTypeNameDraft] = useState("");
+  const [appointmentTypeColorDraft, setAppointmentTypeColorDraft] = useState("#0d79bf");
+  const [appointmentTypeDurationDraft, setAppointmentTypeDurationDraft] = useState(30);
+  const [appointmentTypeDefaultDraft, setAppointmentTypeDefaultDraft] = useState(false);
+  const [appointmentTypeError, setAppointmentTypeError] = useState("");
+  const [roomNameDraft, setRoomNameDraft] = useState("");
+  const [roomColorDraft, setRoomColorDraft] = useState("#0d79bf");
+  const [roomError, setRoomError] = useState("");
+  const [contactCategoryDraft, setContactCategoryDraft] = useState("");
+  const [contactCategoryError, setContactCategoryError] = useState("");
+  const [officeSettingsMessage, setOfficeSettingsMessage] = useState("");
+  const [backupSelections, setBackupSelections] = useState<Record<BackupModuleId, boolean>>(() =>
+    backupModules.reduce<Record<BackupModuleId, boolean>>((accumulator, module) => {
+      accumulator[module.id] = true;
+      return accumulator;
+    }, {} as Record<BackupModuleId, boolean>),
+  );
+  const [importBackupFile, setImportBackupFile] = useState<File | null>(null);
+  const [backupMessage, setBackupMessage] = useState("");
+  const [backupError, setBackupError] = useState("");
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [preferredDocumentScope] = useState<DocumentTemplateScope | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return parseDocumentTemplateScope(new URLSearchParams(window.location.search).get("scope"));
+  });
+  const [expandedSections, setExpandedSections] = useState<Record<SettingsSectionKey, boolean>>(() => {
+    const next = { ...defaultExpandedSections };
+    if (typeof window === "undefined") {
+      return next;
+    }
+    const section = new URLSearchParams(window.location.search).get("section");
+    if (section && isSettingsSectionKey(section)) {
+      next[section] = true;
+    }
+    return next;
+  });
+
+  const toggleSection = (sectionKey: SettingsSectionKey) => {
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  };
+
+  const selectedBackupModules = useMemo(
+    () => backupModules.filter((module) => backupSelections[module.id]),
+    [backupSelections],
+  );
+  const selectedBackupKeys = useMemo(
+    () => [...new Set(selectedBackupModules.flatMap((module) => module.keys))],
+    [selectedBackupModules],
+  );
+  const followUpLienClearStatusOptions = useMemo(() => {
+    const normalized = new Set(lienOptions.map((entry) => entry.trim().toLowerCase()).filter(Boolean));
+    const merged = [...lienOptions];
+    dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses.forEach((status) => {
+      const cleanStatus = status.trim();
+      if (!cleanStatus) {
+        return;
+      }
+      if (normalized.has(cleanStatus.toLowerCase())) {
+        return;
+      }
+      merged.push(cleanStatus);
+    });
+    return merged;
+  }, [dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses, lienOptions]);
+
+  const setAllBackupSelections = (checked: boolean) => {
+    setBackupSelections((current) => {
+      const next: Record<BackupModuleId, boolean> = { ...current };
+      backupModules.forEach((module) => {
+        next[module.id] = checked;
+      });
+      return next;
+    });
+  };
+
+  const applyBackupPreset = (moduleIds: BackupModuleId[]) => {
+    setBackupSelections((current) => {
+      const next: Record<BackupModuleId, boolean> = { ...current };
+      backupModules.forEach((module) => {
+        next[module.id] = moduleIds.includes(module.id);
+      });
+      return next;
+    });
+  };
+
+  const toggleBackupSelection = (moduleId: BackupModuleId) => {
+    setBackupSelections((current) => ({
+      ...current,
+      [moduleId]: !current[moduleId],
+    }));
+  };
+
+  const setAllSections = (isOpen: boolean) => {
+    setExpandedSections((current) => {
+      const next: Record<SettingsSectionKey, boolean> = { ...current };
+      (Object.keys(current) as SettingsSectionKey[]).forEach((sectionKey) => {
+        next[sectionKey] = isOpen;
+      });
+      return next;
+    });
+  };
+
+  const handleAddCaseStatus = () => {
+    const nextName = statusNameDraft.trim();
+    if (!nextName) {
+      return;
+    }
+    addStatus(nextName, false, statusColorDraft, statusCaseClosedDraft);
+    setStatusNameDraft("");
+    setStatusColorDraft("#0d79bf");
+    setStatusCaseClosedDraft(false);
+  };
+
+  const handleAddLienOption = () => {
+    const nextName = lienOptionDraft.trim();
+    if (!nextName) {
+      return;
+    }
+    addLienOption(nextName);
+    setLienOptionDraft("");
+  };
+
+  const handleAddAppointmentType = () => {
+    const typeName = appointmentTypeNameDraft.trim();
+    if (!typeName) {
+      setAppointmentTypeError("Type name is required.");
+      return;
+    }
+
+    const wasAdded = addAppointmentType(
+      typeName,
+      appointmentTypeColorDraft,
+      appointmentTypeDurationDraft,
+      appointmentTypeDefaultDraft,
+    );
+
+    if (!wasAdded) {
+      setAppointmentTypeError("An appointment type with this name already exists.");
+      return;
+    }
+
+    setAppointmentTypeError("");
+    setAppointmentTypeNameDraft("");
+    setAppointmentTypeColorDraft("#0d79bf");
+    setAppointmentTypeDurationDraft(30);
+    setAppointmentTypeDefaultDraft(false);
+  };
+
+  const handleAddRoom = () => {
+    const result = addRoom(roomNameDraft, roomColorDraft);
+    if (!result.ok) {
+      setRoomError(result.reason);
+      return;
+    }
+    setRoomError("");
+    setRoomNameDraft("");
+    setRoomColorDraft("#0d79bf");
+  };
+
+  const handleAddContactCategory = () => {
+    const result = addContactCategory(contactCategoryDraft);
+    if (!result.ok) {
+      setContactCategoryError(result.reason);
+      return;
+    }
+    setContactCategoryError("");
+    setContactCategoryDraft("");
+  };
+
+  const handleRemoveContactCategory = (category: string) => {
+    const result = removeContactCategory(category);
+    if (!result.ok) {
+      setContactCategoryError(result.reason);
+      return;
+    }
+    setContactCategoryError("");
+  };
+
+  const handleOfficeLogoUpload = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setOfficeSettingsMessage("Please upload an image file for the logo.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      updateOfficeSettings({ logoDataUrl: dataUrl });
+      setOfficeSettingsMessage("Logo uploaded.");
+    };
+    reader.onerror = () => {
+      setOfficeSettingsMessage("Could not read logo file.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleExportBackup = () => {
+    setBackupError("");
+    setBackupMessage("");
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!selectedBackupModules.length) {
+      setBackupError("Select at least one backup module.");
+      return;
+    }
+
+    const data: Record<string, unknown> = {};
+    selectedBackupKeys.forEach((key) => {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) {
+        return;
+      }
+      try {
+        data[key] = JSON.parse(raw) as unknown;
+      } catch {
+        data[key] = raw;
+      }
+    });
+
+    const payload: BackupPayload = {
+      app: "CaseMate PI",
+      format: "casemate-backup",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      modules: selectedBackupModules.map((module) => module.id),
+      data,
+    };
+
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `casemate-backup-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setBackupMessage(
+      `Backup exported (${selectedBackupModules.length} module${selectedBackupModules.length === 1 ? "" : "s"}).`,
+    );
+  };
+
+  const handleBackupFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    setBackupError("");
+    setBackupMessage("");
+    const file = event.target.files?.[0] ?? null;
+    setImportBackupFile(file);
+  };
+
+  const handleImportBackup = async () => {
+    setBackupError("");
+    setBackupMessage("");
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!importBackupFile) {
+      setBackupError("Select a backup file first.");
+      return;
+    }
+    if (!selectedBackupModules.length) {
+      setBackupError("Select at least one module to import.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Import will overwrite selected modules in this office. Continue?",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const content = await importBackupFile.text();
+      const parsed = JSON.parse(content) as unknown;
+      const payload = extractImportPayload(parsed);
+      if (!payload) {
+        setBackupError("Invalid backup file format.");
+        return;
+      }
+      const sourceData = payload.data;
+      const legacyMappings = buildLegacyStorageMappings(selectedBackupKeys, sourceData);
+
+      let appliedCount = 0;
+      let legacyMappedCount = 0;
+      selectedBackupKeys.forEach((key) => {
+        let value: unknown | undefined;
+        if (Object.prototype.hasOwnProperty.call(sourceData, key)) {
+          value = sourceData[key];
+        } else if (Object.prototype.hasOwnProperty.call(legacyMappings, key)) {
+          value = legacyMappings[key].value;
+          legacyMappedCount += 1;
+        }
+
+        if (typeof value === "undefined") {
+          return;
+        }
+        const nextValue = typeof value === "string" ? value : JSON.stringify(value);
+        window.localStorage.setItem(key, nextValue);
+        appliedCount += 1;
+      });
+
+      if (!appliedCount) {
+        setBackupError("No matching selected modules were found in that backup file.");
+        return;
+      }
+
+      setBackupMessage(
+        `${payload.source === "backup" ? "Import complete" : "Migration complete"} (${appliedCount} storage item${
+          appliedCount === 1 ? "" : "s"
+        }${legacyMappedCount ? `, ${legacyMappedCount} mapped from legacy keys` : ""}). Reloading...`,
+      );
+      setImportBackupFile(null);
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = "";
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 650);
+    } catch {
+      setBackupError("Could not import backup. Please verify the JSON file.");
+    }
+  };
+
+  const toggleFollowUpLienLopClearStatus = (statusName: string, enabled: boolean) => {
+    const normalizedTarget = statusName.trim().toLowerCase();
+    const currentStatuses = dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses;
+    if (!normalizedTarget) {
+      return;
+    }
+    if (enabled) {
+      if (currentStatuses.some((entry) => entry.trim().toLowerCase() === normalizedTarget)) {
+        return;
+      }
+      setFollowUpLienLopClearStatuses([...currentStatuses, statusName]);
+      return;
+    }
+    setFollowUpLienLopClearStatuses(
+      currentStatuses.filter((entry) => entry.trim().toLowerCase() !== normalizedTarget),
+    );
+  };
+
+  const defaultAppointmentTypeId = appointmentTypes.find((entry) => entry.isDefault)?.id ?? "";
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+          onClick={() => setAllSections(true)}
+          type="button"
+        >
+          Expand All
+        </button>
+        <button
+          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+          onClick={() => setAllSections(false)}
+          type="button"
+        >
+          Collapse All
+        </button>
+      </div>
+
+      <CollapsibleSection
+        actions={
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            onClick={resetOfficeSettingsToDefaults}
+            type="button"
+          >
+            Reset Office Defaults
+          </button>
+        }
+        isOpen={expandedSections.office}
+        onToggle={() => toggleSection("office")}
+        title="Office Settings"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Office Name</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => updateOfficeSettings({ officeName: event.target.value })}
+              value={officeSettings.officeName}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Phone</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(event) => updateOfficeSettings({ phone: formatUsPhoneInput(event.target.value) })}
+              value={officeSettings.phone}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Fax</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              inputMode="numeric"
+              maxLength={12}
+              onChange={(event) => updateOfficeSettings({ fax: formatUsPhoneInput(event.target.value) })}
+              value={officeSettings.fax}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Email</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => updateOfficeSettings({ email: event.target.value })}
+              value={officeSettings.email}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Doctor Name</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => updateOfficeSettings({ doctorName: event.target.value })}
+              value={officeSettings.doctorName}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Office Logo</span>
+            <input
+              accept="image/*"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              onChange={(event) => handleOfficeLogoUpload(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+          </label>
+          <label className="grid gap-1 sm:col-span-2">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Address</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => updateOfficeSettings({ address: event.target.value })}
+              value={officeSettings.address}
+            />
+          </label>
+          {officeSettings.logoDataUrl && (
+            <div className="sm:col-span-2">
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <p className="text-sm font-semibold text-[var(--text-muted)]">Logo Preview</p>
+                <img
+                  alt="Office logo preview"
+                  className="mt-2 max-h-20 rounded border border-[var(--line-soft)] bg-white p-1"
+                  src={officeSettings.logoDataUrl}
+                />
+                <button
+                  className="mt-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold"
+                  onClick={() => updateOfficeSettings({ logoDataUrl: "" })}
+                  type="button"
+                >
+                  Remove Logo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {officeSettingsMessage && (
+          <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">{officeSettingsMessage}</p>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            onClick={resetContactCategoriesToDefaults}
+            type="button"
+          >
+            Reset Category Defaults
+          </button>
+        }
+        description="Control contact category names used by Contacts and patient attorney/referral workflows."
+        isOpen={expandedSections.contactCategories}
+        onToggle={() => toggleSection("contactCategories")}
+        title="Contact Categories"
+      >
+        <div className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid min-w-[240px] grow gap-1">
+              <span className="text-sm font-semibold text-[var(--text-muted)]">New Category</span>
+              <input
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                onChange={(event) => setContactCategoryDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddContactCategory();
+                  }
+                }}
+                placeholder="Example: Chiropractic"
+                value={contactCategoryDraft}
+              />
+            </label>
+            <button
+              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              onClick={handleAddContactCategory}
+              type="button"
+            >
+              Add Category
+            </button>
+          </div>
+
+          {contactCategoryError && (
+            <p className="mt-2 text-sm font-semibold text-[#b43b34]">{contactCategoryError}</p>
+          )}
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {contactCategories.map((category) => (
+              <div
+                key={`contact-category-${category}`}
+                className="flex items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2"
+              >
+                <span className="font-semibold">{category}</span>
+                <button
+                  className="rounded-md border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+                  onClick={() => handleRemoveContactCategory(category)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            {contactCategories.length === 0 && (
+              <p className="text-sm text-[var(--text-muted)]">No categories configured yet.</p>
+            )}
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            onClick={resetScheduleSettingsToDefaults}
+            type="button"
+          >
+            Reset Schedule Defaults
+          </button>
+        }
+        description="Configure appointment statuses and office hours used by the Schedule page."
+        isOpen={expandedSections.schedule}
+        onToggle={() => toggleSection("schedule")}
+        title="Schedule Settings"
+      >
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Appointment Statuses</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              These statuses are available when clicking a patient in Schedule.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {appointmentStatusOptions.map((status) => (
+                <span
+                  key={`appointment-status-${status}`}
+                  className="rounded-full border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold"
+                >
+                  {status}
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <label className="flex items-start gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2">
+                <input
+                  checked={scheduleSettings.enforceOfficeHours}
+                  className="mt-1"
+                  onChange={(event) => setEnforceOfficeHours(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block text-sm font-semibold">Block appointments outside office hours</span>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Prevent booking beyond configured open hours.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2">
+                <input
+                  checked={scheduleSettings.allowOverride}
+                  className="mt-1"
+                  onChange={(event) => setAllowOverride(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block text-sm font-semibold">
+                    Allow override for outside-hours booking
+                  </span>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Users can still schedule outside office hours when needed.
+                  </span>
+                </span>
+              </label>
+
+              <div className="grid gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-3 md:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold">Allowed appointment interval</span>
+                  <select
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    onChange={(event) => setAppointmentIntervalMin(Number(event.target.value))}
+                    value={scheduleSettings.appointmentIntervalMin}
+                  >
+                    {appointmentIntervalOptions.map((minutes) => (
+                      <option key={`appointment-interval-${minutes}`} value={minutes}>
+                        {minutes} minutes
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Example: with 15 minutes selected, appointments can start at 8:00, 8:15, 8:30, and so on.
+                  </span>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold">Max appointments per time slot</span>
+                  <input
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    max={20}
+                    min={1}
+                    onChange={(event) =>
+                      setMaxAppointmentsPerSlot(Math.max(1, Number(event.target.value) || 1))
+                    }
+                    type="number"
+                    value={scheduleSettings.maxAppointmentsPerSlot}
+                  />
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Example: if set to 4, up to four appointments can share the same start time.
+                  </span>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Office Hours</h4>
+            <div className="mt-3 space-y-2">
+              {scheduleSettings.officeHours.map((officeHour) => (
+                <div
+                  key={`office-hours-${officeHour.dayOfWeek}`}
+                  className="grid items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 sm:grid-cols-[130px_110px_1fr_1fr]"
+                >
+                  <span className="text-sm font-semibold">{weekdayLabels[officeHour.dayOfWeek]}</span>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      checked={officeHour.enabled}
+                      onChange={(event) =>
+                        updateOfficeHour(officeHour.dayOfWeek, { enabled: event.target.checked })
+                      }
+                      type="checkbox"
+                    />
+                    Open
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                      Start
+                    </span>
+                    <input
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1"
+                      disabled={!officeHour.enabled}
+                      onChange={(event) =>
+                        updateOfficeHour(officeHour.dayOfWeek, { start: event.target.value })
+                      }
+                      type="time"
+                      value={officeHour.start}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                      End
+                    </span>
+                    <input
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1"
+                      disabled={!officeHour.enabled}
+                      onChange={(event) =>
+                        updateOfficeHour(officeHour.dayOfWeek, { end: event.target.value })
+                      }
+                      type="time"
+                      value={officeHour.end}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+
+        <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-lg font-semibold">Appointment Types</h4>
+              <p className="text-sm text-[var(--text-muted)]">
+                Create types used in Schedule when booking appointments.
+              </p>
+            </div>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+              onClick={resetAppointmentTypesToDefaults}
+              type="button"
+            >
+              Reset Type Defaults
+            </button>
+          </div>
+
+          <div className="mb-3 grid gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 sm:grid-cols-[1.6fr_90px_130px_130px_auto]">
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                Add Appointment Type
+              </span>
+              <input
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                onChange={(event) => setAppointmentTypeNameDraft(event.target.value)}
+                placeholder="Example: Personal Injury Office Visit"
+                value={appointmentTypeNameDraft}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                Color
+              </span>
+              <input
+                className="h-10 rounded-lg border border-[var(--line-soft)] bg-white p-1"
+                onChange={(event) => setAppointmentTypeColorDraft(event.target.value)}
+                type="color"
+                value={appointmentTypeColorDraft}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                Duration (Min)
+              </span>
+              <input
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                min={5}
+                onChange={(event) => setAppointmentTypeDurationDraft(Number(event.target.value) || 5)}
+                type="number"
+                value={appointmentTypeDurationDraft}
+              />
+            </label>
+            <label className="inline-flex items-center gap-2 self-end pb-2 text-sm font-semibold">
+              <input
+                checked={appointmentTypeDefaultDraft}
+                onChange={(event) => setAppointmentTypeDefaultDraft(event.target.checked)}
+                type="checkbox"
+              />
+              Default
+            </label>
+            <button
+              className="self-end rounded-xl bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white"
+              onClick={handleAddAppointmentType}
+              type="button"
+            >
+              Add Type
+            </button>
+          </div>
+
+          {appointmentTypeError && (
+            <p className="mb-3 text-sm font-semibold text-[#b43b34]">{appointmentTypeError}</p>
+          )}
+
+          <label className="mb-3 grid gap-1 sm:max-w-[420px]">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Default Appointment Type</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => setDefaultAppointmentType(event.target.value)}
+              value={defaultAppointmentTypeId}
+            >
+              {appointmentTypes.map((entry) => (
+                <option key={`default-type-${entry.id}`} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[760px] space-y-2">
+              <div className="grid grid-cols-[40px_1.8fr_120px_140px_110px_90px] items-center gap-2 border-b border-[var(--line-soft)] pb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <span />
+                <span>Name</span>
+                <span>Color</span>
+                <span>Duration</span>
+                <span>Default</span>
+                <span />
+              </div>
+
+              {appointmentTypes.map((entry) => (
+                <div
+                  key={`appointment-type-row-${entry.id}`}
+                  className="grid grid-cols-[40px_1.8fr_120px_140px_110px_90px] items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2"
+                >
+                  <span className="text-xl font-semibold text-[var(--brand-primary)]">≡</span>
+                  <input
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    onChange={(event) =>
+                      updateAppointmentType(entry.id, {
+                        name: event.target.value,
+                      })
+                    }
+                    value={entry.name}
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="h-10 w-14 rounded-lg border border-[var(--line-soft)] bg-white p-1"
+                      onChange={(event) =>
+                        updateAppointmentType(entry.id, {
+                          color: event.target.value,
+                        })
+                      }
+                      type="color"
+                      value={entry.color}
+                    />
+                    <span
+                      aria-hidden
+                      className="inline-block h-4 w-4 rounded-full border border-[var(--line-soft)]"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                  </div>
+                  <input
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    min={5}
+                    onChange={(event) =>
+                      updateAppointmentType(entry.id, {
+                        durationMin: Number(event.target.value) || 5,
+                      })
+                    }
+                    type="number"
+                    value={entry.durationMin}
+                  />
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      checked={entry.isDefault}
+                      onChange={() => setDefaultAppointmentType(entry.id)}
+                      type="radio"
+                    />
+                    Default
+                  </label>
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+                    disabled={appointmentTypes.length <= 1}
+                    onClick={() => removeAppointmentType(entry.id)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                  <p className="col-start-2 text-xs text-[var(--text-muted)]">
+                    {formatDurationMinutes(entry.durationMin)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </article>
+
+        <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-white p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-lg font-semibold">Room Settings</h4>
+              <p className="text-sm text-[var(--text-muted)]">
+                Create rooms for optional assignment during patient check-in.
+              </p>
+            </div>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+              onClick={resetRoomSettingsToDefaults}
+              type="button"
+            >
+              Reset Rooms
+            </button>
+          </div>
+
+          <label className="mb-3 flex items-start gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2">
+            <input
+              checked={scheduleRooms.enableRoomSelectionOnCheckIn}
+              className="mt-1"
+              onChange={(event) => setEnableRoomSelectionOnCheckIn(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <span className="block text-sm font-semibold">Prompt for room at check-in</span>
+              <span className="text-xs text-[var(--text-muted)]">
+                When enabled, checking in from Schedule can assign a room. If skipped, check-in still proceeds.
+              </span>
+            </span>
+          </label>
+
+          <div className="mb-3 grid gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 sm:grid-cols-[1.6fr_110px_100px_auto]">
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                Add Room
+              </span>
+              <input
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                onChange={(event) => setRoomNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddRoom();
+                  }
+                }}
+                placeholder="Example: Room 1"
+                value={roomNameDraft}
+              />
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                Color
+              </span>
+              <input
+                className="h-10 rounded-lg border border-[var(--line-soft)] bg-white p-1"
+                onChange={(event) => setRoomColorDraft(event.target.value)}
+                type="color"
+                value={roomColorDraft}
+              />
+            </label>
+
+            <div className="self-end pb-2">
+              <span
+                aria-hidden
+                className="inline-block h-5 w-5 rounded-full border border-[var(--line-soft)]"
+                style={{ backgroundColor: roomColorDraft }}
+              />
+            </div>
+
+            <button
+              className="self-end rounded-xl bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white"
+              onClick={handleAddRoom}
+              type="button"
+            >
+              Add Room
+            </button>
+          </div>
+
+          {roomError && <p className="mb-3 text-sm font-semibold text-[#b43b34]">{roomError}</p>}
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[700px] space-y-2">
+              <div className="grid grid-cols-[40px_1.9fr_140px_110px_90px] items-center gap-2 border-b border-[var(--line-soft)] pb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <span />
+                <span>Room Name</span>
+                <span>Color</span>
+                <span>Active</span>
+                <span />
+              </div>
+
+              {rooms.map((room) => (
+                <div
+                  key={`room-row-${room.id}`}
+                  className="grid grid-cols-[40px_1.9fr_140px_110px_90px] items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2"
+                >
+                  <span className="text-xl font-semibold text-[var(--brand-primary)]">≡</span>
+                  <input
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    onChange={(event) => updateRoom(room.id, { name: event.target.value })}
+                    value={room.name}
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="h-10 w-14 rounded-lg border border-[var(--line-soft)] bg-white p-1"
+                      onChange={(event) => updateRoom(room.id, { color: event.target.value })}
+                      type="color"
+                      value={room.color}
+                    />
+                    <span
+                      aria-hidden
+                      className="inline-block h-4 w-4 rounded-full border border-[var(--line-soft)]"
+                      style={{ backgroundColor: room.color }}
+                    />
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      checked={room.active}
+                      onChange={(event) => updateRoom(room.id, { active: event.target.checked })}
+                      type="checkbox"
+                    />
+                    Active
+                  </label>
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+                    onClick={() => removeRoom(room.id)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              {rooms.length === 0 && (
+                <p className="text-sm text-[var(--text-muted)]">No rooms configured yet.</p>
+              )}
+            </div>
+          </div>
+        </article>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={resetPriorityRulesToDefaults}
+              type="button"
+            >
+              Reset Priority Rules
+            </button>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={resetDashboardWorkspaceSettingsToDefaults}
+              type="button"
+            >
+              Reset Task / Follow Up Defaults
+            </button>
+          </div>
+        }
+        description="Configure priority cases and dashboard behavior for task + patient follow-up queues."
+        isOpen={expandedSections.dashboard}
+        onToggle={() => toggleSection("dashboard")}
+        title="Dashboard Settings"
+      >
+        <div className="grid gap-4 xl:grid-cols-3">
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Case Status</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Choose which case statuses appear on Dashboard.
+            </p>
+            <div className="mt-3 grid gap-2">
+              {caseStatuses.map((status) => (
+                <label
+                  key={`dashboard-case-status-${status.name}`}
+                  className="inline-flex items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5 text-sm"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="inline-block h-3 w-3 rounded-full border border-[var(--line-soft)]"
+                      style={{ backgroundColor: status.color }}
+                    />
+                    {status.name}
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    <input
+                      checked={status.showOnDashboard}
+                      onChange={() => toggleDashboardVisibility(status.name)}
+                      type="checkbox"
+                    />
+                    Show
+                  </span>
+                </label>
+              ))}
+              {caseStatuses.length === 0 && (
+                <p className="text-sm text-[var(--text-muted)]">Add case statuses first.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Priority Case</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Selected statuses will be treated as priority on Dashboard.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {caseStatuses.map((status) => (
+                <label key={`priority-status-${status.name}`} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={priorityRules.statusNames.some(
+                      (entry) => entry.toLowerCase() === status.name.toLowerCase(),
+                    )}
+                    onChange={() => toggleStatus(status.name)}
+                    type="checkbox"
+                  />
+                  {status.name}
+                </label>
+              ))}
+              {caseStatuses.length === 0 && (
+                <p className="text-sm text-[var(--text-muted)]">Add case statuses first.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Additional Priority Rules</h4>
+            <div className="mt-3 space-y-3">
+              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    checked={priorityRules.includeMriDue}
+                    onChange={(event) => setIncludeMriDue(event.target.checked)}
+                    type="checkbox"
+                  />
+                  MRI Due (Days from Initial)
+                </label>
+                <input
+                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  disabled={!priorityRules.includeMriDue}
+                  min={1}
+                  onChange={(event) => setMriDueDaysFromInitial(Number(event.target.value) || 1)}
+                  type="number"
+                  value={priorityRules.mriDueDaysFromInitial}
+                />
+              </div>
+
+              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    checked={priorityRules.includeNoUpdate}
+                    onChange={(event) => setIncludeNoUpdate(event.target.checked)}
+                    type="checkbox"
+                  />
+                  No Update
+                </label>
+                <input
+                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  disabled={!priorityRules.includeNoUpdate}
+                  min={1}
+                  onChange={(event) => setNoUpdateDaysThreshold(Number(event.target.value) || 1)}
+                  type="number"
+                  value={priorityRules.noUpdateDaysThreshold}
+                />
+              </div>
+
+              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <input
+                    checked={priorityRules.includeRbStatusCheck}
+                    onChange={(event) => setIncludeRbStatusCheck(event.target.checked)}
+                    type="checkbox"
+                  />
+                  R&B Status Check (Days from R&B Sent)
+                </label>
+                <input
+                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  disabled={!priorityRules.includeRbStatusCheck}
+                  min={1}
+                  onChange={(event) => setRbStatusCheckDaysThreshold(Number(event.target.value) || 1)}
+                  type="number"
+                  value={priorityRules.rbStatusCheckDaysThreshold}
+                />
+              </div>
+
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Max priority cards</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  min={1}
+                  onChange={(event) => setMaxItems(Number(event.target.value) || 1)}
+                  type="number"
+                  value={priorityRules.maxItems}
+                />
+              </label>
+
+              <p className="text-xs text-[var(--text-muted)]">
+                MRI Due and No Update warnings pause after a case is Discharged or once R&B is sent.
+                Use R&B Status Check for post-R&B follow-up timing.
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">My Tasks</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Controls the dashboard tasks preview and default task behavior.
+            </p>
+            <div className="mt-3 space-y-3">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input
+                  checked={dashboardWorkspaceSettings.myTasks.showOnDashboard}
+                  onChange={(event) => setTasksShowOnDashboard(event.target.checked)}
+                  type="checkbox"
+                />
+                Show My Tasks on Dashboard
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input
+                  checked={dashboardWorkspaceSettings.myTasks.openOnly}
+                  onChange={(event) => setTasksOpenOnly(event.target.checked)}
+                  type="checkbox"
+                />
+                Default to Open tasks only
+              </label>
+
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">
+                  Max tasks shown on Dashboard
+                </span>
+                <input
+                  className="max-w-[200px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  min={1}
+                  onChange={(event) => setTasksMaxItems(Number(event.target.value) || 1)}
+                  type="number"
+                  value={dashboardWorkspaceSettings.myTasks.maxItems}
+                />
+              </label>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Patient Follow Up</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Controls dashboard follow-up preview and follow-up queue behavior in Patients.
+            </p>
+            <div className="mt-3 space-y-3">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold">
+                <input
+                  checked={dashboardWorkspaceSettings.patientFollowUp.showOnDashboard}
+                  onChange={(event) => setFollowUpShowOnDashboard(event.target.checked)}
+                  type="checkbox"
+                />
+                Show Patient Follow Up on Dashboard
+              </label>
+
+              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 sm:grid-cols-2 xl:grid-cols-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeXray}
+                    onChange={(event) => setFollowUpIncludeXray(event.target.checked)}
+                    type="checkbox"
+                  />
+                  X-Ray
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeMriCt}
+                    onChange={(event) => setFollowUpIncludeMriCt(event.target.checked)}
+                    type="checkbox"
+                  />
+                  MRI / CT
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeSpecialist}
+                    onChange={(event) => setFollowUpIncludeSpecialist(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Specialist
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeLienLop}
+                    onChange={(event) => setFollowUpIncludeLienLop(event.target.checked)}
+                    type="checkbox"
+                  />
+                  {lienLabel}
+                </label>
+              </div>
+
+              <div className="grid gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 lg:grid-cols-3">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">X-Ray clear when</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      setFollowUpXrayClearWhen(
+                        event.target.value as "sent" | "done" | "received" | "reviewed",
+                      )
+                    }
+                    value={dashboardWorkspaceSettings.patientFollowUp.xrayClearWhen}
+                  >
+                    <option value="sent">Sent</option>
+                    <option value="done">Done</option>
+                    <option value="received">Report Received</option>
+                    <option value="reviewed">Report Reviewed</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">MRI / CT clear when</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      setFollowUpMriCtClearWhen(
+                        event.target.value as "sent" | "done" | "received" | "reviewed",
+                      )
+                    }
+                    value={dashboardWorkspaceSettings.patientFollowUp.mriCtClearWhen}
+                  >
+                    <option value="sent">Sent</option>
+                    <option value="done">Done</option>
+                    <option value="received">Report Received</option>
+                    <option value="reviewed">Report Reviewed</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Specialist clear when</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      setFollowUpSpecialistClearWhen(event.target.value as "sent" | "scheduled" | "report")
+                    }
+                    value={dashboardWorkspaceSettings.patientFollowUp.specialistClearWhen}
+                  >
+                    <option value="sent">Sent</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="report">Report Received</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <p className="text-sm font-semibold text-[var(--text-muted)]">{lienLabel} clear statuses</p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                  Follow-up clears when this field matches one of the selected statuses.
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {followUpLienClearStatusOptions.map((statusName) => {
+                    const checked = dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses.some(
+                      (entry) => entry.trim().toLowerCase() === statusName.trim().toLowerCase(),
+                    );
+                    return (
+                      <label
+                        className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        key={`follow-up-lien-clear-status-${statusName}`}
+                      >
+                        <input
+                          checked={checked}
+                          onChange={(event) => toggleFollowUpLienLopClearStatus(statusName, event.target.checked)}
+                          type="checkbox"
+                        />
+                        {statusName}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Stale after (days)</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    min={1}
+                    onChange={(event) => setFollowUpStaleDaysThreshold(Number(event.target.value) || 1)}
+                    type="number"
+                    value={dashboardWorkspaceSettings.patientFollowUp.staleDaysThreshold}
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">
+                    Max follow-up rows on Dashboard
+                  </span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    min={1}
+                    onChange={(event) => setFollowUpMaxItems(Number(event.target.value) || 1)}
+                    type="number"
+                    value={dashboardWorkspaceSettings.patientFollowUp.maxItems}
+                  />
+                </label>
+              </div>
+            </div>
+          </article>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={() => setAllStatsVisible(true)}
+              type="button"
+            >
+              Select All
+            </button>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={() => setAllStatsVisible(false)}
+              type="button"
+            >
+              Clear All
+            </button>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={resetQuickStatsToDefaults}
+              type="button"
+            >
+              Reset Quick Stats Defaults
+            </button>
+          </div>
+        }
+        description="Choose which quick patient stats are shown in Patient File next to Re-Exam and Related Cases."
+        isOpen={expandedSections.quickStats}
+        onToggle={() => toggleSection("quickStats")}
+        title="Quick Stats"
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          {quickStatOptions.map((option) => (
+            <label
+              className="flex items-start gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              key={`quick-stat-option-${option.key}`}
+            >
+              <input
+                checked={quickStatsSettings.visibleStats[option.key]}
+                className="mt-1"
+                onChange={(event) => setStatVisibility(option.key, event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="text-xs text-[var(--text-muted)]">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={resetCaseStatusesToDefaults}
+              type="button"
+            >
+              Reset Status Defaults
+            </button>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              onClick={resetLienOptionsToDefaults}
+              type="button"
+            >
+              Reset Lien / LOP Defaults
+            </button>
+          </div>
+        }
+        description="Create and maintain case status names and colors."
+        isOpen={expandedSections.caseStatuses}
+        onToggle={() => toggleSection("caseStatuses")}
+        title="Case Status Categories"
+      >
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--line-soft)] bg-white p-3">
+          <label className="min-w-[220px] grow space-y-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">New Case Status</span>
+            <input
+              className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => setStatusNameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAddCaseStatus();
+                }
+              }}
+              placeholder="Example: Pending Records"
+              value={statusNameDraft}
+            />
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Status Color</span>
+            <input
+              className="h-10 w-16 rounded-lg border border-[var(--line-soft)] bg-white p-1"
+              onChange={(event) => setStatusColorDraft(event.target.value)}
+              type="color"
+              value={statusColorDraft}
+            />
+          </label>
+
+          <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold">
+            <input
+              checked={statusCaseClosedDraft}
+              onChange={(event) => setStatusCaseClosedDraft(event.target.checked)}
+              type="checkbox"
+            />
+            Case Closed
+          </label>
+
+          <button
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+            onClick={handleAddCaseStatus}
+            type="button"
+          >
+            Add Status
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {caseStatuses.map((status) => (
+            <div
+              key={status.name}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full border border-[var(--line-soft)]"
+                  style={{ backgroundColor: status.color }}
+                />
+                <span className="font-semibold">{status.name}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    checked={status.isCaseClosed}
+                    onChange={(event) => setStatusClosed(status.name, event.target.checked)}
+                    type="checkbox"
+                  />
+                  Case Closed
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  Color
+                  <input
+                    className="h-8 w-10 rounded-md border border-[var(--line-soft)] bg-white p-1"
+                    onChange={(event) => setStatusColor(status.name, event.target.value)}
+                    type="color"
+                    value={status.color}
+                  />
+                </label>
+                <button
+                  aria-label={`Remove ${status.name}`}
+                  className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
+                  onClick={() => removeStatus(status.name)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {caseStatuses.length === 0 && (
+            <p className="text-sm text-[var(--text-muted)]">No statuses configured yet.</p>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-[var(--line-soft)] bg-white p-4">
+          <h4 className="text-lg font-semibold">Lien / LOP</h4>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Configure the patient-file label and dropdown options for this field.
+          </p>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="self-start rounded-xl border border-[var(--line-soft)] bg-white p-3">
+              <span className="text-sm font-semibold text-[var(--text-muted)]">Field Label</span>
+              <div className="mt-2 inline-flex w-full rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-1">
+                {(["Lien", "LOP"] as const).map((label) => {
+                  const active = lienLabel === label;
+                  return (
+                    <button
+                      aria-pressed={active}
+                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                        active
+                          ? "bg-[var(--brand-primary)] text-white shadow-sm"
+                          : "text-[var(--text-main)] hover:bg-white"
+                      }`}
+                      key={label}
+                      onClick={() => setLienLabel(label)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                This label appears in the patient-file field.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">
+                  Add {lienLabel} Option
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="min-w-[240px] grow rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) => setLienOptionDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAddLienOption();
+                      }
+                    }}
+                    placeholder="Example: Sent to Attorney"
+                    value={lienOptionDraft}
+                  />
+                  <button
+                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                    onClick={handleAddLienOption}
+                    type="button"
+                  >
+                    Add Option
+                  </button>
+                </div>
+              </label>
+
+              <div className="mt-3 grid gap-2">
+                {lienOptions.map((option, index) => (
+                  <div
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white p-2"
+                    key={`${option}-${index}`}
+                  >
+                    <input
+                      className="min-w-[220px] grow rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5"
+                      onChange={(event) => updateLienOption(index, event.target.value)}
+                      value={option}
+                    />
+                    <button
+                      className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
+                      disabled={index === 0}
+                      onClick={() => moveLienOption(index, "up")}
+                      type="button"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
+                      disabled={index === lienOptions.length - 1}
+                      onClick={() => moveLienOption(index, "down")}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
+                      disabled={lienOptions.length <= 1}
+                      onClick={() => removeLienOption(index)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Configure Subjective, Objective, Assessment, and Plan macro templates."
+        isOpen={expandedSections.soapMacros}
+        onToggle={() => toggleSection("soapMacros")}
+        title="SOAP Macro Settings"
+      >
+        <MacroSettingsPanel />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Manage treatment macros, diagnosis codes, and one-click diagnosis bundles."
+        isOpen={expandedSections.billingMacros}
+        onToggle={() => toggleSection("billingMacros")}
+        title="Billing Macro Settings"
+      >
+        <BillingMacroSettingsPanel />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Create office cash packages (visits, included CPTs, discounted price, and auto discount %)."
+        isOpen={expandedSections.packageBuilder}
+        onToggle={() => toggleSection("packageBuilder")}
+        title="Package Builder"
+      >
+        <PackageBuilderSettingsPanel />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Create and edit document templates that merge patient and case data into printable PDFs."
+        isOpen={expandedSections.documents}
+        onToggle={() => toggleSection("documents")}
+        title="Document Template Settings"
+      >
+        <DocumentTemplateSettingsPanel
+          officeSettings={officeSettings}
+          preferredScope={preferredDocumentScope}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Create fully customizable narrative report templates that can pull from patient demographics, encounters, imaging, specialists, diagnoses, and runtime prompts."
+        isOpen={expandedSections.reports}
+        onToggle={() => toggleSection("reports")}
+        title="Narrative Report Builder"
+      >
+        <ReportTemplateSettingsPanel />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        description="Export selected settings/data into a backup file, then import into another office setup."
+        isOpen={expandedSections.backup}
+        onToggle={() => toggleSection("backup")}
+        title="Backup & Restore"
+      >
+        <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold"
+                onClick={() => setAllBackupSelections(true)}
+                type="button"
+              >
+                Select All
+              </button>
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold"
+                onClick={() => setAllBackupSelections(false)}
+                type="button"
+              >
+                Clear All
+              </button>
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold"
+                onClick={() =>
+                  applyBackupPreset(["soapMacros", "billingMacros", "documentTemplates", "reportTemplates"])
+                }
+                type="button"
+              >
+                Macros + Letters Only
+              </button>
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold"
+                onClick={() =>
+                  applyBackupPreset([
+                    "officeSettings",
+                    "quickStats",
+                    "scheduleSettings",
+                    "roomSettings",
+                    "appointmentTypes",
+                    "keyDates",
+                  ])
+                }
+                type="button"
+              >
+                Office + Schedule Only
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {backupModules.map((module) => (
+                <label
+                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2"
+                  key={`backup-module-${module.id}`}
+                >
+                  <input
+                    checked={backupSelections[module.id]}
+                    className="mt-1"
+                    onChange={() => toggleBackupSelection(module.id)}
+                    type="checkbox"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold">{module.label}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{module.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <p className="mt-3 text-xs text-[var(--text-muted)]">
+              Selected modules: {selectedBackupModules.length} • Storage keys included: {selectedBackupKeys.length}
+            </p>
+          </article>
+
+          <article className="space-y-3 rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+              <h4 className="text-lg font-semibold">Export Backup</h4>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Download a JSON backup for transfer to another office or for your own archive.
+              </p>
+              <button
+                className="mt-3 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                onClick={handleExportBackup}
+                type="button"
+              >
+                Export Selected Backup
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+              <h4 className="text-lg font-semibold">Import Backup</h4>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Import selected modules from a backup JSON and overwrite current values. Legacy migration also supports
+                files with <span className="font-semibold">patients</span>, <span className="font-semibold">key dates</span>, and{" "}
+                <span className="font-semibold">contacts</span> collections.
+              </p>
+              <input
+                accept=".json,application/json"
+                className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                onChange={handleBackupFileSelected}
+                ref={importFileInputRef}
+                type="file"
+              />
+              {importBackupFile && (
+                <p className="mt-2 text-xs text-[var(--text-muted)]">Selected file: {importBackupFile.name}</p>
+              )}
+              <button
+                className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={handleImportBackup}
+                type="button"
+              >
+                Import Selected Modules
+              </button>
+            </div>
+
+            {backupError && <p className="text-sm font-semibold text-[#b43b34]">{backupError}</p>}
+            {backupMessage && (
+              <p className="text-sm font-semibold text-[var(--brand-primary)]">{backupMessage}</p>
+            )}
+          </article>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        isOpen={expandedSections.security}
+        onToggle={() => toggleSection("security")}
+        title="Security Baseline (Pre-PHI Checklist)"
+      >
+        <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-muted)]">
+          <li>Use only test data in local mode.</li>
+          <li>Add MFA and role-based permissions before production launch.</li>
+          <li>Enable full audit logs for user actions and data edits.</li>
+          <li>Run backup and restore tests before go-live.</li>
+          <li>Switch to HIPAA cloud with BAA before storing real PHI.</li>
+        </ul>
+      </CollapsibleSection>
+    </div>
+  );
+}

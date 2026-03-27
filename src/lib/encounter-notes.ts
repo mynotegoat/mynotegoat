@@ -1,0 +1,349 @@
+import { encounters as seedEncounters } from "@/lib/mock-data";
+import { type MacroAnswerMap } from "@/lib/macro-templates";
+
+export const encounterSections = [
+  "subjective",
+  "objective",
+  "assessment",
+  "plan",
+] as const;
+
+export type EncounterSection = (typeof encounterSections)[number];
+
+export interface EncounterDiagnosisEntry {
+  id: string;
+  code: string;
+  description: string;
+  source: string;
+}
+
+export interface EncounterChargeEntry {
+  id: string;
+  treatmentMacroId?: string;
+  name: string;
+  procedureCode: string;
+  unitPrice: number;
+  units: number;
+}
+
+export interface EncounterMacroRunRecord {
+  id: string;
+  section: EncounterSection;
+  macroId: string;
+  macroName: string;
+  body: string;
+  answers: MacroAnswerMap;
+  generatedText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EncounterNoteRecord {
+  id: string;
+  patientId: string;
+  patientName: string;
+  provider: string;
+  appointmentType: string;
+  encounterDate: string;
+  startTime: string;
+  soap: Record<EncounterSection, string>;
+  macroRuns: EncounterMacroRunRecord[];
+  diagnoses: EncounterDiagnosisEntry[];
+  charges: EncounterChargeEntry[];
+  signed: boolean;
+  signedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const STORAGE_KEY = "casemate.encounter-notes.v1";
+
+function toUsDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(trimmed)) {
+    const [month, day, year] = trimmed.split("/");
+    return `${month}/${day}/20${year}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-");
+    return `${month}/${day}/${year}`;
+  }
+  return "";
+}
+
+function splitLegacyEncounterDate(raw: string) {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}\s?(?:AM|PM))$/i);
+  if (!match) {
+    return {
+      encounterDate: toUsDate(trimmed) || "",
+      startTime: "",
+    };
+  }
+  return {
+    encounterDate: toUsDate(match[1]) || "",
+    startTime: "",
+  };
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function defaultSoapBySection(): Record<EncounterSection, string> {
+  return {
+    subjective: "",
+    objective: "",
+    assessment: "",
+    plan: "",
+  };
+}
+
+function createSeedRecords(): EncounterNoteRecord[] {
+  return seedEncounters.map((entry) => {
+    const { encounterDate, startTime } = splitLegacyEncounterDate(entry.encounterDate);
+    const timestamp = nowIso();
+    return {
+      id: entry.id,
+      patientId: entry.patientId,
+      patientName: entry.patientName,
+      provider: entry.provider,
+      appointmentType: entry.appointmentType,
+      encounterDate,
+      startTime,
+      soap: defaultSoapBySection(),
+      macroRuns: [],
+      diagnoses: [],
+      charges: [],
+      signed: entry.signed,
+      signedAt: "",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  });
+}
+
+function normalizeDiagnosis(value: unknown): EncounterDiagnosisEntry | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<EncounterDiagnosisEntry>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const code = typeof row.code === "string" ? row.code.trim().toUpperCase() : "";
+  const description = typeof row.description === "string" ? row.description.trim() : "";
+  const source = typeof row.source === "string" ? row.source.trim() : "Manual";
+  if (!id || !code || !description) {
+    return null;
+  }
+  return {
+    id,
+    code,
+    description,
+    source,
+  };
+}
+
+function normalizeCharge(value: unknown): EncounterChargeEntry | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<EncounterChargeEntry>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  const procedureCode = typeof row.procedureCode === "string" ? row.procedureCode.trim().toUpperCase() : "";
+  if (!id || !name || !procedureCode) {
+    return null;
+  }
+  const unitPrice = typeof row.unitPrice === "number" && Number.isFinite(row.unitPrice) ? Math.max(0, row.unitPrice) : 0;
+  const units =
+    typeof row.units === "number" && Number.isFinite(row.units)
+      ? Math.max(1, Math.round(row.units))
+      : 1;
+  return {
+    id,
+    treatmentMacroId: typeof row.treatmentMacroId === "string" ? row.treatmentMacroId : undefined,
+    name,
+    procedureCode,
+    unitPrice,
+    units,
+  };
+}
+
+function normalizeSoap(value: unknown) {
+  const defaults = defaultSoapBySection();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+  const row = value as Partial<Record<EncounterSection, unknown>>;
+  return {
+    subjective: typeof row.subjective === "string" ? row.subjective : defaults.subjective,
+    objective: typeof row.objective === "string" ? row.objective : defaults.objective,
+    assessment: typeof row.assessment === "string" ? row.assessment : defaults.assessment,
+    plan: typeof row.plan === "string" ? row.plan : defaults.plan,
+  };
+}
+
+function normalizeMacroRun(value: unknown): EncounterMacroRunRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<EncounterMacroRunRecord>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const section = row.section;
+  const macroId = typeof row.macroId === "string" ? row.macroId.trim() : "";
+  const macroName = typeof row.macroName === "string" ? row.macroName.trim() : "";
+  const body = typeof row.body === "string" ? row.body : "";
+  const generatedText = typeof row.generatedText === "string" ? row.generatedText : "";
+  const answers =
+    row.answers && typeof row.answers === "object"
+      ? Object.entries(row.answers).reduce<MacroAnswerMap>((accumulator, [key, rawValue]) => {
+          if (typeof rawValue === "string") {
+            accumulator[key] = rawValue;
+            return accumulator;
+          }
+          if (Array.isArray(rawValue)) {
+            const normalizedValues = rawValue
+              .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+              .filter((entry) => entry.length > 0);
+            accumulator[key] = normalizedValues;
+          }
+          return accumulator;
+        }, {})
+      : {};
+  if (
+    !id ||
+    !macroId ||
+    !macroName ||
+    !generatedText ||
+    !section ||
+    !encounterSections.includes(section)
+  ) {
+    return null;
+  }
+  return {
+    id,
+    section,
+    macroId,
+    macroName,
+    body,
+    answers,
+    generatedText,
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : nowIso(),
+    updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : nowIso(),
+  };
+}
+
+function normalizeRecord(value: unknown): EncounterNoteRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Partial<EncounterNoteRecord>;
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const patientId = typeof row.patientId === "string" ? row.patientId.trim() : "";
+  const patientName = typeof row.patientName === "string" ? row.patientName.trim() : "";
+  const provider = typeof row.provider === "string" ? row.provider.trim() : "";
+  const appointmentType = typeof row.appointmentType === "string" ? row.appointmentType.trim() : "";
+  const encounterDate = typeof row.encounterDate === "string" ? toUsDate(row.encounterDate) : "";
+  if (!id || !patientId || !patientName || !provider || !appointmentType || !encounterDate) {
+    return null;
+  }
+
+  return {
+    id,
+    patientId,
+    patientName,
+    provider,
+    appointmentType,
+    encounterDate,
+    startTime: "",
+    soap: normalizeSoap(row.soap),
+    macroRuns: Array.isArray(row.macroRuns)
+      ? row.macroRuns.map(normalizeMacroRun).filter((entry): entry is EncounterMacroRunRecord => Boolean(entry))
+      : [],
+    diagnoses: Array.isArray(row.diagnoses)
+      ? row.diagnoses.map(normalizeDiagnosis).filter((entry): entry is EncounterDiagnosisEntry => Boolean(entry))
+      : [],
+    charges: Array.isArray(row.charges)
+      ? row.charges.map(normalizeCharge).filter((entry): entry is EncounterChargeEntry => Boolean(entry))
+      : [],
+    signed: row.signed === true,
+    signedAt: typeof row.signedAt === "string" ? row.signedAt : "",
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : nowIso(),
+    updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : nowIso(),
+  };
+}
+
+export function loadEncounterNoteRecords() {
+  if (typeof window === "undefined") {
+    return createSeedRecords();
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return createSeedRecords();
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return createSeedRecords();
+    }
+    const normalized = parsed
+      .map(normalizeRecord)
+      .filter((entry): entry is EncounterNoteRecord => Boolean(entry));
+    return normalized.length ? normalized : createSeedRecords();
+  } catch {
+    return createSeedRecords();
+  }
+}
+
+export function saveEncounterNoteRecords(records: EncounterNoteRecord[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
+export function createEncounterId() {
+  return `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createEncounterDiagnosisId() {
+  return `edx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createEncounterChargeId() {
+  return `ech-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createEncounterMacroRunId() {
+  return `emr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function getNowUsDate() {
+  const date = new Date();
+  return date.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+export function normalizeEncounterDateInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (!digits) {
+    return "";
+  }
+  if (digits.length <= 2) {
+    return digits;
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}

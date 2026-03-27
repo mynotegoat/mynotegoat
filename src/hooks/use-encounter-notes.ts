@@ -1,0 +1,411 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import {
+  createEncounterChargeId,
+  createEncounterDiagnosisId,
+  createEncounterId,
+  createEncounterMacroRunId,
+  getNowUsDate,
+  loadEncounterNoteRecords,
+  saveEncounterNoteRecords,
+  type EncounterChargeEntry,
+  type EncounterMacroRunRecord,
+  type EncounterDiagnosisEntry,
+  type EncounterNoteRecord,
+  type EncounterSection,
+} from "@/lib/encounter-notes";
+
+type NewEncounterDraft = {
+  patientId: string;
+  patientName: string;
+  provider: string;
+  appointmentType: string;
+  encounterDate?: string;
+};
+
+type UpdateEncounterPatch = Partial<
+  Pick<EncounterNoteRecord, "provider" | "appointmentType" | "encounterDate" | "patientName">
+>;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+export function useEncounterNotes() {
+  const [encounters, setEncounters] = useState<EncounterNoteRecord[]>(() => loadEncounterNoteRecords());
+
+  const updateRecords = useCallback((updater: (current: EncounterNoteRecord[]) => EncounterNoteRecord[]) => {
+    setEncounters((current) => {
+      const next = updater(current);
+      saveEncounterNoteRecords(next);
+      return next;
+    });
+  }, []);
+
+  const upsertEncounter = useCallback(
+    (encounterId: string, updater: (current: EncounterNoteRecord) => EncounterNoteRecord) => {
+      updateRecords((current) =>
+        current.map((entry) => {
+          if (entry.id !== encounterId) {
+            return entry;
+          }
+          const next = updater(entry);
+          return {
+            ...next,
+            updatedAt: nowIso(),
+          };
+        }),
+      );
+    },
+    [updateRecords],
+  );
+
+  const createEncounter = useCallback(
+    (draft: NewEncounterDraft) => {
+      const patientId = draft.patientId.trim();
+      const patientName = draft.patientName.trim();
+      const provider = draft.provider.trim();
+      const appointmentType = draft.appointmentType.trim();
+      const encounterDate = (draft.encounterDate ?? "").trim() || getNowUsDate();
+
+      if (!patientId || !patientName || !provider || !appointmentType || !encounterDate) {
+        return null;
+      }
+
+      const timestamp = nowIso();
+      const newId = createEncounterId();
+      const newRecord: EncounterNoteRecord = {
+        id: newId,
+        patientId,
+        patientName,
+        provider,
+        appointmentType,
+        encounterDate,
+        startTime: "",
+        soap: {
+          subjective: "",
+          objective: "",
+          assessment: "",
+          plan: "",
+        },
+        macroRuns: [],
+        diagnoses: [],
+        charges: [],
+        signed: false,
+        signedAt: "",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      updateRecords((current) => [newRecord, ...current]);
+      return newId;
+    },
+    [updateRecords],
+  );
+
+  const updateEncounter = useCallback(
+    (encounterId: string, patch: UpdateEncounterPatch) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const setSoapSection = useCallback(
+    (encounterId: string, section: EncounterSection, value: string) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        soap: {
+          ...current.soap,
+          [section]: value,
+        },
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const addMacroRun = useCallback(
+    (
+      encounterId: string,
+      input: Omit<EncounterMacroRunRecord, "id" | "createdAt" | "updatedAt">,
+    ) => {
+      let createdId: string | null = null;
+      upsertEncounter(encounterId, (current) => {
+        const timestamp = nowIso();
+        createdId = createEncounterMacroRunId();
+        return {
+          ...current,
+          macroRuns: [
+            ...current.macroRuns,
+            {
+              id: createdId,
+              section: input.section,
+              macroId: input.macroId,
+              macroName: input.macroName,
+              body: input.body,
+              answers: { ...input.answers },
+              generatedText: input.generatedText,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            },
+          ],
+        };
+      });
+      return createdId;
+    },
+    [upsertEncounter],
+  );
+
+  const updateMacroRun = useCallback(
+    (
+      encounterId: string,
+      macroRunId: string,
+      patch: Partial<Pick<EncounterMacroRunRecord, "answers" | "generatedText">>,
+    ) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        macroRuns: current.macroRuns.map((entry) => {
+          if (entry.id !== macroRunId) {
+            return entry;
+          }
+          return {
+            ...entry,
+            answers: patch.answers ? { ...patch.answers } : entry.answers,
+            generatedText: patch.generatedText ?? entry.generatedText,
+            updatedAt: nowIso(),
+          };
+        }),
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const removeMacroRun = useCallback(
+    (encounterId: string, macroRunId: string) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        macroRuns: current.macroRuns.filter((entry) => entry.id !== macroRunId),
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const appendSoapSection = useCallback(
+    (encounterId: string, section: EncounterSection, snippet: string) => {
+      const trimmed = snippet.trim();
+      if (!trimmed) {
+        return;
+      }
+      upsertEncounter(encounterId, (current) => {
+        const existing = current.soap[section].trim();
+        const nextText = existing ? `${existing}\n\n${trimmed}` : trimmed;
+        return {
+          ...current,
+          soap: {
+            ...current.soap,
+            [section]: nextText,
+          },
+        };
+      });
+    },
+    [upsertEncounter],
+  );
+
+  const addDiagnosis = useCallback(
+    (encounterId: string, input: Omit<EncounterDiagnosisEntry, "id">) => {
+      const code = input.code.trim().toUpperCase();
+      const description = input.description.trim();
+      const source = input.source.trim() || "Manual";
+      if (!code || !description) {
+        return false;
+      }
+      let added = false;
+      upsertEncounter(encounterId, (current) => {
+        const duplicate = current.diagnoses.some(
+          (entry) =>
+            entry.code.toLowerCase() === code.toLowerCase() &&
+            entry.description.toLowerCase() === description.toLowerCase(),
+        );
+        if (duplicate) {
+          return current;
+        }
+        added = true;
+        return {
+          ...current,
+          diagnoses: [
+            ...current.diagnoses,
+            {
+              id: createEncounterDiagnosisId(),
+              code,
+              description,
+              source,
+            },
+          ],
+        };
+      });
+      return added;
+    },
+    [upsertEncounter],
+  );
+
+  const addDiagnosesBulk = useCallback(
+    (encounterId: string, items: Array<Omit<EncounterDiagnosisEntry, "id">>) => {
+      if (!items.length) {
+        return 0;
+      }
+      let addedCount = 0;
+      upsertEncounter(encounterId, (current) => {
+        const nextDiagnoses = [...current.diagnoses];
+        items.forEach((item) => {
+          const code = item.code.trim().toUpperCase();
+          const description = item.description.trim();
+          const source = item.source.trim() || "Bundle";
+          if (!code || !description) {
+            return;
+          }
+          const duplicate = nextDiagnoses.some(
+            (entry) =>
+              entry.code.toLowerCase() === code.toLowerCase() &&
+              entry.description.toLowerCase() === description.toLowerCase(),
+          );
+          if (duplicate) {
+            return;
+          }
+          addedCount += 1;
+          nextDiagnoses.push({
+            id: createEncounterDiagnosisId(),
+            code,
+            description,
+            source,
+          });
+        });
+        return {
+          ...current,
+          diagnoses: nextDiagnoses,
+        };
+      });
+      return addedCount;
+    },
+    [upsertEncounter],
+  );
+
+  const removeDiagnosis = useCallback(
+    (encounterId: string, diagnosisId: string) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        diagnoses: current.diagnoses.filter((entry) => entry.id !== diagnosisId),
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const addCharge = useCallback(
+    (encounterId: string, input: Omit<EncounterChargeEntry, "id">) => {
+      const name = input.name.trim();
+      const procedureCode = input.procedureCode.trim().toUpperCase();
+      if (!name || !procedureCode) {
+        return false;
+      }
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        charges: [
+          ...current.charges,
+          {
+            id: createEncounterChargeId(),
+            treatmentMacroId: input.treatmentMacroId,
+            name,
+            procedureCode,
+            unitPrice: Math.max(0, Number(input.unitPrice) || 0),
+            units: Math.max(1, Math.round(Number(input.units) || 1)),
+          },
+        ],
+      }));
+      return true;
+    },
+    [upsertEncounter],
+  );
+
+  const updateCharge = useCallback(
+    (encounterId: string, chargeId: string, patch: Partial<Omit<EncounterChargeEntry, "id">>) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        charges: current.charges.map((entry) => {
+          if (entry.id !== chargeId) {
+            return entry;
+          }
+          return {
+            ...entry,
+            ...patch,
+            name: patch.name === undefined ? entry.name : patch.name.trim(),
+            procedureCode:
+              patch.procedureCode === undefined ? entry.procedureCode : patch.procedureCode.trim().toUpperCase(),
+            units: patch.units === undefined ? entry.units : Math.max(1, Math.round(Number(patch.units) || 1)),
+            unitPrice:
+              patch.unitPrice === undefined ? entry.unitPrice : Math.max(0, Number(patch.unitPrice) || 0),
+          };
+        }),
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const removeCharge = useCallback(
+    (encounterId: string, chargeId: string) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        charges: current.charges.filter((entry) => entry.id !== chargeId),
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const setSigned = useCallback(
+    (encounterId: string, signed: boolean) => {
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        signed,
+        signedAt: signed ? nowIso() : "",
+      }));
+    },
+    [upsertEncounter],
+  );
+
+  const deleteEncounter = useCallback(
+    (encounterId: string) => {
+      updateRecords((current) => current.filter((entry) => entry.id !== encounterId));
+    },
+    [updateRecords],
+  );
+
+  const encountersByNewest = useMemo(
+    () =>
+      [...encounters].sort((left, right) => {
+        const leftUpdated = Date.parse(left.updatedAt);
+        const rightUpdated = Date.parse(right.updatedAt);
+        return (Number.isFinite(rightUpdated) ? rightUpdated : 0) - (Number.isFinite(leftUpdated) ? leftUpdated : 0);
+      }),
+    [encounters],
+  );
+
+  return {
+    encounters,
+    encountersByNewest,
+    createEncounter,
+    updateEncounter,
+    setSoapSection,
+    addMacroRun,
+    updateMacroRun,
+    removeMacroRun,
+    appendSoapSection,
+    addDiagnosis,
+    addDiagnosesBulk,
+    removeDiagnosis,
+    addCharge,
+    updateCharge,
+    removeCharge,
+    setSigned,
+    deleteEncounter,
+  };
+}
