@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   createTaskId,
-  getDefaultTasks,
   loadTasks,
   saveTasks,
   type TaskPriority,
@@ -32,11 +31,7 @@ function compareByUpdatedAtDesc(left: TaskRecord, right: TaskRecord) {
 }
 
 export function useTasks() {
-  const [tasks, setTasks] = useState<TaskRecord[]>(() => getDefaultTasks());
-
-  useEffect(() => {
-    setTasks(loadTasks());
-  }, []);
+  const [tasks, setTasks] = useState<TaskRecord[]>(() => loadTasks());
 
   const updateTasks = useCallback((updater: (current: TaskRecord[]) => TaskRecord[]) => {
     setTasks((current) => {

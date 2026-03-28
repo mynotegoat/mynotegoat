@@ -1,22 +1,62 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CloudStateSync } from "@/components/cloud-state-sync";
-import { prepareCloudStateBeforeMount } from "@/lib/cloud-state";
+import {
+  buildWorkspaceIdForUser,
+  prepareCloudStateBeforeMount,
+  setActiveWorkspaceId,
+} from "@/lib/cloud-state";
+import { resolveAuthAccessState } from "@/lib/auth-access";
 
 export default function PortalLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     async function bootstrap() {
-      await prepareCloudStateBeforeMount();
+      const access = await resolveAuthAccessState();
+      if (!active) {
+        return;
+      }
+
+      if (access.state === "signed-out") {
+        router.replace("/auth/login");
+        return;
+      }
+
+      if (access.state === "email-unverified") {
+        router.replace("/auth/login?verify=1");
+        return;
+      }
+
+      if (access.state === "pending-approval") {
+        router.replace("/auth/pending");
+        return;
+      }
+
+      if (access.state !== "access-granted" || !access.userId) {
+        router.replace("/auth/login");
+        return;
+      }
+
+      const workspaceId = buildWorkspaceIdForUser(access.userId);
+      setActiveWorkspaceId(workspaceId);
+
+      try {
+        await prepareCloudStateBeforeMount();
+      } catch (error) {
+        console.warn("[Portal] Cloud bootstrap skipped:", error);
+      }
+
       if (active) {
         setMounted(true);
       }
@@ -27,12 +67,12 @@ export default function PortalLayout({
     return () => {
       active = false;
     };
-  }, []);
+  }, [router]);
 
   if (!mounted) {
     return (
       <div className="min-h-screen px-4 py-6 text-sm text-[var(--text-muted)] lg:px-8">
-        Loading workspace...
+        Checking account access...
       </div>
     );
   }

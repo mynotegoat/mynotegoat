@@ -1,6 +1,5 @@
--- Quick cloud persistence table for Note Goat prototype.
--- This keeps your existing localStorage-based app working while syncing to Supabase.
--- Run in Supabase SQL Editor.
+-- Note Goat cloud sync + auth access controls.
+-- Run this in Supabase SQL Editor.
 
 create table if not exists public.app_snapshots (
   workspace_id text primary key,
@@ -10,27 +9,81 @@ create table if not exists public.app_snapshots (
 
 alter table public.app_snapshots enable row level security;
 
-grant usage on schema public to anon;
-grant select, insert, update on table public.app_snapshots to anon;
+revoke all on table public.app_snapshots from anon;
+revoke all on table public.app_snapshots from authenticated;
+grant select, insert, update on table public.app_snapshots to authenticated;
 
-drop policy if exists "app_snapshots_select_anon" on public.app_snapshots;
-create policy "app_snapshots_select_anon"
+-- Workspace id format is: <auth_user_id>:<office_id>
+-- Example: 16ec...:main-office
+-- Each signed-in user can only access their own workspace rows.
+drop policy if exists "app_snapshots_select_owner" on public.app_snapshots;
+create policy "app_snapshots_select_owner"
 on public.app_snapshots
 for select
-to anon
-using (true);
+to authenticated
+using (split_part(workspace_id, ':', 1) = auth.uid()::text);
 
-drop policy if exists "app_snapshots_insert_anon" on public.app_snapshots;
-create policy "app_snapshots_insert_anon"
+drop policy if exists "app_snapshots_insert_owner" on public.app_snapshots;
+create policy "app_snapshots_insert_owner"
 on public.app_snapshots
 for insert
-to anon
-with check (true);
+to authenticated
+with check (split_part(workspace_id, ':', 1) = auth.uid()::text);
 
-drop policy if exists "app_snapshots_update_anon" on public.app_snapshots;
-create policy "app_snapshots_update_anon"
+drop policy if exists "app_snapshots_update_owner" on public.app_snapshots;
+create policy "app_snapshots_update_owner"
 on public.app_snapshots
 for update
-to anon
-using (true)
-with check (true);
+to authenticated
+using (split_part(workspace_id, ':', 1) = auth.uid()::text)
+with check (split_part(workspace_id, ':', 1) = auth.uid()::text);
+
+create table if not exists public.account_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  approval_status text not null default 'pending'
+    check (approval_status in ('pending', 'approved', 'rejected', 'suspended')),
+  created_at timestamptz not null default now(),
+  approved_at timestamptz,
+  approved_by uuid
+);
+
+alter table public.account_profiles enable row level security;
+
+grant select on table public.account_profiles to authenticated;
+
+-- Users can read only their own account profile.
+drop policy if exists "account_profiles_select_self" on public.account_profiles;
+create policy "account_profiles_select_self"
+on public.account_profiles
+for select
+to authenticated
+using (user_id = auth.uid());
+
+-- Keep existing auth users in sync (safe to run repeatedly).
+insert into public.account_profiles (user_id, email)
+select id, coalesce(email, '')
+from auth.users
+on conflict (user_id)
+do update set email = excluded.email;
+
+create or replace function public.handle_new_auth_user_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.account_profiles (user_id, email, approval_status)
+  values (new.id, coalesce(new.email, ''), 'pending')
+  on conflict (user_id)
+  do update set email = excluded.email;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_profile on auth.users;
+create trigger on_auth_user_created_profile
+after insert on auth.users
+for each row execute procedure public.handle_new_auth_user_profile();

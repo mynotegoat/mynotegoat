@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard" },
@@ -22,11 +24,55 @@ function classNames(...classes: Array<string | false | undefined>) {
 
 function buildTitle(pathname: string) {
   const item = navItems.find((entry) => pathname.startsWith(entry.href));
-  return item?.label ?? "CaseMate PI";
+  return item?.label ?? "Note Goat";
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [userEmail, setUserEmail] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const supabase = getSupabaseBrowserClient();
+
+    if (!supabase) {
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) {
+        return;
+      }
+      setUserEmail(data.session?.user?.email ?? "");
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) {
+        return;
+      }
+      setUserEmail(session?.user?.email ?? "");
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      window.location.href = "/auth/login";
+      return;
+    }
+
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    window.location.href = "/auth/login";
+  };
 
   return (
     <div className="min-h-screen">
@@ -36,10 +82,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <aside className="hidden border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] p-6 text-[#e4f4ff] lg:block">
               <div className="mb-8">
                 <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#79d9d2]">
-                  CaseMate PI
+                  Note Goat
                 </div>
-                <h2 className="mt-2 text-[28px] font-semibold">Clinic OS v2</h2>
-                <p className="mt-2 text-sm text-[#aad0e4]">Local test mode</p>
+                <h2 className="mt-2 text-[28px] font-semibold">Clinic OS</h2>
+                <p className="mt-2 text-sm text-[#aad0e4]">Private office workspace</p>
               </div>
 
               <nav className="space-y-2">
@@ -65,11 +111,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
               <div className="mt-8 rounded-xl border border-white/20 bg-white/10 p-4">
                 <div className="text-xs uppercase tracking-[0.22em] text-[#8fd8d3]">
-                  Launch Scope
+                  Workspace
                 </div>
-                <p className="mt-2 text-sm leading-snug text-[#d8ecfa]">
-                  Build web first. Keep API-first architecture for iOS/Android companion apps.
+                <p className="mt-2 break-all text-sm leading-snug text-[#d8ecfa]">
+                  {userEmail || "Signed in"}
                 </p>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="mt-3 rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/25 disabled:opacity-50"
+                >
+                  {signingOut ? "Signing out..." : "Sign Out"}
+                </button>
               </div>
             </aside>
 
@@ -77,14 +131,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-soft)] bg-white/70 px-4 py-4 lg:px-7 lg:py-5">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                    CaseMate PI Prototype
+                    Note Goat
                   </div>
                   <h1 className="text-2xl font-semibold text-[var(--text-main)]">
                     {buildTitle(pathname)}
                   </h1>
                 </div>
                 <div className="inline-flex items-center rounded-full bg-[var(--bg-soft)] px-4 py-2 text-sm font-semibold text-[var(--text-main)]">
-                  No cloud required for testing
+                  {userEmail || "Secure cloud mode"}
                 </div>
               </header>
 

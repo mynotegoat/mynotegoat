@@ -121,142 +121,15 @@ export interface CaseTimelineMetricRecord {
 }
 
 export const dashboardStats = [
-  { label: "Total Active Cases", value: "87" },
-  { label: "Ready To Submit", value: "14" },
-  { label: "Today Appointments", value: "31" },
-  { label: "Avg Days Initial To Discharge", value: "15.2" },
+  { label: "Total Active Cases", value: "0" },
+  { label: "Ready To Submit", value: "0" },
+  { label: "Today Appointments", value: "0" },
+  { label: "Avg Days Initial To Discharge", value: "0.0" },
 ];
 
-const seedPatients: PatientRecord[] = [
-  {
-    id: "PT-1001",
-    fullName: "Danielyan, Mher",
-    dob: "1988-06-14",
-    sex: "Male",
-    phone: "818-555-0144",
-    attorney: "Erdoglyan Law Firm",
-    caseStatus: "Active",
-    dateOfLoss: "2026-03-07",
-    lastUpdate: "2026-03-11",
-    priority: "Normal",
-    matrix: {
-      contact: "818-555-0144",
-      initialExam: "03/11/26",
-      xraySent: "03/11/26 Diagnostic Imaging Network",
-      xrayDone: "03/12/26",
-      xrayReceived: "03/13/26",
-      xrayReviewed: "03/15/26",
-      mriSent: "03/16/26",
-      specialistSent: "03/18/26 Dr. Tatevossian",
-      billed: "$250.00",
-      notes: "Needs MRI follow-up",
-      review: "Requested",
-    },
-  },
-  {
-    id: "PT-1002",
-    fullName: "Hernandez, Lorenzo",
-    dob: "1974-04-25",
-    sex: "Male",
-    phone: "213-908-4316",
-    attorney: "Self",
-    caseStatus: "Active",
-    dateOfLoss: "2026-02-20",
-    lastUpdate: "2026-02-26",
-    priority: "MRI Due",
-    matrix: {
-      contact: "213-908-4316",
-      initialExam: "03/09/26",
-      mriSent: "03/11/26",
-      mriScheduled: "03/20/26",
-      notes: "Blue triangle MRI reminder",
-      review: "Requested",
-    },
-  },
-  {
-    id: "PT-1003",
-    fullName: "Haribyan, Aram",
-    dob: "1991-03-14",
-    sex: "Male",
-    phone: "747-260-6368",
-    attorney: "Kazaryan & Harutyunyan",
-    caseStatus: "Ready To Submit",
-    dateOfLoss: "2026-02-23",
-    lastUpdate: "2026-03-02",
-    priority: "Normal",
-    matrix: {
-      contact: "747-260-6368",
-      initialExam: "02/26/26",
-      xrayDone: "03/06/26",
-      xrayReceived: "03/08/26",
-      xrayReviewed: "03/09/26",
-      reExam1: "03/11/26",
-      rbSent: "03/13/26",
-      billed: "$85.00",
-      review: "Received",
-    },
-  },
-  {
-    id: "PT-1004",
-    fullName: "Vardanyan, Zhirayr",
-    dob: "1979-06-17",
-    sex: "Male",
-    phone: "818-641-8258",
-    attorney: "Yepremyan Law Firm",
-    caseStatus: "Submitted",
-    dateOfLoss: "2026-02-13",
-    lastUpdate: "2026-03-09",
-    priority: "Normal",
-    matrix: {
-      contact: "818-641-8258",
-      initialExam: "02/17/26",
-      reExam1: "03/04/26",
-      discharge: "03/10/26",
-      rbSent: "03/12/26",
-      billed: "$300.00",
-      review: "Received",
-    },
-  },
-  {
-    id: "PT-1005",
-    fullName: "Ellis, Brian",
-    dob: "1990-10-22",
-    sex: "Male",
-    phone: "818-777-6620",
-    attorney: "Yepremyan Law Firm",
-    caseStatus: "Active",
-    dateOfLoss: "2026-02-13",
-    lastUpdate: "2026-02-16",
-    priority: "No Recent Update",
-    matrix: {
-      contact: "818-777-6620",
-      initialExam: "02/16/26",
-      notes: "No update in reminder window",
-      review: "Requested",
-    },
-  },
-  {
-    id: "PT-1006",
-    fullName: "Petrosyan, Maria",
-    dob: "1986-11-08",
-    sex: "Female",
-    maritalStatus: "Married",
-    phone: "818-310-6067",
-    attorney: "Trial Lit Attorneys",
-    caseStatus: "Dropped",
-    dateOfLoss: "2026-01-30",
-    lastUpdate: "2026-02-04",
-    priority: "Normal",
-    matrix: {
-      contact: "818-310-6067",
-      initialExam: "02/04/26",
-      discharge: "02/25/26",
-      notes: "Case dropped by attorney",
-    },
-  },
-];
+const seedPatients: PatientRecord[] = [];
 
-export const PATIENTS_STORAGE_KEY = "casemate.patients.v1";
+export const PATIENTS_STORAGE_KEY = "casemate.patients.v2";
 
 const matrixFieldList: PatientMatrixField[] = [
   "contact",
@@ -472,210 +345,22 @@ function loadPatients(): PatientRecord[] {
   if (stored !== null) {
     return stored;
   }
-  return seedPatients.map((entry) => ({ ...entry, matrix: entry.matrix ? { ...entry.matrix } : undefined }));
+  return [];
 }
 
 export const patients: PatientRecord[] = loadPatients();
 
-export const contacts: ContactRecord[] = [
-  {
-    id: "CT-01",
-    name: "Erdoglyan Law Firm",
-    category: "Attorney",
-    phone: "747-298-2333",
-    fax: "818-698-3120",
-    email: "nazo@erdoglyanlawfirm.com",
-    address: "Glendale, CA",
-  },
-  {
-    id: "CT-02",
-    name: "Trial Lit Attorneys",
-    category: "Attorney",
-    phone: "818-668-3524",
-    fax: "888-315-5721",
-    email: "nazo@drakelawgroup.com",
-    address: "Los Angeles, CA",
-  },
-  {
-    id: "CT-03",
-    name: "Diagnostic Imaging Network",
-    category: "Imaging",
-    phone: "818-501-4404",
-    email: "scheduling@din.org",
-  },
-  {
-    id: "CT-04",
-    name: "Dr. Raymond Tatevossian",
-    category: "Orthopedic",
-    phone: "818-325-2088",
-    email: "new.patient@csppdoctors.com",
-  },
-  {
-    id: "CT-05",
-    name: "Glendale Adventist",
-    category: "Hospital/ER",
-    phone: "818-409-8171",
-    email: "intake@glendaleadventist.org",
-  },
-];
+export const contacts: ContactRecord[] = [];
 
-export const appointments: AppointmentRecord[] = [
-  {
-    id: "AP-01",
-    patientId: "PT-1001",
-    patientName: "Danielyan, Mher",
-    provider: "Galstyan, Mike",
-    appointmentType: "PI Office Visit",
-    start: "08:00 AM",
-    durationMin: 45,
-    status: "Scheduled",
-    color: "pink",
-  },
-  {
-    id: "AP-02",
-    patientId: "PT-1002",
-    patientName: "Hernandez, Lorenzo",
-    provider: "Galstyan, Mike",
-    appointmentType: "Spinal Decompression - C/S",
-    start: "09:00 AM",
-    durationMin: 30,
-    status: "Scheduled",
-    color: "blue",
-  },
-  {
-    id: "AP-03",
-    patientId: "PT-1003",
-    patientName: "Haribyan, Aram",
-    provider: "Galstyan, Mike",
-    appointmentType: "PI Re-Exam",
-    start: "11:30 AM",
-    durationMin: 60,
-    status: "Checked In",
-    color: "orange",
-  },
-  {
-    id: "AP-04",
-    patientId: "PT-1004",
-    patientName: "Vardanyan, Zhirayr",
-    provider: "Galstyan, Mike",
-    appointmentType: "PI Discharge Visit",
-    start: "02:00 PM",
-    durationMin: 60,
-    status: "Seen",
-    color: "pink",
-  },
-];
+export const appointments: AppointmentRecord[] = [];
 
-export const encounters: EncounterRecord[] = [
-  {
-    id: "EN-3001",
-    patientId: "PT-1001",
-    patientName: "Danielyan, Mher",
-    encounterDate: "2026-03-15 03:30 PM",
-    provider: "Galstyan, Mike (Dr. Mike)",
-    appointmentType: "Spinal Decompression - C/S",
-    signed: false,
-    diagnosesCount: 6,
-    chargesCount: 2,
-  },
-  {
-    id: "EN-3002",
-    patientId: "PT-1001",
-    patientName: "Danielyan, Mher",
-    encounterDate: "2026-03-13 03:30 PM",
-    provider: "Galstyan, Mike (Dr. Mike)",
-    appointmentType: "PI Office Visit",
-    signed: true,
-    diagnosesCount: 7,
-    chargesCount: 3,
-  },
-  {
-    id: "EN-3003",
-    patientId: "PT-1002",
-    patientName: "Hernandez, Lorenzo",
-    encounterDate: "2026-03-12 02:00 PM",
-    provider: "Galstyan, Mike (Dr. Mike)",
-    appointmentType: "PI Office Visit",
-    signed: true,
-    diagnosesCount: 5,
-    chargesCount: 2,
-  },
-  {
-    id: "EN-3004",
-    patientId: "PT-1003",
-    patientName: "Haribyan, Aram",
-    encounterDate: "2026-03-11 10:30 AM",
-    provider: "Galstyan, Mike (Dr. Mike)",
-    appointmentType: "PI Re-Exam",
-    signed: false,
-    diagnosesCount: 4,
-    chargesCount: 1,
-  },
-];
+export const encounters: EncounterRecord[] = [];
 
-export const charges: ChargeRecord[] = [
-  {
-    id: "CH-01",
-    encounterDate: "2026-03-15",
-    patientName: "Danielyan, Mher",
-    procedureCode: "99203",
-    description: "New Patient Evaluation",
-    units: 1,
-    billed: 250,
-    paid: 0,
-  },
-  {
-    id: "CH-02",
-    encounterDate: "2026-03-15",
-    patientName: "Hernandez, Lorenzo",
-    procedureCode: "97014",
-    description: "Electrical Muscle Stimulation",
-    units: 1,
-    billed: 35,
-    paid: 0,
-  },
-  {
-    id: "CH-03",
-    encounterDate: "2026-03-14",
-    patientName: "Haribyan, Aram",
-    procedureCode: "98940",
-    description: "CMT Manipulation 1-2 Regions",
-    units: 1,
-    billed: 85,
-    paid: 85,
-  },
-  {
-    id: "CH-04",
-    encounterDate: "2026-03-14",
-    patientName: "Vardanyan, Zhirayr",
-    procedureCode: "97035",
-    description: "Ultrasound",
-    units: 1,
-    billed: 50,
-    paid: 50,
-  },
-];
+export const charges: ChargeRecord[] = [];
 
-export const imagingEvents: ImagingEventRecord[] = [
-  { id: "IE-001", patientId: "PT-1001", facility: "Diagnostic Imaging Network", type: "X-Ray", quantity: 3 },
-  { id: "IE-002", patientId: "PT-1001", facility: "Diagnostic Imaging Network", type: "MRI", quantity: 1 },
-  { id: "IE-003", patientId: "PT-1002", facility: "Broadway Imaging Center", type: "MRI", quantity: 1 },
-  { id: "IE-004", patientId: "PT-1002", facility: "Broadway Imaging Center", type: "X-Ray", quantity: 2 },
-  { id: "IE-005", patientId: "PT-1003", facility: "Patient Refused", type: "MRI", quantity: 1 },
-  { id: "IE-006", patientId: "PT-1003", facility: "Patient Refused", type: "X-Ray", quantity: 2 },
-  { id: "IE-007", patientId: "PT-1004", facility: "Unique Diagnostic Center", type: "MRI", quantity: 1 },
-  { id: "IE-008", patientId: "PT-1004", facility: "Unique Diagnostic Center", type: "X-Ray", quantity: 2 },
-  { id: "IE-009", patientId: "PT-1005", facility: "All Star Imaging", type: "MRI", quantity: 1 },
-  { id: "IE-010", patientId: "PT-1006", facility: "Alpha MRI Center", type: "MRI", quantity: 2 },
-];
+export const imagingEvents: ImagingEventRecord[] = [];
 
-export const caseTimelineMetrics: CaseTimelineMetricRecord[] = [
-  { patientId: "PT-1001", initialToDischargeDays: 15, dischargeToRbDays: 120, rbToPaidDays: 48 },
-  { patientId: "PT-1002", initialToDischargeDays: 18, dischargeToRbDays: 165, rbToPaidDays: 60 },
-  { patientId: "PT-1003", initialToDischargeDays: 13, dischargeToRbDays: 170, rbToPaidDays: 35 },
-  { patientId: "PT-1004", initialToDischargeDays: 16, dischargeToRbDays: 190, rbToPaidDays: 52 },
-  { patientId: "PT-1005", initialToDischargeDays: 14, dischargeToRbDays: 150, rbToPaidDays: 46 },
-];
+export const caseTimelineMetrics: CaseTimelineMetricRecord[] = [];
 
 export const soapMacroButtons = {
   subjective: ["Headaches", "Cervical", "Thoracic", "Lumbar", "Pain Scale"],

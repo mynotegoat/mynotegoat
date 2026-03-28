@@ -1,23 +1,25 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type LocalSnapshot = Record<string, string>;
 
 const LOCAL_KEY_PREFIX = "casemate.";
-const LOCAL_SYNC_AT_KEY = "casemate.cloud-sync-at.v1";
+const ACTIVE_WORKSPACE_KEY = "casemate.active-workspace-id.v1";
+const LOCAL_SYNC_AT_PREFIX = "casemate.cloud-sync-at";
 const DEFAULT_TABLE = "app_snapshots";
-const DEFAULT_WORKSPACE_ID = "default";
-
-let client: SupabaseClient | null = null;
+const DEFAULT_OFFICE_ID = "main-office";
+const ALLOW_LOCAL_BOOTSTRAP = process.env.NEXT_PUBLIC_CASEMATE_ALLOW_LOCAL_BOOTSTRAP === "1";
 
 function getConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const table =
     process.env.NEXT_PUBLIC_CASEMATE_SNAPSHOT_TABLE?.trim() || DEFAULT_TABLE;
-  const workspaceId =
-    process.env.NEXT_PUBLIC_CASEMATE_WORKSPACE_ID?.trim() || DEFAULT_WORKSPACE_ID;
+  const officeId =
+    process.env.NEXT_PUBLIC_CASEMATE_OFFICE_ID?.trim() ||
+    process.env.NEXT_PUBLIC_CASEMATE_WORKSPACE_ID?.trim() ||
+    DEFAULT_OFFICE_ID;
 
   if (!url || !anonKey) {
     return null;
@@ -27,31 +29,60 @@ function getConfig() {
     url,
     anonKey,
     table,
-    workspaceId,
+    officeId,
   };
-}
-
-function getClient() {
-  const config = getConfig();
-  if (!config) {
-    return null;
-  }
-
-  if (!client) {
-    client = createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-  }
-
-  return client;
 }
 
 export function isCloudSyncEnabled() {
   return Boolean(getConfig());
+}
+
+export function buildWorkspaceIdForUser(userId: string) {
+  const officeId =
+    process.env.NEXT_PUBLIC_CASEMATE_OFFICE_ID?.trim() ||
+    process.env.NEXT_PUBLIC_CASEMATE_WORKSPACE_ID?.trim() ||
+    DEFAULT_OFFICE_ID;
+  return `${userId}:${officeId}`;
+}
+
+function getSyncAtKey(workspaceId: string) {
+  return `${LOCAL_SYNC_AT_PREFIX}.${workspaceId}`;
+}
+
+export function setActiveWorkspaceId(workspaceId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+}
+
+function getActiveWorkspaceId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? "";
+}
+
+function clearLocalWorkspaceData() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.startsWith(LOCAL_KEY_PREFIX)) {
+      continue;
+    }
+    if (key === ACTIVE_WORKSPACE_KEY || key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`)) {
+      continue;
+    }
+    keysToRemove.push(key);
+  }
+
+  keysToRemove.forEach((key) => {
+    window.localStorage.removeItem(key);
+  });
 }
 
 function readLocalSnapshot(): LocalSnapshot {
@@ -62,9 +93,15 @@ function readLocalSnapshot(): LocalSnapshot {
   const snapshot: LocalSnapshot = {};
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
-    if (!key || !key.startsWith(LOCAL_KEY_PREFIX) || key === LOCAL_SYNC_AT_KEY) {
+    if (
+      !key ||
+      !key.startsWith(LOCAL_KEY_PREFIX) ||
+      key === ACTIVE_WORKSPACE_KEY ||
+      key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`)
+    ) {
       continue;
     }
+
     const value = window.localStorage.getItem(key);
     snapshot[key] = value ?? "";
   }
@@ -108,17 +145,41 @@ function parseTimestamp(value: string | null) {
   return Number.isNaN(parsed) ? Number.NaN : parsed;
 }
 
-async function fetchRemoteSnapshot() {
+async function getAuthedConfig() {
   const config = getConfig();
-  const supabase = getClient();
+  const supabase = getSupabaseBrowserClient();
   if (!config || !supabase) {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from(config.table)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const userId = session?.user?.id;
+  if (!userId) {
+    return null;
+  }
+
+  const expectedWorkspaceId = `${userId}:${config.officeId}`;
+  return {
+    ...config,
+    supabase,
+    userId,
+    workspaceId: expectedWorkspaceId,
+  };
+}
+
+async function fetchRemoteSnapshot(workspaceId: string) {
+  const authed = await getAuthedConfig();
+  if (!authed) {
+    return null;
+  }
+
+  const { data, error } = await authed.supabase
+    .from(authed.table)
     .select("workspace_id,snapshot,updated_at")
-    .eq("workspace_id", config.workspaceId)
+    .eq("workspace_id", workspaceId)
     .limit(1)
     .maybeSingle();
 
@@ -129,17 +190,16 @@ async function fetchRemoteSnapshot() {
   return data;
 }
 
-async function upsertRemoteSnapshot(snapshot: LocalSnapshot) {
-  const config = getConfig();
-  const supabase = getClient();
-  if (!config || !supabase) {
+async function upsertRemoteSnapshot(workspaceId: string, snapshot: LocalSnapshot) {
+  const authed = await getAuthedConfig();
+  if (!authed || typeof window === "undefined") {
     return;
   }
 
   const nowIso = new Date().toISOString();
-  const { error } = await supabase.from(config.table).upsert(
+  const { error } = await authed.supabase.from(authed.table).upsert(
     {
-      workspace_id: config.workspaceId,
+      workspace_id: workspaceId,
       snapshot,
       updated_at: nowIso,
     },
@@ -152,7 +212,7 @@ async function upsertRemoteSnapshot(snapshot: LocalSnapshot) {
     throw error;
   }
 
-  window.localStorage.setItem(LOCAL_SYNC_AT_KEY, nowIso);
+  window.localStorage.setItem(getSyncAtKey(workspaceId), nowIso);
 }
 
 export async function prepareCloudStateBeforeMount() {
@@ -161,13 +221,25 @@ export async function prepareCloudStateBeforeMount() {
   }
 
   try {
+    const authed = await getAuthedConfig();
+    if (!authed) {
+      return;
+    }
+
+    const previousWorkspaceId = getActiveWorkspaceId();
+    if (previousWorkspaceId && previousWorkspaceId !== authed.workspaceId) {
+      clearLocalWorkspaceData();
+    }
+
+    setActiveWorkspaceId(authed.workspaceId);
+
     const localSnapshot = readLocalSnapshot();
     const localHasData = hasMeaningfulLocalData(localSnapshot);
     const localSyncedAtMs = parseTimestamp(
-      window.localStorage.getItem(LOCAL_SYNC_AT_KEY),
+      window.localStorage.getItem(getSyncAtKey(authed.workspaceId)),
     );
 
-    const remote = await fetchRemoteSnapshot();
+    const remote = await fetchRemoteSnapshot(authed.workspaceId);
 
     if (
       remote &&
@@ -184,14 +256,20 @@ export async function prepareCloudStateBeforeMount() {
       if (shouldPullRemote) {
         writeLocalSnapshot(remote.snapshot as Record<string, unknown>);
         if (remote.updated_at) {
-          window.localStorage.setItem(LOCAL_SYNC_AT_KEY, remote.updated_at);
+          window.localStorage.setItem(getSyncAtKey(authed.workspaceId), remote.updated_at);
         }
         return;
       }
     }
 
+    if (!ALLOW_LOCAL_BOOTSTRAP) {
+      clearLocalWorkspaceData();
+      window.localStorage.removeItem(getSyncAtKey(authed.workspaceId));
+      return;
+    }
+
     if (localHasData) {
-      await upsertRemoteSnapshot(localSnapshot);
+      await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }
   } catch (error) {
     console.warn("[Cloud Sync] Startup sync skipped:", error);
@@ -204,11 +282,20 @@ export async function pushLocalStateToCloud() {
   }
 
   try {
+    const authed = await getAuthedConfig();
+    if (!authed) {
+      return;
+    }
+
+    if (getActiveWorkspaceId() !== authed.workspaceId) {
+      setActiveWorkspaceId(authed.workspaceId);
+    }
+
     const localSnapshot = readLocalSnapshot();
     if (!hasMeaningfulLocalData(localSnapshot)) {
       return;
     }
-    await upsertRemoteSnapshot(localSnapshot);
+    await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
   } catch (error) {
     console.warn("[Cloud Sync] Autosave failed:", error);
   }
