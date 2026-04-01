@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const [showBrandLogo, setShowBrandLogo] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -81,11 +82,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="grid min-h-[calc(100vh-2rem)] lg:grid-cols-[250px_1fr]">
             <aside className="hidden border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] p-6 text-[#e4f4ff] lg:block">
               <div className="mb-8">
-                <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#79d9d2]">
-                  Note Goat
+                <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
+                  {showBrandLogo ? (
+                    <img
+                      src="/notegoat-logo.svg"
+                      alt="Note Goat"
+                      className="h-16 w-full object-contain"
+                      onError={() => setShowBrandLogo(false)}
+                    />
+                  ) : (
+                    <div className="text-center text-xl font-semibold tracking-wide text-white">
+                      Note Goat
+                    </div>
+                  )}
                 </div>
-                <h2 className="mt-2 text-[28px] font-semibold">Clinic OS</h2>
-                <p className="mt-2 text-sm text-[#aad0e4]">Private office workspace</p>
+                <h2 className="mt-3 text-[28px] font-semibold">Note Goat</h2>
+                <p className="mt-1 text-sm text-[#aad0e4]">Secure office workspace</p>
               </div>
 
               <nav className="space-y-2">

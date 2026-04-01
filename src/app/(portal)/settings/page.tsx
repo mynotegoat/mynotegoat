@@ -213,7 +213,7 @@ const backupModules: BackupModuleDefinition[] = [
 
 type BackupPayload = {
   app: string;
-  format: "casemate-backup";
+  format: "notegoat-backup";
   version: number;
   exportedAt: string;
   modules: BackupModuleId[];
@@ -665,7 +665,7 @@ function buildLegacyMigrationData(parsed: Record<string, unknown>) {
 
 function extractImportPayload(parsed: unknown): ParsedImportPayload | null {
   if (isRecord(parsed)) {
-    if (parsed.format === "casemate-backup" && isRecord(parsed.data)) {
+    if ((parsed.format === "notegoat-backup" || parsed.format === "casemate-backup") && isRecord(parsed.data)) {
       return { data: parsed.data, source: "backup" };
     }
 
@@ -1115,8 +1115,8 @@ export default function SettingsPage() {
     });
 
     const payload: BackupPayload = {
-      app: "CaseMate PI",
-      format: "casemate-backup",
+      app: "Note Goat",
+      format: "notegoat-backup",
       version: 1,
       exportedAt: new Date().toISOString(),
       modules: selectedBackupModules.map((module) => module.id),
@@ -1128,7 +1128,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `casemate-backup-${stamp}.json`;
+    link.download = `notegoat-backup-${stamp}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();

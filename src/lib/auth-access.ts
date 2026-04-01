@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { normalizePlanTier, type PlanTier } from "@/lib/plan-access";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "suspended";
 
@@ -15,6 +16,7 @@ export interface AuthAccessState {
   email?: string;
   userId?: string;
   approvalStatus?: ApprovalStatus;
+  planTier?: PlanTier;
   errorMessage?: string;
 }
 
@@ -64,7 +66,7 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
 
   const { data: profile, error: profileError } = await supabase
     .from("account_profiles")
-    .select("approval_status")
+    .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -77,7 +79,14 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
     };
   }
 
-  const approvalStatus = normalizeApprovalStatus(profile?.approval_status);
+  const profileRow =
+    profile && typeof profile === "object" ? (profile as Record<string, unknown>) : {};
+  const approvalStatus = normalizeApprovalStatus(profileRow.approval_status);
+  const userMetadata =
+    user.user_metadata && typeof user.user_metadata === "object"
+      ? (user.user_metadata as Record<string, unknown>)
+      : {};
+  const planTier = normalizePlanTier(profileRow.plan_tier ?? userMetadata.plan_tier);
 
   if (approvalStatus !== "approved") {
     return {
@@ -85,6 +94,7 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
       email: user.email ?? undefined,
       userId: user.id,
       approvalStatus,
+      planTier,
     };
   }
 
@@ -93,5 +103,6 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
     email: user.email ?? undefined,
     userId: user.id,
     approvalStatus,
+    planTier,
   };
 }
