@@ -54,11 +54,9 @@ export function normalizeContactDirectory(value: unknown) {
     return getDefaultContactDirectory();
   }
 
-  const normalized = value
+  return value
     .map((entry) => normalizeContact(entry))
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-
-  return normalized.length > 0 ? normalized : getDefaultContactDirectory();
 }
 
 export function loadContactDirectory() {

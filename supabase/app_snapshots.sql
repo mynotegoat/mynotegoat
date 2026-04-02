@@ -43,6 +43,8 @@ create table if not exists public.account_profiles (
   email text not null,
   approval_status text not null default 'pending'
     check (approval_status in ('pending', 'approved', 'rejected', 'suspended')),
+  is_admin boolean not null default false,
+  plan_tier text not null default 'complete',
   created_at timestamptz not null default now(),
   approved_at timestamptz,
   approved_by uuid
@@ -50,7 +52,7 @@ create table if not exists public.account_profiles (
 
 alter table public.account_profiles enable row level security;
 
-grant select on table public.account_profiles to authenticated;
+grant select, update on table public.account_profiles to authenticated;
 
 -- Users can read only their own account profile.
 drop policy if exists "account_profiles_select_self" on public.account_profiles;
@@ -59,6 +61,38 @@ on public.account_profiles
 for select
 to authenticated
 using (user_id = auth.uid());
+
+-- Admins can read all account profiles.
+drop policy if exists "admins_select_all" on public.account_profiles;
+create policy "admins_select_all"
+on public.account_profiles
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.account_profiles ap
+    where ap.user_id = auth.uid() and ap.is_admin = true
+  )
+);
+
+-- Admins can update account profiles (approve/reject/suspend, set plan tier).
+drop policy if exists "admins_update_all" on public.account_profiles;
+create policy "admins_update_all"
+on public.account_profiles
+for update
+to authenticated
+using (
+  exists (
+    select 1 from public.account_profiles ap
+    where ap.user_id = auth.uid() and ap.is_admin = true
+  )
+)
+with check (
+  exists (
+    select 1 from public.account_profiles ap
+    where ap.user_id = auth.uid() and ap.is_admin = true
+  )
+);
 
 -- Keep existing auth users in sync (safe to run repeatedly).
 insert into public.account_profiles (user_id, email)

@@ -48,6 +48,11 @@ export default function LoginClient({ verifyNotice }: LoginClientProps) {
     const access = await resolveAuthAccessState();
     setLoading(false);
 
+    if (access.state === "access-granted" && access.isAdmin) {
+      router.replace("/admin");
+      return;
+    }
+
     if (access.state === "access-granted") {
       router.replace("/dashboard");
       return;

@@ -186,7 +186,7 @@ function compareAppointments(left: ScheduleAppointmentRecord, right: ScheduleApp
 export function normalizeScheduleAppointments(value: unknown): ScheduleAppointmentRecord[] {
   const fallbackDate = getTodayIsoDate();
   if (!Array.isArray(value)) {
-    return getDefaultScheduleAppointments();
+    return [];
   }
 
   const seen = new Set<string>();
@@ -201,7 +201,7 @@ export function normalizeScheduleAppointments(value: unknown): ScheduleAppointme
     records.push(normalized);
   });
 
-  return records.length ? records.sort(compareAppointments) : getDefaultScheduleAppointments();
+  return records.sort(compareAppointments);
 }
 
 function mapLegacyStatus(value: string): AppointmentStatus {
@@ -238,17 +238,17 @@ export function getDefaultScheduleAppointments(): ScheduleAppointmentRecord[] {
 
 export function loadScheduleAppointments(): ScheduleAppointmentRecord[] {
   if (typeof window === "undefined") {
-    return getDefaultScheduleAppointments();
+    return [];
   }
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return getDefaultScheduleAppointments();
+      return [];
     }
     return normalizeScheduleAppointments(JSON.parse(raw));
   } catch {
-    return getDefaultScheduleAppointments();
+    return [];
   }
 }
 

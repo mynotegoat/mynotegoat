@@ -281,24 +281,23 @@ function normalizeRecord(value: unknown): EncounterNoteRecord | null {
 
 export function loadEncounterNoteRecords() {
   if (typeof window === "undefined") {
-    return createSeedRecords();
+    return [];
   }
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return createSeedRecords();
+      return [];
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      return createSeedRecords();
+      return [];
     }
-    const normalized = parsed
+    return parsed
       .map(normalizeRecord)
       .filter((entry): entry is EncounterNoteRecord => Boolean(entry));
-    return normalized.length ? normalized : createSeedRecords();
   } catch {
-    return createSeedRecords();
+    return [];
   }
 }
 

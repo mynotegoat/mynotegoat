@@ -17,6 +17,7 @@ export interface AuthAccessState {
   userId?: string;
   approvalStatus?: ApprovalStatus;
   planTier?: PlanTier;
+  isAdmin?: boolean;
   errorMessage?: string;
 }
 
@@ -82,11 +83,23 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
   const profileRow =
     profile && typeof profile === "object" ? (profile as Record<string, unknown>) : {};
   const approvalStatus = normalizeApprovalStatus(profileRow.approval_status);
+  const isAdmin = profileRow.is_admin === true;
   const userMetadata =
     user.user_metadata && typeof user.user_metadata === "object"
       ? (user.user_metadata as Record<string, unknown>)
       : {};
   const planTier = normalizePlanTier(profileRow.plan_tier ?? userMetadata.plan_tier);
+
+  if (isAdmin) {
+    return {
+      state: "access-granted",
+      email: user.email ?? undefined,
+      userId: user.id,
+      approvalStatus: "approved",
+      planTier,
+      isAdmin: true,
+    };
+  }
 
   if (approvalStatus !== "approved") {
     return {
@@ -104,5 +117,6 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
     userId: user.id,
     approvalStatus,
     planTier,
+    isAdmin: false,
   };
 }

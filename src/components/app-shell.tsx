@@ -2,36 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/patients", label: "Patients" },
-  { href: "/statistics", label: "Statistics" },
-  { href: "/tasks", label: "My Tasks" },
-  { href: "/contacts", label: "Contacts" },
-  { href: "/appointments", label: "Schedule" },
-  { href: "/encounters", label: "Encounters" },
-  { href: "/key-dates", label: "Key Dates" },
-  { href: "/billing", label: "Billing" },
-  { href: "/settings", label: "Settings" },
-];
+import { getVisiblePortalNavItems, type PlanTier } from "@/lib/plan-access";
 
 function classNames(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function buildTitle(pathname: string) {
-  const item = navItems.find((entry) => pathname.startsWith(entry.href));
+function buildTitle(pathname: string, items: { href: string; label: string }[]) {
+  const item = items.find((entry) => pathname.startsWith(entry.href));
   return item?.label ?? "Note Goat";
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  planTier = "complete",
+}: {
+  children: React.ReactNode;
+  planTier?: PlanTier;
+}) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [showBrandLogo, setShowBrandLogo] = useState(true);
+  const navItems = useMemo(() => getVisiblePortalNavItems(planTier), [planTier]);
 
   useEffect(() => {
     let active = true;
@@ -146,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     Note Goat
                   </div>
                   <h1 className="text-2xl font-semibold text-[var(--text-main)]">
-                    {buildTitle(pathname)}
+                    {buildTitle(pathname, navItems)}
                   </h1>
                 </div>
                 <div className="inline-flex items-center rounded-full bg-[var(--bg-soft)] px-4 py-2 text-sm font-semibold text-[var(--text-main)]">

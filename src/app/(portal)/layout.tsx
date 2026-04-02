@@ -10,6 +10,7 @@ import {
   setActiveWorkspaceId,
 } from "@/lib/cloud-state";
 import { resolveAuthAccessState } from "@/lib/auth-access";
+import type { PlanTier } from "@/lib/plan-access";
 
 export default function PortalLayout({
   children,
@@ -18,6 +19,7 @@ export default function PortalLayout({
 }>) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [planTier, setPlanTier] = useState<PlanTier>("complete");
 
   useEffect(() => {
     let active = true;
@@ -46,6 +48,15 @@ export default function PortalLayout({
       if (access.state !== "access-granted" || !access.userId) {
         router.replace("/auth/login");
         return;
+      }
+
+      if (access.isAdmin) {
+        router.replace("/admin");
+        return;
+      }
+
+      if (access.planTier) {
+        setPlanTier(access.planTier);
       }
 
       const workspaceId = buildWorkspaceIdForUser(access.userId);
@@ -78,7 +89,7 @@ export default function PortalLayout({
   }
 
   return (
-    <AppShell>
+    <AppShell planTier={planTier}>
       <CloudStateSync />
       {children}
     </AppShell>

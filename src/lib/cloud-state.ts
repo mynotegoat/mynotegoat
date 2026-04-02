@@ -9,7 +9,6 @@ const ACTIVE_WORKSPACE_KEY = "casemate.active-workspace-id.v1";
 const LOCAL_SYNC_AT_PREFIX = "casemate.cloud-sync-at";
 const DEFAULT_TABLE = "app_snapshots";
 const DEFAULT_OFFICE_ID = "main-office";
-const ALLOW_LOCAL_BOOTSTRAP = process.env.NEXT_PUBLIC_CASEMATE_ALLOW_LOCAL_BOOTSTRAP === "1";
 
 function getConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -227,8 +226,12 @@ export async function prepareCloudStateBeforeMount() {
     }
 
     const previousWorkspaceId = getActiveWorkspaceId();
-    if (previousWorkspaceId && previousWorkspaceId !== authed.workspaceId) {
+    const workspaceSwitched =
+      previousWorkspaceId && previousWorkspaceId !== authed.workspaceId;
+
+    if (workspaceSwitched) {
       clearLocalWorkspaceData();
+      window.localStorage.removeItem(getSyncAtKey(previousWorkspaceId));
     }
 
     setActiveWorkspaceId(authed.workspaceId);
@@ -239,33 +242,45 @@ export async function prepareCloudStateBeforeMount() {
       window.localStorage.getItem(getSyncAtKey(authed.workspaceId)),
     );
 
-    const remote = await fetchRemoteSnapshot(authed.workspaceId);
+    let remote: Awaited<ReturnType<typeof fetchRemoteSnapshot>> = null;
+    try {
+      remote = await fetchRemoteSnapshot(authed.workspaceId);
+    } catch (error) {
+      console.warn("[Cloud Sync] Could not fetch remote, keeping local data:", error);
+      return;
+    }
 
-    if (
+    const remoteHasData =
       remote &&
       remote.snapshot &&
       typeof remote.snapshot === "object" &&
-      !Array.isArray(remote.snapshot)
-    ) {
-      const remoteUpdatedAtMs = parseTimestamp(remote.updated_at ?? null);
+      !Array.isArray(remote.snapshot) &&
+      hasMeaningfulLocalData(
+        Object.fromEntries(
+          Object.entries(remote.snapshot as Record<string, unknown>).map(
+            ([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)],
+          ),
+        ),
+      );
+
+    if (remoteHasData) {
+      const remoteUpdatedAtMs = parseTimestamp(remote!.updated_at ?? null);
       const shouldPullRemote =
         !localHasData ||
-        Number.isNaN(localSyncedAtMs) ||
-        (!Number.isNaN(remoteUpdatedAtMs) && remoteUpdatedAtMs >= localSyncedAtMs);
+        (!Number.isNaN(remoteUpdatedAtMs) &&
+          !Number.isNaN(localSyncedAtMs) &&
+          remoteUpdatedAtMs > localSyncedAtMs);
 
       if (shouldPullRemote) {
-        writeLocalSnapshot(remote.snapshot as Record<string, unknown>);
-        if (remote.updated_at) {
-          window.localStorage.setItem(getSyncAtKey(authed.workspaceId), remote.updated_at);
+        writeLocalSnapshot(remote!.snapshot as Record<string, unknown>);
+        if (remote!.updated_at) {
+          window.localStorage.setItem(
+            getSyncAtKey(authed.workspaceId),
+            remote!.updated_at,
+          );
         }
         return;
       }
-    }
-
-    if (!ALLOW_LOCAL_BOOTSTRAP) {
-      clearLocalWorkspaceData();
-      window.localStorage.removeItem(getSyncAtKey(authed.workspaceId));
-      return;
     }
 
     if (localHasData) {
