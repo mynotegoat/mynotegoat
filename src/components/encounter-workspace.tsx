@@ -637,6 +637,12 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   );
   const filteredEncounterPatientId = filteredEncounterList[0]?.patientId ?? null;
   const filteredEncounterPatientName = filteredEncounterList[0]?.patientName ?? "";
+  const patientAppointments = useMemo(() => {
+    if (!filteredEncounterPatientId) return [];
+    return scheduleAppointments
+      .filter((a) => a.patientId === filteredEncounterPatientId)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
+  }, [filteredEncounterPatientId, scheduleAppointments]);
   const appointmentTypeOptions = useMemo(() => {
     const names = appointmentTypes.map((entry) => entry.name);
     if (selectedEncounter && !names.includes(selectedEncounter.appointmentType)) {
@@ -1180,6 +1186,76 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               Print Selected SOAP Notes
             </button>
           </article>
+
+          {filteredEncounterPatientId && patientAppointments.length > 0 && (
+            <article className="panel-card p-4">
+              <h4 className="text-sm font-semibold">
+                Appointments for {filteredEncounterPatientName}
+              </h4>
+              <div className="mt-2 max-h-[340px] overflow-auto rounded-xl border border-[var(--line-soft)]">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-[var(--bg-soft)] text-left">
+                      <th className="px-2 py-1.5 text-xs">Date</th>
+                      <th className="px-2 py-1.5 text-xs">Type</th>
+                      <th className="px-2 py-1.5 text-xs">Status</th>
+                      <th className="px-2 py-1.5 text-xs">Encounter</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patientAppointments.map((apt) => {
+                      const dateUs = (() => {
+                        const [y, m, d] = apt.date.split("-");
+                        return `${m}/${d}/${y}`;
+                      })();
+                      const linked = encountersByNewest.find(
+                        (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
+                      );
+                      return (
+                        <tr key={apt.id} className="border-t border-[var(--line-soft)]">
+                          <td className="px-2 py-1.5 tabular-nums">{dateUs}</td>
+                          <td className="px-2 py-1.5">{apt.appointmentType}</td>
+                          <td className="px-2 py-1.5">{apt.status}</td>
+                          <td className="px-2 py-1.5">
+                            {linked ? (
+                              <button
+                                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold"
+                                onClick={() => setSelectedEncounterId(linked.id)}
+                                type="button"
+                              >
+                                {linked.signed ? "View" : "Open"}
+                              </button>
+                            ) : (
+                              <button
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                                onClick={() => {
+                                  const provider = officeSettings.doctorName || "Provider";
+                                  const newId = createEncounter({
+                                    patientId: apt.patientId,
+                                    patientName: apt.patientName,
+                                    provider,
+                                    appointmentType: apt.appointmentType,
+                                    encounterDate: dateUs,
+                                  });
+                                  if (newId) {
+                                    setSelectedEncounterId(newId);
+                                    setMessage(`Encounter created for ${dateUs}.`);
+                                  }
+                                }}
+                                type="button"
+                              >
+                                + Encounter
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          )}
         </aside>
 
         <article className="panel-card p-4">
