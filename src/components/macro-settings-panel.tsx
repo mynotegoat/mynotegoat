@@ -92,6 +92,7 @@ export function MacroSettingsPanel() {
   const [questionOptionsDraft, setQuestionOptionsDraft] = useState("");
   const [questionMultiSelectDraft, setQuestionMultiSelectDraft] = useState(false);
   const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
+  const [newChoiceDrafts, setNewChoiceDrafts] = useState<Record<string, string>>({});
 
   const [testPatientId, setTestPatientId] = useState(macroTestContexts[0]?.id ?? "");
   const [runOpen, setRunOpen] = useState(false);
@@ -497,14 +498,26 @@ export function MacroSettingsPanel() {
                 </div>
 
                 <div className="mt-3 space-y-2">
-                  {selectedMacro.questions.map((question) => (
+                  {selectedMacro.questions.map((question) => {
+                    const choiceKey = `${selectedMacro.id}::${question.id}`;
+                    const choiceDraft = newChoiceDrafts[choiceKey] ?? "";
+                    const addChoice = () => {
+                      const value = choiceDraft.trim();
+                      if (!value) return;
+                      updateQuestion(selectedMacro.id, question.id, (current) => ({
+                        ...current,
+                        options: [...current.options, value],
+                      }));
+                      setNewChoiceDrafts((c) => ({ ...c, [choiceKey]: "" }));
+                    };
+                    return (
                     <div
                       key={question.id}
-                      className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-white p-2"
+                      className="rounded-xl border border-[var(--line-soft)] bg-white p-2 space-y-2"
                     >
-                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
-                          className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
+                          className="flex-1 rounded-lg border border-[var(--line-soft)] px-2 py-1 font-semibold"
                           onChange={(event) =>
                             updateQuestion(selectedMacro.id, question.id, (current) => ({
                               ...current,
@@ -513,28 +526,7 @@ export function MacroSettingsPanel() {
                           }
                           value={question.label}
                         />
-                        <input
-                          className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
-                          onBlur={() => commitQuestionOptionsDraft(selectedMacro.id, question.id)}
-                          onChange={(event) =>
-                            setQuestionOptionsDrafts((current) => ({
-                              ...current,
-                              [getQuestionDraftKey(selectedMacro.id, question.id)]: event.target.value,
-                            }))
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              commitQuestionOptionsDraft(selectedMacro.id, question.id);
-                            }
-                          }}
-                          placeholder="options..."
-                          value={
-                            questionOptionsDrafts[getQuestionDraftKey(selectedMacro.id, question.id)] ??
-                            question.options.join(", ")
-                          }
-                        />
-                        <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] px-2 py-1 text-sm font-semibold">
+                        <label className="inline-flex items-center gap-1.5 text-xs font-semibold">
                           <input
                             checked={question.multiSelect === true}
                             onChange={(event) =>
@@ -548,23 +540,70 @@ export function MacroSettingsPanel() {
                           Multi
                         </label>
                         <button
-                          className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-sm"
+                          className="rounded-lg border border-[var(--line-soft)] px-2 py-0.5 text-xs"
                           onClick={() => appendToBody(insertQuestionToken(question.id))}
                           type="button"
                         >
                           Insert Token
                         </button>
                         <button
-                          className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-sm"
+                          className="rounded-lg border border-[var(--line-soft)] px-2 py-0.5 text-xs text-[#b43b34]"
                           onClick={() => removeQuestion(selectedMacro.id, question.id)}
                           type="button"
                         >
                           Remove
                         </button>
                       </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        {question.options.map((option, optIndex) => (
+                          <span
+                            key={`${question.id}-opt-${optIndex}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-0.5 text-xs"
+                          >
+                            {option}
+                            <button
+                              className="ml-0.5 text-[var(--text-muted)] hover:text-[#b43b34]"
+                              onClick={() =>
+                                updateQuestion(selectedMacro.id, question.id, (current) => ({
+                                  ...current,
+                                  options: current.options.filter((_, i) => i !== optIndex),
+                                }))
+                              }
+                              type="button"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <input
+                          className="flex-1 rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs"
+                          onChange={(event) => setNewChoiceDrafts((c) => ({ ...c, [choiceKey]: event.target.value }))}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addChoice();
+                            }
+                          }}
+                          placeholder="Add choice..."
+                          value={choiceDraft}
+                        />
+                        <button
+                          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                          onClick={addChoice}
+                          type="button"
+                        >
+                          + Add
+                        </button>
+                      </div>
+
                       <p className="text-xs text-[var(--text-muted)]">Token: {insertQuestionToken(question.id)}</p>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
