@@ -185,6 +185,36 @@ export const RichTextTemplateEditor = forwardRef<
           <option value="<h3>">Heading 3</option>
           <option value="<blockquote>">Quote</option>
         </select>
+        <select
+          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+          defaultValue=""
+          onChange={(event) => {
+            const size = event.target.value;
+            if (!size) return;
+            runCommand("fontSize", "7");
+            const editor = editorRef.current;
+            if (editor) {
+              const fonts = editor.querySelectorAll('font[size="7"]');
+              fonts.forEach((el) => {
+                const span = document.createElement("span");
+                span.style.fontSize = size;
+                span.innerHTML = el.innerHTML;
+                el.replaceWith(span);
+              });
+              emitChange();
+            }
+            event.currentTarget.value = "";
+          }}
+        >
+          <option value="">Size</option>
+          <option value="10px">10</option>
+          <option value="12px">12</option>
+          <option value="14px">14</option>
+          <option value="16px">16</option>
+          <option value="18px">18</option>
+          <option value="20px">20</option>
+          <option value="24px">24</option>
+        </select>
         <button
           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
           onMouseDown={(event) => event.preventDefault()}

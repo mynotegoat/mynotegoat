@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRef, useMemo, useState } from "react";
 import { useMacroTemplates } from "@/hooks/use-macro-templates";
+import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/components/rich-text-template-editor";
 import {
   createQuestionId,
   getQuestionIdsFromBody,
@@ -86,6 +87,7 @@ export function MacroSettingsPanel() {
     resetToDefaults,
   } = useMacroTemplates();
 
+  const editorRef = useRef<RichTextTemplateEditorHandle>(null);
   const [activeSection, setActiveSection] = useState<MacroSection>("subjective");
   const [selectedMacroId, setSelectedMacroId] = useState<string | null>(null);
   const [questionLabelDraft, setQuestionLabelDraft] = useState("");
@@ -138,10 +140,14 @@ export function MacroSettingsPanel() {
     if (!selectedMacro) {
       return;
     }
-    updateMacro(selectedMacro.id, (current) => ({
-      ...current,
-      body: current.body ? `${current.body}${current.body.endsWith("\n") ? "" : " "}${snippet}` : snippet,
-    }));
+    if (editorRef.current) {
+      editorRef.current.insertText(snippet);
+    } else {
+      updateMacro(selectedMacro.id, (current) => ({
+        ...current,
+        body: current.body ? `${current.body}${current.body.endsWith("\n") ? "" : " "}${snippet}` : snippet,
+      }));
+    }
   };
 
   const parseQuestionOptions = (value: string) =>
@@ -406,19 +412,21 @@ export function MacroSettingsPanel() {
                 />
               </label>
 
-              <label className="grid gap-1">
+              <div className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Template Body</span>
-                <textarea
-                  className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) =>
+                <RichTextTemplateEditor
+                  ref={editorRef}
+                  value={selectedMacro.body}
+                  onChange={(nextValue) =>
                     updateMacro(selectedMacro.id, (current) => ({
                       ...current,
-                      body: event.target.value,
+                      body: nextValue,
                     }))
                   }
-                  value={selectedMacro.body}
+                  minHeightClassName="min-h-44"
+                  placeholder="Write your macro template..."
                 />
-              </label>
+              </div>
 
               <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">

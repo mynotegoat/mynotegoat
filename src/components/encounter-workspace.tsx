@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/components/rich-text-template-editor";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
 import { useMacroTemplates } from "@/hooks/use-macro-templates";
@@ -517,6 +518,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     return patients.find((entry) => entry.id === initialPatientId)?.fullName ?? "";
   }, [initialPatientId]);
 
+  const soapEditorRef = useRef<RichTextTemplateEditorHandle>(null);
   const [activeSection, setActiveSection] = useState<EncounterSection>("subjective");
   const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(initialEncounterId ?? null);
   const [encounterSearch, setEncounterSearch] = useState(initialEncounterSearchValue);
@@ -1509,20 +1511,20 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
                 {saltSourceEncounter ? (
                   <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                    <label className="grid gap-1">
+                    <div className="grid gap-1">
                       <span className="text-sm font-semibold text-[var(--text-muted)]">
                         {sectionLabels[activeSection]} Note
                       </span>
-                      <textarea
-                        className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                        disabled={selectedEncounter.signed}
-                        onChange={(event) =>
-                          setSoapSection(selectedEncounter.id, activeSection, event.target.value)
-                        }
-                        placeholder="Type directly here, use macros, or mix both."
+                      <RichTextTemplateEditor
+                        ref={soapEditorRef}
                         value={selectedEncounter.soap[activeSection]}
+                        onChange={(nextValue) =>
+                          setSoapSection(selectedEncounter.id, activeSection, nextValue)
+                        }
+                        minHeightClassName="min-h-44"
+                        placeholder="Type directly here, use macros, or mix both."
                       />
-                    </label>
+                    </div>
                     <div className="grid gap-1">
                       <span className="text-sm font-semibold text-[var(--text-muted)]">
                         Previous {sectionLabels[activeSection]} ({saltSourceEncounter.encounterDate})
@@ -1533,20 +1535,20 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </div>
                   </div>
                 ) : (
-                  <label className="mt-3 grid gap-1">
+                  <div className="mt-3 grid gap-1">
                     <span className="text-sm font-semibold text-[var(--text-muted)]">
                       {sectionLabels[activeSection]} Note
                     </span>
-                    <textarea
-                      className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      disabled={selectedEncounter.signed}
-                      onChange={(event) =>
-                        setSoapSection(selectedEncounter.id, activeSection, event.target.value)
-                      }
-                      placeholder="Type directly here, use macros, or mix both."
+                    <RichTextTemplateEditor
+                      ref={soapEditorRef}
                       value={selectedEncounter.soap[activeSection]}
+                      onChange={(nextValue) =>
+                        setSoapSection(selectedEncounter.id, activeSection, nextValue)
+                      }
+                      minHeightClassName="min-h-44"
+                      placeholder="Type directly here, use macros, or mix both."
                     />
-                  </label>
+                  </div>
                 )}
               </section>
 
