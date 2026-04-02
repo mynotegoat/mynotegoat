@@ -309,13 +309,22 @@ export function BillingMacroSettingsPanel() {
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
                   Action
                 </span>
-                <button
-                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                  onClick={() => removeTreatment(entry.id)}
-                  type="button"
-                >
-                  Remove
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    onClick={() => addTreatment({ name: `${entry.name} (copy)`, procedureCode: entry.procedureCode, unitPrice: entry.unitPrice, defaultUnits: entry.defaultUnits })}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+                    onClick={() => removeTreatment(entry.id)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -512,13 +521,22 @@ export function BillingMacroSettingsPanel() {
                         />
                         Active
                       </label>
-                      <button
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                        onClick={() => removeDiagnosis(entry.id)}
-                        type="button"
-                      >
-                        Remove
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                          onClick={() => addDiagnosis({ code: entry.code, description: `${entry.description} (copy)`, folderId: entry.folderId })}
+                          type="button"
+                        >
+                          Copy
+                        </button>
+                        <button
+                          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
+                          onClick={() => removeDiagnosis(entry.id)}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

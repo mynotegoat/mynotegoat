@@ -1,6 +1,13 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  }
+  return _stripe;
+}
 
 export const PLAN_PRICE_MAP: Record<string, { tier: string; label: string }> = {
   price_1TGoGfQUcjwOa1XTAuVVYNQ9: { tier: "tracking", label: "Tracking" },

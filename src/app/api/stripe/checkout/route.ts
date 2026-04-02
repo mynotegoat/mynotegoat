@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, TIER_PRICE_MAP } from "@/lib/stripe-config";
+import { getStripe, TIER_PRICE_MAP } from "@/lib/stripe-config";
 import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find or create Stripe customer for this user
-    const existing = await stripe.customers.list({
+    const existing = await getStripe().customers.list({
       email,
       limit: 1,
     });
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (existing.data.length > 0) {
       customerId = existing.data[0].id;
     } else {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email,
         metadata: { supabase_user_id: userId },
       });
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     const origin = request.headers.get("origin") || "http://localhost:3000";
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
