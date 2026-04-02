@@ -1345,7 +1345,7 @@ export default function SettingsPage() {
         actions={
           <button
             className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-            onClick={resetOfficeSettingsToDefaults}
+            onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetOfficeSettingsToDefaults(); }}
             type="button"
           >
             Reset Office Defaults
@@ -1446,7 +1446,7 @@ export default function SettingsPage() {
         actions={
           <button
             className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-            onClick={resetContactCategoriesToDefaults}
+            onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetContactCategoriesToDefaults(); }}
             type="button"
           >
             Reset Category Defaults
@@ -1514,7 +1514,7 @@ export default function SettingsPage() {
         actions={
           <button
             className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-            onClick={resetScheduleSettingsToDefaults}
+            onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetScheduleSettingsToDefaults(); }}
             type="button"
           >
             Reset Schedule Defaults
@@ -1676,7 +1676,7 @@ export default function SettingsPage() {
             </div>
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
-              onClick={resetAppointmentTypesToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetAppointmentTypesToDefaults(); }}
               type="button"
             >
               Reset Type Defaults
@@ -1843,7 +1843,7 @@ export default function SettingsPage() {
             </div>
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
-              onClick={resetRoomSettingsToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetRoomSettingsToDefaults(); }}
               type="button"
             >
               Reset Rooms
@@ -1980,14 +1980,14 @@ export default function SettingsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-              onClick={resetPriorityRulesToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetPriorityRulesToDefaults(); }}
               type="button"
             >
               Reset Priority Rules
             </button>
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-              onClick={resetDashboardWorkspaceSettingsToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetDashboardWorkspaceSettingsToDefaults(); }}
               type="button"
             >
               Reset Task / Follow Up Defaults
@@ -2355,7 +2355,7 @@ export default function SettingsPage() {
             </button>
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-              onClick={resetQuickStatsToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetQuickStatsToDefaults(); }}
               type="button"
             >
               Reset Quick Stats Defaults
@@ -2393,14 +2393,14 @@ export default function SettingsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-              onClick={resetCaseStatusesToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetCaseStatusesToDefaults(); }}
               type="button"
             >
               Reset Status Defaults
             </button>
             <button
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-              onClick={resetLienOptionsToDefaults}
+              onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetLienOptionsToDefaults(); }}
               type="button"
             >
               Reset Lien / LOP Defaults

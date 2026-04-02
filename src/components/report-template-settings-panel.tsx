@@ -131,7 +131,7 @@ export function ReportTemplateSettingsPanel() {
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-          onClick={resetToDefaults}
+          onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetToDefaults(); }}
           type="button"
         >
           Reset Report Template Defaults
