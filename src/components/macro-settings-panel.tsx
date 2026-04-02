@@ -173,6 +173,18 @@ export function MacroSettingsPanel() {
     setSelectedMacroId(newId);
   };
 
+  const handleCopyMacro = () => {
+    if (!selectedMacro) return;
+    const newId = addMacro(activeSection);
+    updateMacro(newId, () => ({
+      ...selectedMacro,
+      id: newId,
+      buttonName: `${selectedMacro.buttonName} (copy)`,
+      questions: selectedMacro.questions.map((q) => ({ ...q })),
+    }));
+    setSelectedMacroId(newId);
+  };
+
   const handleDeleteMacro = () => {
     if (!selectedMacro) {
       return;
@@ -355,6 +367,13 @@ export function MacroSettingsPanel() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-lg font-semibold">Edit Macro</h4>
                 <div className="flex gap-2">
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    onClick={handleCopyMacro}
+                    type="button"
+                  >
+                    Copy Macro
+                  </button>
                   <button
                     className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
                     onClick={openRunModal}
