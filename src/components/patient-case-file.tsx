@@ -1472,10 +1472,39 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     };
 
     setReferrals((current) => {
-      if (!editingId) {
-        return [...current, nextEntry];
+      const nextReferrals = !editingId
+        ? [...current, nextEntry]
+        : current.map((entry) => (entry.id === editingId ? nextEntry : entry));
+
+      // Persist imaging data to patient matrix
+      const sentDateIso = toIsoDateFromUsDate(nextEntry.sentDate);
+      const doneDateIso = toIsoDateFromUsDate(nextEntry.doneDate ?? "");
+      const receivedDateIso = toIsoDateFromUsDate(nextEntry.reportReceivedDate ?? "");
+      const reviewedDateIso = toIsoDateFromUsDate(nextEntry.reportReviewedDate ?? "");
+
+      if (mode === "xray") {
+        updatePatientRecordById(patient.id, {
+          lastUpdate: new Date().toISOString().slice(0, 10),
+          matrix: {
+            xraySent: sentDateIso,
+            xrayDone: doneDateIso,
+            xrayReceived: receivedDateIso,
+            xrayReviewed: reviewedDateIso,
+          },
+        });
+      } else {
+        updatePatientRecordById(patient.id, {
+          lastUpdate: new Date().toISOString().slice(0, 10),
+          matrix: {
+            mriSent: sentDateIso,
+            mriDone: doneDateIso,
+            mriReceived: receivedDateIso,
+            mriReviewed: reviewedDateIso,
+          },
+        });
       }
-      return current.map((entry) => (entry.id === editingId ? nextEntry : entry));
+
+      return nextReferrals;
     });
 
     setMessage(editingId ? `${label} sent entry updated.` : `${label} sent entry added.`);
@@ -2492,7 +2521,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
                 <div className="flex gap-2 sm:col-span-2">
                   <button
-                    className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
                     onClick={() => saveImagingReferral("xray")}
                     type="button"
                   >
@@ -2698,7 +2727,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
                 <div className="flex gap-2 sm:col-span-2">
                   <button
-                    className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
                     onClick={() => saveImagingReferral("mri")}
                     type="button"
                   >

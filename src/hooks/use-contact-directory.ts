@@ -35,14 +35,6 @@ function normalizeCategory(category: string) {
 export function useContactDirectory() {
   const [contacts, setContacts] = useState<ContactRecord[]>(() => loadContactDirectory());
 
-  const updateContacts = useCallback((updater: (current: ContactRecord[]) => ContactRecord[]) => {
-    setContacts((current) => {
-      const next = updater(current);
-      saveContactDirectory(next);
-      return next;
-    });
-  }, []);
-
   const addContact = useCallback(
     (draft: ContactDraft): AddContactResult => {
       const name = draft.name.trim();
@@ -59,55 +51,43 @@ export function useContactDirectory() {
         };
       }
 
-      let addedContact: ContactRecord | null = null;
-      let existingContact: ContactRecord | null = null;
+      // Read current state synchronously
+      const current = loadContactDirectory();
 
-      updateContacts((current) => {
-        existingContact =
-          current.find(
-            (entry) =>
-              entry.category.toLowerCase() === category.toLowerCase() &&
-              entry.name.toLowerCase() === name.toLowerCase(),
-          ) ?? null;
+      const existing = current.find(
+        (entry) =>
+          entry.category.toLowerCase() === category.toLowerCase() &&
+          entry.name.toLowerCase() === name.toLowerCase(),
+      );
 
-        if (existingContact) {
-          return current;
-        }
-
-        const next: ContactRecord = {
-          id: createContactId(),
-          name,
-          category,
-          phone,
-          fax,
-          email,
-          address,
-        };
-        addedContact = next;
-        return [...current, next];
-      });
-
-      if (existingContact) {
+      if (existing) {
         return {
           added: false,
           reason: "Contact already exists.",
-          contact: existingContact,
+          contact: existing,
         };
       }
 
-      if (!addedContact) {
-        return {
-          added: false,
-          reason: "Could not add contact.",
-        };
-      }
+      const next: ContactRecord = {
+        id: createContactId(),
+        name,
+        category,
+        phone,
+        fax,
+        email,
+        address,
+      };
+
+      const updated = [...current, next];
+      saveContactDirectory(updated);
+      setContacts(updated);
 
       return {
         added: true,
-        contact: addedContact,
+        contact: next,
       };
     },
-    [updateContacts],
+    [],
   );
 
   const updateContact = useCallback(
@@ -126,68 +106,53 @@ export function useContactDirectory() {
         };
       }
 
-      let updatedContact: ContactRecord | null = null;
-      let duplicateContact: ContactRecord | null = null;
+      const current = loadContactDirectory();
 
-      updateContacts((current) => {
-        const target = current.find((entry) => entry.id === id);
-        if (!target) {
-          return current;
-        }
+      const target = current.find((entry) => entry.id === id);
+      if (!target) {
+        return {
+          updated: false,
+          reason: "Contact not found.",
+        };
+      }
 
-        duplicateContact =
-          current.find(
-            (entry) =>
-              entry.id !== id &&
-              entry.category.toLowerCase() === category.toLowerCase() &&
-              entry.name.toLowerCase() === name.toLowerCase(),
-          ) ?? null;
+      const duplicate = current.find(
+        (entry) =>
+          entry.id !== id &&
+          entry.category.toLowerCase() === category.toLowerCase() &&
+          entry.name.toLowerCase() === name.toLowerCase(),
+      );
 
-        if (duplicateContact) {
-          return current;
-        }
-
-        const next = current.map((entry) => {
-          if (entry.id !== id) {
-            return entry;
-          }
-          const updated: ContactRecord = {
-            ...entry,
-            name,
-            category,
-            phone,
-            fax,
-            email,
-            address,
-          };
-          updatedContact = updated;
-          return updated;
-        });
-
-        return next;
-      });
-
-      if (duplicateContact) {
+      if (duplicate) {
         return {
           updated: false,
           reason: "Contact already exists.",
-          contact: duplicateContact,
+          contact: duplicate,
         };
       }
 
-      if (!updatedContact) {
-        return {
-          updated: false,
-          reason: "Could not update contact.",
-        };
-      }
+      const updatedContact: ContactRecord = {
+        ...target,
+        name,
+        category,
+        phone,
+        fax,
+        email,
+        address,
+      };
+
+      const updated = current.map((entry) =>
+        entry.id === id ? updatedContact : entry,
+      );
+      saveContactDirectory(updated);
+      setContacts(updated);
 
       return {
         updated: true,
         contact: updatedContact,
       };
     },
-    [updateContacts],
+    [],
   );
 
   const resetToDefaults = useCallback(() => {

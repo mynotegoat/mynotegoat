@@ -38,6 +38,8 @@ export function BillingMacroSettingsPanel() {
   const [bundleNameDraft, setBundleNameDraft] = useState("");
   const [bundleDiagnosisDraft, setBundleDiagnosisDraft] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [treatmentOpen, setTreatmentOpen] = useState(false);
+  const [diagnosisOpen, setDiagnosisOpen] = useState(false);
 
   const diagnosisById = useMemo(
     () => new Map(billingMacros.diagnoses.map((entry) => [entry.id, entry] as const)),
@@ -134,12 +136,22 @@ export function BillingMacroSettingsPanel() {
 
       {error && <p className="text-sm font-semibold text-[#b43b34]">{error}</p>}
 
-      <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-        <h4 className="text-lg font-semibold">Treatment Macros</h4>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          These define CPT/procedure code, price per unit, and default units used when adding ledger charges.
-        </p>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
+      <article className="rounded-xl border border-[var(--line-soft)] bg-white">
+        <button
+          className="flex w-full items-center justify-between p-4 text-left"
+          onClick={() => setTreatmentOpen((prev) => !prev)}
+          type="button"
+        >
+          <div>
+            <h4 className="text-lg font-semibold">Treatment Macros</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              These define CPT/procedure code, price per unit, and default units used when adding ledger charges.
+            </p>
+          </div>
+          <span className="ml-3 shrink-0 text-xl">{treatmentOpen ? "▾" : "▸"}</span>
+        </button>
+        {treatmentOpen && <div className="border-t border-[var(--line-soft)] p-4">
+        <p className="text-xs text-[var(--text-muted)]">
           Default Units are auto-filled when you add this treatment to Billing. Most services are set to 1.
         </p>
 
@@ -308,14 +320,25 @@ export function BillingMacroSettingsPanel() {
             </div>
           ))}
         </div>
+      </div>}
       </article>
 
-      <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-        <h4 className="text-lg font-semibold">Diagnosis Macro Settings</h4>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Organize your ICD-10 library with folders, then group common sets into one-click bundles.
-        </p>
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <article className="rounded-xl border border-[var(--line-soft)] bg-white">
+        <button
+          className="flex w-full items-center justify-between p-4 text-left"
+          onClick={() => setDiagnosisOpen((prev) => !prev)}
+          type="button"
+        >
+          <div>
+            <h4 className="text-lg font-semibold">Diagnosis Macro Settings</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Organize your ICD-10 library with folders, then group common sets into one-click bundles.
+            </p>
+          </div>
+          <span className="ml-3 shrink-0 text-xl">{diagnosisOpen ? "▾" : "▸"}</span>
+        </button>
+        {diagnosisOpen && <div className="border-t border-[var(--line-soft)] p-4">
+        <div className="grid gap-3 lg:grid-cols-2">
           <article className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
             <h5 className="text-base font-semibold">Diagnosis Folders</h5>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
@@ -620,6 +643,7 @@ export function BillingMacroSettingsPanel() {
             )}
           </div>
         </div>
+      </div>}
       </article>
     </div>
   );

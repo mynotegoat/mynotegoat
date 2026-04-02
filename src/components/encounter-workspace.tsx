@@ -369,6 +369,126 @@ function printHtmlWithIframeFallback(printableHtml: string) {
   return true;
 }
 
+function AppointmentsOverview({
+  appointments,
+  encounters,
+  patients: patientList,
+  onCreateEncounter,
+  onOpenEncounter,
+}: {
+  appointments: Array<{ id: string; patientId: string; patientName: string; appointmentType: string; date: string; startTime: string; status: string }>;
+  encounters: Array<{ id: string; patientId: string; encounterDate: string; signed: boolean; patientName: string; appointmentType: string }>;
+  patients: Array<{ id: string; fullName: string }>;
+  officeSettings: { doctorName: string };
+  appointmentTypes: Array<{ name: string }>;
+  onCreateEncounter: (appointmentId: string, patientId: string, patientName: string, appointmentType: string, date: string) => void;
+  onOpenEncounter: (encounterId: string, patientName: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const todayAppointments = useMemo(() => {
+    return appointments
+      .filter((a) => a.date === today)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [appointments, today]);
+
+  const getLinkedEncounter = (appointment: { patientId: string; date: string }) => {
+    const dateUs = (() => {
+      const [y, m, d] = appointment.date.split("-");
+      return `${m}/${d}/${y}`;
+    })();
+    return encounters.find(
+      (e) => e.patientId === appointment.patientId && e.encounterDate === dateUs,
+    );
+  };
+
+  return (
+    <section className="panel-card p-4">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div>
+          <h3 className="text-lg font-semibold">Today&apos;s Appointments</h3>
+          <p className="text-sm text-[var(--text-muted)]">
+            {todayAppointments.length} appointment{todayAppointments.length !== 1 ? "s" : ""} scheduled
+          </p>
+        </div>
+        <span
+          aria-hidden
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line-soft)] text-sm transition-transform ${expanded ? "rotate-180" : ""}`}
+        >
+          ⌄
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-[var(--bg-soft)] text-left">
+                <th className="px-3 py-2">Time</th>
+                <th className="px-3 py-2">Patient</th>
+                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Encounter</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todayAppointments.map((apt) => {
+                const linked = getLinkedEncounter(apt);
+                return (
+                  <tr key={apt.id} className="border-t border-[var(--line-soft)]">
+                    <td className="px-3 py-2 tabular-nums">{apt.startTime}</td>
+                    <td className="px-3 py-2 font-semibold">{apt.patientName}</td>
+                    <td className="px-3 py-2">{apt.appointmentType}</td>
+                    <td className="px-3 py-2">{apt.status}</td>
+                    <td className="px-3 py-2">
+                      {linked ? (
+                        <button
+                          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                          onClick={() => onOpenEncounter(linked.id, apt.patientName)}
+                          type="button"
+                        >
+                          {linked.signed ? "View Encounter" : "Open Encounter"}
+                        </button>
+                      ) : (
+                        <button
+                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                          onClick={() => {
+                            const dateUs = (() => {
+                              const [y, m, d] = apt.date.split("-");
+                              return `${m}/${d}/${y}`;
+                            })();
+                            onCreateEncounter(apt.id, apt.patientId, apt.patientName, apt.appointmentType, dateUs);
+                          }}
+                          type="button"
+                        >
+                          + Encounter
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {todayAppointments.length === 0 && (
+                <tr>
+                  <td className="px-3 py-4 text-[var(--text-muted)]" colSpan={5}>
+                    No appointments scheduled for today.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function EncounterWorkspace({ initialPatientId, initialEncounterId }: EncounterWorkspaceProps) {
   const { macroLibrary } = useMacroTemplates();
   const { billingMacros } = useBillingMacros();
@@ -377,6 +497,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const { scheduleAppointments, updateAppointment } = useScheduleAppointments();
   const {
     encountersByNewest,
+    createEncounter,
     updateEncounter,
     setSoapSection,
     addMacroRun,
@@ -917,6 +1038,33 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       </section>
 
       {message && <p className="text-sm font-semibold text-[var(--brand-primary)]">{message}</p>}
+
+      <AppointmentsOverview
+        appointments={scheduleAppointments}
+        encounters={encountersByNewest}
+        patients={patients}
+        officeSettings={officeSettings}
+        appointmentTypes={appointmentTypes}
+        onCreateEncounter={(appointmentId, patientId, patientName, appointmentType, date) => {
+          const provider = officeSettings.doctorName || "Provider";
+          const newId = createEncounter({
+            patientId,
+            patientName,
+            provider,
+            appointmentType,
+            encounterDate: date,
+          });
+          if (newId) {
+            setEncounterSearch(patientName);
+            setSelectedEncounterId(newId);
+            setMessage(`Encounter created for ${date}.`);
+          }
+        }}
+        onOpenEncounter={(encounterId, patientName) => {
+          setEncounterSearch(patientName);
+          setSelectedEncounterId(encounterId);
+        }}
+      />
 
       <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
         <aside className="space-y-4">
@@ -1495,7 +1643,6 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       : [];
                   const selectedAnswer = selectedAnswers[0] ?? "";
                   const freeTextValue = Array.isArray(answerValue) ? answerValue.join(", ") : answerValue ?? "";
-                  const isPainScaleQuestion = question.label.trim().toLowerCase() === "pain scale";
                   const numericOptions = Array.from(
                     new Set(
                       normalizedOptions
@@ -1504,17 +1651,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     ),
                   ).sort((left, right) => left - right);
                   const usePainScaleColumns =
-                    isPainScaleQuestion &&
-                    numericOptions.includes(1) &&
-                    numericOptions.includes(10) &&
-                    numericOptions.length >= 10;
+                    numericOptions.length >= 5 &&
+                    numericOptions.length === normalizedOptions.length;
+                  const midPoint = usePainScaleColumns ? Math.ceil(numericOptions.length / 2) : 0;
                   const leftPainScaleOptions = usePainScaleColumns
-                    ? [1, 2, 3, 4, 5].filter((value) => numericOptions.includes(value)).map(String)
+                    ? numericOptions.slice(0, midPoint).map(String)
                     : [];
                   const rightPainScaleOptions = usePainScaleColumns
-                    ? [6, 7, 8, 9, 10].filter((value) => numericOptions.includes(value)).map(String)
+                    ? numericOptions.slice(midPoint).map(String)
                     : [];
-                  const zeroPainScaleOption = usePainScaleColumns && numericOptions.includes(0) ? "0" : null;
+                  const zeroPainScaleOption: string | null = null;
                   const selectableOptions = normalizedOptions.length > 0 ? normalizedOptions : question.options;
                   const renderOptionRow = (option: string) => (
                     <label
