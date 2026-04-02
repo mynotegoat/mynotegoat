@@ -727,6 +727,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     address: "",
   });
   const [patientDob, setPatientDob] = useState(toUsDate(patient.dob));
+  const [patientSex, setPatientSex] = useState<"Male" | "Female" | "Other" | "">(patient.sex ?? "");
   const [dateOfLoss, setDateOfLoss] = useState(toUsDate(patient.dateOfLoss));
   const [initialExam, setInitialExam] = useState(toUsDate(patient.matrix?.initialExam ?? ""));
   const [patientPhone, setPatientPhone] = useState(formatUsPhoneInput(patient.phone));
@@ -2077,6 +2078,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const savedPatient = updatePatientRecordById(patient.id, {
       fullName: nextFullName,
       dob: toIsoDateFromUsDate(patientDob),
+      sex: patientSex || undefined,
       dateOfLoss: toIsoDateFromUsDate(dateOfLoss) || patient.dateOfLoss,
       attorney: attorney.trim() || "Self",
       phone: formatUsPhoneInput(patientPhone) || "-",
@@ -2295,6 +2297,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               placeholder="MM/DD/YYYY"
               value={patientDob}
             />
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Sex</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => setPatientSex(event.target.value as "Male" | "Female" | "Other" | "")}
+              value={patientSex}
+            >
+              <option value="">—</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
           </label>
 
           <label className="grid gap-1">
