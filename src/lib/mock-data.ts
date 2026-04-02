@@ -48,7 +48,7 @@ export interface PatientRecord {
   fullName: string;
   dob: string;
   sex?: "Male" | "Female" | "Other";
-  maritalStatus?: "Single" | "Married" | "Other";
+  maritalStatus?: "Single" | "Married" | "Divorced" | "Widowed" | "Other";
   phone: string;
   email?: string;
   address?: string;
@@ -245,15 +245,11 @@ function normalizeSex(value: unknown): PatientRecord["sex"] | undefined {
 
 function normalizeMaritalStatus(value: unknown): PatientRecord["maritalStatus"] | undefined {
   const normalized = cleanString(value).toLowerCase();
-  if (normalized === "single") {
-    return "Single";
-  }
-  if (normalized === "married") {
-    return "Married";
-  }
-  if (normalized === "other") {
-    return "Other";
-  }
+  if (normalized === "single") return "Single";
+  if (normalized === "married") return "Married";
+  if (normalized === "divorced") return "Divorced";
+  if (normalized === "widowed") return "Widowed";
+  if (normalized === "other") return "Other";
   return undefined;
 }
 
@@ -470,7 +466,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
 export type UpdatePatientRecordPatch = Partial<
   Pick<
     PatientRecord,
-    "fullName" | "dob" | "sex" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority"
+    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority"
   > & {
     matrix: Partial<Record<PatientMatrixField, string>>;
   }

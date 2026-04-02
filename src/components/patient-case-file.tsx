@@ -728,6 +728,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   });
   const [patientDob, setPatientDob] = useState(toUsDate(patient.dob));
   const [patientSex, setPatientSex] = useState<"Male" | "Female" | "Other" | "">(patient.sex ?? "");
+  const [maritalStatus, setMaritalStatus] = useState<"Single" | "Married" | "Divorced" | "Widowed" | "Other" | "">(patient.maritalStatus ?? "");
   const [dateOfLoss, setDateOfLoss] = useState(toUsDate(patient.dateOfLoss));
   const [initialExam, setInitialExam] = useState(toUsDate(patient.matrix?.initialExam ?? ""));
   const [patientPhone, setPatientPhone] = useState(formatUsPhoneInput(patient.phone));
@@ -2079,6 +2080,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       fullName: nextFullName,
       dob: toIsoDateFromUsDate(patientDob),
       sex: patientSex || undefined,
+      maritalStatus: maritalStatus || undefined,
       dateOfLoss: toIsoDateFromUsDate(dateOfLoss) || patient.dateOfLoss,
       attorney: attorney.trim() || "Self",
       phone: formatUsPhoneInput(patientPhone) || "-",
@@ -2309,6 +2311,21 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               <option value="">—</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
+            </select>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Status</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => setMaritalStatus(event.target.value as "Single" | "Married" | "Divorced" | "Widowed" | "Other" | "")}
+              value={maritalStatus}
+            >
+              <option value="">—</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+              <option value="Divorced">Divorced</option>
+              <option value="Widowed">Widowed</option>
             </select>
           </label>
 
