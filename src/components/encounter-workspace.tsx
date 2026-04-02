@@ -1726,9 +1726,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         .map((option) => Number(option)),
                     ),
                   ).sort((left, right) => left - right);
-                  const usePainScaleColumns =
-                    numericOptions.length >= 5 &&
-                    numericOptions.length === normalizedOptions.length;
+                  const nonNumericOptions = normalizedOptions.filter((option) => !/^\d+$/.test(option));
+                  const usePainScaleColumns = numericOptions.length >= 5;
                   const midPoint = usePainScaleColumns ? Math.ceil(numericOptions.length / 2) : 0;
                   const leftPainScaleOptions = usePainScaleColumns
                     ? numericOptions.slice(0, midPoint).map(String)
@@ -1736,8 +1735,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   const rightPainScaleOptions = usePainScaleColumns
                     ? numericOptions.slice(midPoint).map(String)
                     : [];
-                  const zeroPainScaleOption: string | null = null;
                   const selectableOptions = normalizedOptions.length > 0 ? normalizedOptions : question.options;
+                  const useMultiColumn = !usePainScaleColumns && selectableOptions.length >= 5;
+                  const columnCount = useMultiColumn ? Math.ceil(selectableOptions.length / 5) : 1;
+                  const columns: string[][] = [];
+                  if (useMultiColumn) {
+                    const perCol = Math.ceil(selectableOptions.length / columnCount);
+                    for (let c = 0; c < columnCount; c++) {
+                      columns.push(selectableOptions.slice(c * perCol, (c + 1) * perCol));
+                    }
+                  }
                   const renderOptionRow = (option: string) => (
                     <label
                       key={`${question.id}-${option}`}
@@ -1783,11 +1790,19 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       {question.options.length > 0 ? (
                         usePainScaleColumns ? (
                           <div className="mt-2 space-y-2">
-                            {zeroPainScaleOption ? renderOptionRow(zeroPainScaleOption) : null}
                             <div className="grid gap-2 md:grid-cols-2">
                               <div className="grid gap-2">{leftPainScaleOptions.map(renderOptionRow)}</div>
                               <div className="grid gap-2">{rightPainScaleOptions.map(renderOptionRow)}</div>
                             </div>
+                            {nonNumericOptions.length > 0 && (
+                              <div className="grid gap-2">{nonNumericOptions.map(renderOptionRow)}</div>
+                            )}
+                          </div>
+                        ) : useMultiColumn ? (
+                          <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
+                            {columns.map((col, ci) => (
+                              <div key={ci} className="grid gap-2 content-start">{col.map(renderOptionRow)}</div>
+                            ))}
                           </div>
                         ) : (
                           <div className="mt-2 grid gap-2">{selectableOptions.map(renderOptionRow)}</div>

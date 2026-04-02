@@ -650,8 +650,11 @@ export function MacroSettingsPanel() {
                   <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
                     <p className="text-sm font-semibold">{question.label}</p>
                     {question.options.length > 0 ? (
-                      <div className="mt-2 grid gap-2">
-                        {question.options.map((option) => (
+                      (() => {
+                        const opts = question.options;
+                        const colCount = opts.length >= 5 ? Math.ceil(opts.length / 5) : 1;
+                        const perCol = Math.ceil(opts.length / colCount);
+                        const renderOpt = (option: string) => (
                           <label
                             key={`${question.id}-${option}`}
                             className="inline-flex w-full items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm"
@@ -688,8 +691,19 @@ export function MacroSettingsPanel() {
                             )}
                             {option}
                           </label>
-                        ))}
-                      </div>
+                        );
+                        return colCount > 1 ? (
+                          <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+                            {Array.from({ length: colCount }, (_, ci) => (
+                              <div key={ci} className="grid gap-2 content-start">
+                                {opts.slice(ci * perCol, (ci + 1) * perCol).map(renderOpt)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 grid gap-2">{opts.map(renderOpt)}</div>
+                        );
+                      })()
                     ) : (
                       <input
                         className="mt-2 w-full rounded-xl border border-[var(--line-soft)] px-3 py-2"
