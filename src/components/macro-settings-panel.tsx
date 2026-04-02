@@ -629,6 +629,25 @@ export function MacroSettingsPanel() {
                   value={generatedOutput}
                 />
               </div>
+
+              {generatedOutput && (
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-muted)]">Print Preview</p>
+                  <div
+                    className="mt-1 min-h-36 rounded-xl border border-[var(--line-soft)] bg-white px-6 py-4 text-sm leading-7"
+                    style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+                    dangerouslySetInnerHTML={{
+                      __html: /<\/?[a-z][\s\S]*>/i.test(generatedOutput)
+                        ? generatedOutput
+                        : generatedOutput
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/\n/g, "<br />"),
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </article>

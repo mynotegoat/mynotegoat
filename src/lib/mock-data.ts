@@ -58,6 +58,8 @@ export interface PatientRecord {
   lastUpdate: string;
   priority: PatientPriority;
   matrix?: Partial<Record<PatientMatrixField, string>>;
+  xrayReferrals?: unknown[];
+  mriReferrals?: unknown[];
 }
 
 export interface AppointmentRecord {
@@ -303,6 +305,8 @@ function normalizePatientRecord(value: unknown, index: number): PatientRecord | 
     lastUpdate,
     priority: normalizePriority(value.priority),
     matrix: normalizeMatrix(value.matrix),
+    xrayReferrals: Array.isArray(value.xrayReferrals) ? value.xrayReferrals : undefined,
+    mriReferrals: Array.isArray(value.mriReferrals) ? value.mriReferrals : undefined,
   };
 }
 
@@ -466,7 +470,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
 export type UpdatePatientRecordPatch = Partial<
   Pick<
     PatientRecord,
-    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority"
+    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "xrayReferrals" | "mriReferrals"
   > & {
     matrix: Partial<Record<PatientMatrixField, string>>;
   }

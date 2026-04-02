@@ -28,6 +28,7 @@ import { type TaskPriority } from "@/lib/tasks";
 import {
   patients as allPatients,
   type PatientRecord,
+  type UpdatePatientRecordPatch,
   updatePatientRecordById,
 } from "@/lib/mock-data";
 
@@ -760,7 +761,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     reportReceivedDate: toUsDate(patient.matrix?.xrayReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.xrayReviewed ?? ""),
   });
-  const [xrayReferrals, setXrayReferrals] = useState<ImagingReferral[]>([]);
+  const [xrayReferrals, setXrayReferrals] = useState<ImagingReferral[]>(() =>
+    Array.isArray(patient.xrayReferrals) ? (patient.xrayReferrals as ImagingReferral[]) : [],
+  );
   const [xrayMessage, setXrayMessage] = useState("");
   const [editingXrayReferralId, setEditingXrayReferralId] = useState<string | null>(null);
 
@@ -775,7 +778,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     reportReceivedDate: toUsDate(patient.matrix?.mriReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.mriReviewed ?? ""),
   });
-  const [mriReferrals, setMriReferrals] = useState<ImagingReferral[]>([]);
+  const [mriReferrals, setMriReferrals] = useState<ImagingReferral[]>(() =>
+    Array.isArray(patient.mriReferrals) ? (patient.mriReferrals as ImagingReferral[]) : [],
+  );
   const [mriMessage, setMriMessage] = useState("");
   const [editingMriReferralId, setEditingMriReferralId] = useState<string | null>(null);
 
@@ -1487,6 +1492,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       if (mode === "xray") {
         updatePatientRecordById(patient.id, {
           lastUpdate: new Date().toISOString().slice(0, 10),
+          xrayReferrals: nextReferrals,
           matrix: {
             xraySent: sentDateIso,
             xrayDone: doneDateIso,
@@ -1497,6 +1503,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       } else {
         updatePatientRecordById(patient.id, {
           lastUpdate: new Date().toISOString().slice(0, 10),
+          mriReferrals: nextReferrals,
           matrix: {
             mriSent: sentDateIso,
             mriDone: doneDateIso,
@@ -1543,7 +1550,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const editingId = mode === "xray" ? editingXrayReferralId : editingMriReferralId;
     const setMessage = mode === "xray" ? setXrayMessage : setMriMessage;
 
-    setReferrals((current) => current.filter((entry) => entry.id !== referralId));
+    setReferrals((current) => {
+      const next = current.filter((entry) => entry.id !== referralId);
+      const key = mode === "xray" ? "xrayReferrals" : "mriReferrals";
+      updatePatientRecordById(patient.id, {
+        lastUpdate: new Date().toISOString().slice(0, 10),
+        [key]: next,
+      } as UpdatePatientRecordPatch);
+      return next;
+    });
     if (editingId === referralId) {
       setEditingId(null);
       clearImagingDraft(mode);
@@ -2088,6 +2103,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       address: patientAddress.trim(),
       caseStatus: caseStatus as PatientRecord["caseStatus"],
       lastUpdate: new Date().toISOString().slice(0, 10),
+      xrayReferrals,
+      mriReferrals,
       matrix: {
         initialExam: toIsoDateFromUsDate(initialExam),
         lien: resolvedLienStatus,
@@ -2101,7 +2118,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       },
     });
 
-    setSaveMessage(savedPatient ? "Saved." : "Could not save patient record.");
+    setSaveMessage(savedPatient ? "Updated." : "Could not save patient record.");
   };
 
   const saveAndClosePatientFile = () => {
@@ -3759,7 +3776,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             onClick={savePatientFile}
             type="button"
           >
-            Save
+            Update
           </button>
           <button
             className="rounded-xl bg-[#de3a31] px-6 py-2 font-semibold text-white"
