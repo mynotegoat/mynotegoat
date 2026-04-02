@@ -35,6 +35,7 @@ type SettingsSectionKey =
   | "packageBuilder"
   | "documents"
   | "reports"
+  | "subscription"
   | "backup"
   | "security";
 
@@ -50,6 +51,7 @@ const defaultExpandedSections: Record<SettingsSectionKey, boolean> = {
   packageBuilder: false,
   documents: false,
   reports: false,
+  subscription: false,
   backup: false,
   security: false,
 };
@@ -788,6 +790,87 @@ function CollapsibleSection({
       </div>
       {isOpen ? <div className="mt-3">{children}</div> : null}
     </section>
+  );
+}
+
+function SubscriptionSection() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const openPortal = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      // Get current user's stripe_customer_id from their profile
+      const { getSupabaseBrowserClient } = await import("@/lib/supabase-browser");
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        setError("Not connected to server.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setError("Not signed in.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("account_profiles")
+        .select("stripe_customer_id, plan_tier")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      const customerId = profile && typeof profile === "object"
+        ? (profile as Record<string, unknown>).stripe_customer_id
+        : null;
+
+      if (!customerId || typeof customerId !== "string") {
+        setError("No subscription found. Contact support or sign up for a plan.");
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error || "Could not open billing portal.");
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-[var(--text-muted)]">
+        View invoices, update your payment method, or change your plan through
+        the Stripe customer portal.
+      </p>
+      {error && (
+        <p className="text-sm font-semibold text-[#b43b34]">{error}</p>
+      )}
+      <button
+        type="button"
+        onClick={() => void openPortal()}
+        disabled={loading}
+        className="rounded-xl bg-[var(--brand-primary)] px-5 py-3 font-semibold text-white disabled:opacity-50"
+      >
+        {loading ? "Opening..." : "Manage Subscription"}
+      </button>
+    </div>
   );
 }
 
@@ -2698,6 +2781,15 @@ export default function SettingsPage() {
             )}
           </article>
         </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        isOpen={expandedSections.subscription}
+        onToggle={() => toggleSection("subscription")}
+        title="Subscription"
+        description="Manage your plan and billing details through Stripe."
+      >
+        <SubscriptionSection />
       </CollapsibleSection>
 
       <CollapsibleSection

@@ -45,6 +45,8 @@ create table if not exists public.account_profiles (
     check (approval_status in ('pending', 'approved', 'rejected', 'suspended')),
   is_admin boolean not null default false,
   plan_tier text not null default 'complete',
+  stripe_customer_id text,
+  stripe_subscription_status text,
   created_at timestamptz not null default now(),
   approved_at timestamptz,
   approved_by uuid

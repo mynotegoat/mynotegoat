@@ -12,7 +12,18 @@ interface AccountRow {
   is_admin: boolean;
   created_at: string;
   approved_at: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_status: string | null;
 }
+
+const subscriptionStatusColors: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-800",
+  trialing: "bg-blue-100 text-blue-800",
+  past_due: "bg-amber-100 text-amber-800",
+  canceled: "bg-red-100 text-red-800",
+  unpaid: "bg-red-100 text-red-800",
+  incomplete: "bg-gray-200 text-gray-700",
+};
 
 type StatusFilter = "all" | ApprovalStatus;
 
@@ -39,7 +50,7 @@ export default function AdminAccountsPage() {
 
     const { data, error: fetchError } = await supabase
       .from("account_profiles")
-      .select("user_id, email, approval_status, plan_tier, is_admin, created_at, approved_at")
+      .select("user_id, email, approval_status, plan_tier, is_admin, created_at, approved_at, stripe_customer_id, stripe_subscription_status")
       .order("created_at", { ascending: false });
 
     setLoading(false);
@@ -266,6 +277,21 @@ export default function AdminAccountsPage() {
                       >
                         {account.approval_status}
                       </span>
+                      {account.stripe_subscription_status && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            subscriptionStatusColors[account.stripe_subscription_status] ??
+                            "bg-gray-200 text-gray-700"
+                          }`}
+                        >
+                          Stripe: {account.stripe_subscription_status}
+                        </span>
+                      )}
+                      {!account.stripe_customer_id && !account.is_admin && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
+                          No payment
+                        </span>
+                      )}
                       <span>
                         Signed up{" "}
                         {new Date(account.created_at).toLocaleDateString()}
