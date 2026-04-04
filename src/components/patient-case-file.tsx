@@ -808,7 +808,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     specialist: "",
     sentDate: "",
   });
-  const [specialistReferrals, setSpecialistReferrals] = useState<SpecialistReferral[]>([]);
+  const [specialistReferrals, setSpecialistReferrals] = useState<SpecialistReferral[]>(() => {
+    if (!Array.isArray(patient.specialistReferrals)) return [];
+    return (patient.specialistReferrals as Record<string, unknown>[]).map((raw) => ({
+      id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
+      specialist: typeof raw.specialist === "string" ? raw.specialist : "",
+      sentDate: typeof raw.sentDate === "string" ? raw.sentDate : "",
+      scheduledDate: typeof raw.scheduledDate === "string" ? raw.scheduledDate : "",
+      completedDate: typeof raw.completedDate === "string" ? raw.completedDate : "",
+      reportReceivedDate: typeof raw.reportReceivedDate === "string" ? raw.reportReceivedDate : "",
+      reportReviewedDate: typeof raw.reportReviewedDate === "string" ? raw.reportReviewedDate : "",
+    }));
+  });
   const [specialistMessage, setSpecialistMessage] = useState("");
   const [editingSpecialist, setEditingSpecialist] = useState<SpecialistReferral | null>(null);
   const [imagingPanelsOpen, setImagingPanelsOpen] = useState<Record<ImagingPanelKey, boolean>>({
@@ -2146,6 +2157,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       relatedCases: relatedCases.length > 0 ? relatedCases : undefined,
       xrayReferrals,
       mriReferrals,
+      specialistReferrals,
       matrix: {
         initialExam: toIsoDateFromUsDate(initialExam),
         lien: resolvedLienStatus,

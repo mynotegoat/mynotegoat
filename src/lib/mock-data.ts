@@ -61,6 +61,7 @@ export interface PatientRecord {
   relatedCases?: { patientId: string; fullName: string; dateOfLoss: string }[];
   xrayReferrals?: unknown[];
   mriReferrals?: unknown[];
+  specialistReferrals?: unknown[];
 }
 
 export interface AppointmentRecord {
@@ -309,6 +310,7 @@ function normalizePatientRecord(value: unknown, index: number): PatientRecord | 
     relatedCases: Array.isArray(value.relatedCases) ? value.relatedCases : undefined,
     xrayReferrals: Array.isArray(value.xrayReferrals) ? value.xrayReferrals : undefined,
     mriReferrals: Array.isArray(value.mriReferrals) ? value.mriReferrals : undefined,
+    specialistReferrals: Array.isArray(value.specialistReferrals) ? value.specialistReferrals : undefined,
   };
 }
 
@@ -476,7 +478,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
 export type UpdatePatientRecordPatch = Partial<
   Pick<
     PatientRecord,
-    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "relatedCases" | "xrayReferrals" | "mriReferrals"
+    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "relatedCases" | "xrayReferrals" | "mriReferrals" | "specialistReferrals"
   > & {
     matrix: Partial<Record<PatientMatrixField, string>>;
   }
