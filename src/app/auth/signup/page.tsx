@@ -7,6 +7,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 type PlanOption = {
   tier: "tracking" | "track_schedule" | "complete";
   name: string;
+  price: string;
+  period: string;
   description: string;
   features: string[];
   highlight?: boolean;
@@ -16,6 +18,8 @@ const PLANS: PlanOption[] = [
   {
     tier: "tracking",
     name: "Tracking",
+    price: "$69.99",
+    period: "/mo",
     description: "Patient management essentials",
     features: [
       "Dashboard",
@@ -30,6 +34,8 @@ const PLANS: PlanOption[] = [
   {
     tier: "track_schedule",
     name: "Track & Schedule",
+    price: "$99.99",
+    period: "/mo",
     description: "Add scheduling to your workflow",
     features: [
       "Everything in Tracking",
@@ -40,6 +46,8 @@ const PLANS: PlanOption[] = [
   {
     tier: "complete",
     name: "Complete",
+    price: "$149.99",
+    period: "/mo",
     description: "Full practice management suite",
     features: [
       "Everything in Track & Schedule",
@@ -138,13 +146,19 @@ export default function SignupPage() {
                     </svg>
                   </span>
                 )}
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-[var(--text-main)]">{plan.name}</span>
-                  {plan.highlight && (
-                    <span className="rounded-full bg-[var(--brand-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                      Popular
-                    </span>
-                  )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-[var(--text-main)]">{plan.name}</span>
+                    {plan.highlight && (
+                      <span className="rounded-full bg-[var(--brand-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        Popular
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-bold text-[var(--text-main)]">{plan.price}</span>
+                    <span className="text-sm text-[var(--text-muted)]">{plan.period}</span>
+                  </div>
                 </div>
                 <p className="mt-0.5 text-sm text-[var(--text-muted)]">{plan.description}</p>
                 <ul className="mt-2 space-y-1">
