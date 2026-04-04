@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { CloudStateSync } from "@/components/cloud-state-sync";
 import {
   buildWorkspaceIdForUser,
   prepareCloudStateBeforeMount,
   setActiveWorkspaceId,
 } from "@/lib/cloud-state";
-import { installStorageSyncInterceptor, onSyncStatusChange } from "@/lib/storage-sync-interceptor";
+import { installStorageSyncInterceptor, onSyncStatusChange, pauseSync, resumeSync } from "@/lib/storage-sync-interceptor";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
 import { PlanTierProvider } from "@/lib/plan-context";
@@ -65,14 +64,8 @@ export default function PortalLayout({
       const workspaceId = buildWorkspaceIdForUser(access.userId);
       setActiveWorkspaceId(workspaceId);
 
-      try {
-        await prepareCloudStateBeforeMount();
-      } catch (error) {
-        console.warn("[Portal] Cloud bootstrap skipped:", error);
-      }
-
-      // Install the real-time sync interceptor AFTER cloud state is loaded.
-      // Every localStorage write from this point forward auto-syncs to Supabase.
+      // Install interceptor paused so bootstrap writes don't trigger syncs
+      pauseSync();
       installStorageSyncInterceptor();
       onSyncStatusChange((status) => {
         if (active) {
@@ -80,9 +73,21 @@ export default function PortalLayout({
         }
       });
 
+      // MOUNT IMMEDIATELY — localStorage already has the data from last session.
+      // Don't block the page on a cloud fetch.
       if (active) {
         setMounted(true);
       }
+
+      // Pull cloud data in the BACKGROUND after the page is already visible.
+      // If cloud has newer data, it overwrites localStorage and hooks re-read on next render.
+      try {
+        await prepareCloudStateBeforeMount();
+      } catch (error) {
+        console.warn("[Portal] Cloud sync skipped:", error);
+      }
+
+      resumeSync();
     }
 
     void bootstrap();
@@ -103,7 +108,6 @@ export default function PortalLayout({
   return (
     <PlanTierProvider planTier={planTier}>
       <AppShell planTier={planTier}>
-        <CloudStateSync />
         {/* Sync status indicator */}
         <div className="pointer-events-none fixed bottom-3 right-3 z-50">
           {syncStatus === "syncing" && (

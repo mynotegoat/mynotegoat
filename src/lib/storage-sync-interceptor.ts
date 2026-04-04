@@ -26,6 +26,21 @@ let installed = false;
 let pendingSync = false;
 let lastSyncAt = 0;
 let syncErrorCount = 0;
+let paused = false;
+
+/** Temporarily pause sync (e.g. during bootstrap writes). */
+export function pauseSync() {
+  paused = true;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+}
+
+/** Resume sync after bootstrap. */
+export function resumeSync() {
+  paused = false;
+}
 
 // Sync status callback for UI indicator
 type SyncStatusCallback = (status: "syncing" | "synced" | "error") => void;
@@ -66,12 +81,13 @@ async function doSync() {
 }
 
 function scheduleSyncNow() {
+  if (paused) return;
   if (debounceTimer) {
     clearTimeout(debounceTimer);
   }
   debounceTimer = setTimeout(() => {
     void doSync();
-  }, 300);
+  }, 1_500);
 }
 
 export function installStorageSyncInterceptor() {

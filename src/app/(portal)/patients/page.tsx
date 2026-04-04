@@ -21,6 +21,8 @@ import { createPatientRecord, patients, type PatientMatrixField, type PatientRec
 import { formatUsPhoneInput } from "@/lib/phone-format";
 
 const COLUMN_ORDER_KEY = "casemate.patient-column-order.v1";
+const SORT_COLUMN_KEY = "casemate.patient-sort-column.v1";
+const SORT_ASC_KEY = "casemate.patient-sort-asc.v1";
 type ListColumnId = "patient" | "initialExam" | "dateOfLoss" | "attorney" | "status";
 const defaultColumnOrder: ListColumnId[] = ["patient", "initialExam", "dateOfLoss", "attorney", "status"];
 
@@ -263,9 +265,17 @@ export default function PatientsPage() {
   const [attorney, setAttorney] = useState("ALL");
   const [status, setStatus] = useState("ALL");
 
-  // Sort state
-  const [sortColumn, setSortColumn] = useState<ListColumnId>("patient");
-  const [sortAsc, setSortAsc] = useState(true);
+  // Sort state (persisted)
+  const [sortColumn, setSortColumn] = useState<ListColumnId>(() => {
+    if (typeof window === "undefined") return "patient";
+    const saved = window.localStorage.getItem(SORT_COLUMN_KEY);
+    return saved && defaultColumnOrder.includes(saved as ListColumnId) ? (saved as ListColumnId) : "patient";
+  });
+  const [sortAsc, setSortAsc] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = window.localStorage.getItem(SORT_ASC_KEY);
+    return saved === null ? true : saved === "true";
+  });
 
   // Column order (draggable)
   const [columnOrder, setColumnOrder] = useState<ListColumnId[]>(() => loadColumnOrder());
@@ -547,10 +557,16 @@ export default function PatientsPage() {
 
   const toggleSort = (col: ListColumnId) => {
     if (sortColumn === col) {
-      setSortAsc((prev) => !prev);
+      setSortAsc((prev) => {
+        const next = !prev;
+        window.localStorage.setItem(SORT_ASC_KEY, String(next));
+        return next;
+      });
     } else {
       setSortColumn(col);
       setSortAsc(true);
+      window.localStorage.setItem(SORT_COLUMN_KEY, col);
+      window.localStorage.setItem(SORT_ASC_KEY, "true");
     }
   };
 
@@ -1168,7 +1184,7 @@ export default function PatientsPage() {
 
       {showNewPatientModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">
-          <div className="panel-card mx-auto w-full max-w-6xl p-4 md:p-5">
+          <form className="panel-card mx-auto w-full max-w-6xl p-4 md:p-5" onSubmit={(e) => { e.preventDefault(); createNewPatient(); }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xl font-semibold">New Patient</h3>
@@ -1524,8 +1540,7 @@ export default function PatientsPage() {
                 </button>
                 <button
                   className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                  onClick={createNewPatient}
-                  type="button"
+                  type="submit"
                 >
                   Create Patient
                 </button>
@@ -1536,7 +1551,7 @@ export default function PatientsPage() {
                   <option key={contact.id} value={contact.name} />
                 ))}
               </datalist>
-            </div>
+            </form>
         </div>
       )}
 

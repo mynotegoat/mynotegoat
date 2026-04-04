@@ -194,7 +194,7 @@ export default function KeyDatesPage() {
         </div>
       </section>
 
-      <section className="panel-card p-4">
+      <form className="panel-card p-4" onSubmit={(e) => { e.preventDefault(); submitForm(); }}>
         <h4 className="text-lg font-semibold">{editingId ? "Edit Key Date" : "Add Key Date"}</h4>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="grid gap-1">
@@ -282,13 +282,12 @@ export default function KeyDatesPage() {
           )}
           <button
             className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-            onClick={submitForm}
-            type="button"
+            type="submit"
           >
             {editingId ? "Save Key Date" : "Add Key Date"}
           </button>
         </div>
-      </section>
+      </form>
 
       <section className="panel-card overflow-hidden">
         <div className="border-b border-[var(--line-soft)] px-4 py-3">

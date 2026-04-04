@@ -2510,7 +2510,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.xray && (
-              <div className="mt-4 space-y-4">
+              <form className="mt-4 space-y-4" onSubmit={(e) => { e.preventDefault(); saveImagingReferral("xray"); }}>
                 {/* Row 1: Sent Date + Imaging Center */}
                 <div className="grid grid-cols-[140px_1fr] gap-3">
                   <label className="grid gap-1">
@@ -2631,8 +2631,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 <div className="flex gap-2">
                   <button
                     className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                    onClick={() => saveImagingReferral("xray")}
-                    type="button"
+                    type="submit"
                   >
                     {editingXrayReferralId ? "Update X-Ray Sent" : "Add X-Ray Sent"}
                   </button>
@@ -2674,7 +2673,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     No X-Ray
                   </label>
                 </div>
-              </div>
+              </form>
             )}
 
             {xrayMessage && (
@@ -2737,7 +2736,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.mri && (
-              <div className="mt-4 space-y-4">
+              <form className="mt-4 space-y-4" onSubmit={(e) => { e.preventDefault(); saveImagingReferral("mri"); }}>
                 <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold">
                   <input
                     checked={Boolean(mri.isCt)}
@@ -2863,8 +2862,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 <div className="flex gap-2">
                   <button
                     className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                    onClick={() => saveImagingReferral("mri")}
-                    type="button"
+                    type="submit"
                   >
                     {editingMriReferralId ? "Update MRI / CT Sent" : "Add MRI / CT Sent"}
                   </button>
@@ -2906,7 +2904,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     No MRI
                   </label>
                 </div>
-              </div>
+              </form>
             )}
 
             {mriMessage && (
@@ -4253,7 +4251,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       {showQuickTaskModal && (
         <div className="fixed inset-0 z-50 bg-black/45 p-4">
           <div className="relative h-full w-full">
-            <div className="panel-card p-4" style={getAnchoredModalStyle(quickTaskAnchor, 680, 60)}>
+            <form className="panel-card p-4" style={getAnchoredModalStyle(quickTaskAnchor, 680, 60)} onSubmit={(e) => { e.preventDefault(); saveQuickTask(); }}>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h3 className="text-xl font-semibold">Quick Add Task</h3>
                 <button
@@ -4321,13 +4319,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </button>
                 <button
                   className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                  onClick={saveQuickTask}
-                  type="button"
+                  type="submit"
                 >
                   Add Task
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -4364,7 +4361,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       {showAddAttorneyForm && (
         <div className="fixed inset-0 z-50 bg-black/45 p-4">
           <div className="relative h-full w-full">
-            <div className="panel-card overflow-auto p-4" style={getAnchoredModalStyle(attorneyFormAnchor, 960, 85)}>
+            <form className="panel-card overflow-auto p-4" style={getAnchoredModalStyle(attorneyFormAnchor, 960, 85)} onSubmit={(e) => { e.preventDefault(); saveAttorneyContact(); }}>
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-xl font-semibold">Add New Attorney</h3>
               <button
@@ -4461,13 +4458,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
               <button
                 className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                onClick={saveAttorneyContact}
-                type="button"
+                type="submit"
               >
                 Save Attorney
               </button>
             </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -4475,7 +4471,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       {editingSpecialist && (
         <div className="fixed inset-0 z-50 bg-black/45 p-4">
           <div className="relative h-full w-full">
-            <div className="panel-card p-4" style={getAnchoredModalStyle(specialistEditorAnchor, 760, 75)}>
+            <form className="panel-card p-4" style={getAnchoredModalStyle(specialistEditorAnchor, 760, 75)} onSubmit={(e) => { e.preventDefault(); saveSpecialistEditor(); }}>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-xl font-semibold">Edit Specialist Referral</h3>
               <button
@@ -4600,13 +4596,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
               <button
                 className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                onClick={saveSpecialistEditor}
-                type="button"
+                type="submit"
               >
                 Save Specialist
               </button>
             </div>
-            </div>
+            </form>
           </div>
         </div>
       )}

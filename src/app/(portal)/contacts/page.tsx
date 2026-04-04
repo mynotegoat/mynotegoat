@@ -245,7 +245,7 @@ export default function ContactsPage() {
                   )}
                 </>
               ) : (
-                <div className="mt-3 grid gap-2">
+                <form className="mt-3 grid gap-2" onSubmit={(e) => { e.preventDefault(); saveEditedContact(); }}>
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
                     onChange={(event) =>
@@ -326,13 +326,12 @@ export default function ContactsPage() {
                     </button>
                     <button
                       className="rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-sm font-semibold text-white"
-                      onClick={saveEditedContact}
-                      type="button"
+                      type="submit"
                     >
                       Save
                     </button>
                   </div>
-                </div>
+                </form>
               )}
             </article>
           );
@@ -341,7 +340,7 @@ export default function ContactsPage() {
 
       {showAddContactModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
-          <div className="panel-card max-h-[85vh] w-full max-w-2xl overflow-auto p-4">
+          <form className="panel-card max-h-[85vh] w-full max-w-2xl overflow-auto p-4" onSubmit={(e) => { e.preventDefault(); saveNewContact(); }}>
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-xl font-semibold">Add Contact</h3>
               <button
@@ -453,13 +452,12 @@ export default function ContactsPage() {
               </button>
               <button
                 className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                onClick={saveNewContact}
-                type="button"
+                type="submit"
               >
                 Save Contact
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

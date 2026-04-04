@@ -166,7 +166,26 @@ function parseTimestamp(value: string | null) {
   return Number.isNaN(parsed) ? Number.NaN : parsed;
 }
 
+// Cache authenticated config so we don't call getSession() on every push.
+// Refreshed at most once per 60 seconds.
+let cachedAuthedConfig: {
+  url: string;
+  anonKey: string;
+  table: string;
+  officeId: string;
+  supabase: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>;
+  userId: string;
+  workspaceId: string;
+} | null = null;
+let cachedAuthedConfigAt = 0;
+const AUTH_CACHE_TTL = 60_000; // 60 seconds
+
 async function getAuthedConfig() {
+  const now = Date.now();
+  if (cachedAuthedConfig && now - cachedAuthedConfigAt < AUTH_CACHE_TTL) {
+    return cachedAuthedConfig;
+  }
+
   const config = getConfig();
   const supabase = getSupabaseBrowserClient();
   if (!config || !supabase) {
@@ -179,16 +198,19 @@ async function getAuthedConfig() {
 
   const userId = session?.user?.id;
   if (!userId) {
+    cachedAuthedConfig = null;
     return null;
   }
 
   const expectedWorkspaceId = `${userId}:${config.officeId}`;
-  return {
+  cachedAuthedConfig = {
     ...config,
     supabase,
     userId,
     workspaceId: expectedWorkspaceId,
   };
+  cachedAuthedConfigAt = now;
+  return cachedAuthedConfig;
 }
 
 async function fetchRemoteSnapshot(workspaceId: string) {
@@ -241,9 +263,13 @@ export async function prepareCloudStateBeforeMount() {
     return;
   }
 
+  // Hard timeout: never let cloud sync block longer than 5 seconds
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+
   try {
     const authed = await getAuthedConfig();
-    if (!authed) {
+    if (!authed || controller.signal.aborted) {
       return;
     }
 
@@ -252,7 +278,6 @@ export async function prepareCloudStateBeforeMount() {
       previousWorkspaceId && previousWorkspaceId !== authed.workspaceId;
 
     if (workspaceSwitched) {
-      // Safety: backup before clearing
       backupLocalWorkspaceData();
       clearLocalWorkspaceData();
       window.localStorage.removeItem(getSyncAtKey(previousWorkspaceId));
@@ -260,11 +285,10 @@ export async function prepareCloudStateBeforeMount() {
 
     setActiveWorkspaceId(authed.workspaceId);
 
+    if (controller.signal.aborted) return;
+
     const localSnapshot = readLocalSnapshot();
     const localHasData = hasMeaningfulLocalData(localSnapshot);
-    const localSyncedAtMs = parseTimestamp(
-      window.localStorage.getItem(getSyncAtKey(authed.workspaceId)),
-    );
 
     let remote: Awaited<ReturnType<typeof fetchRemoteSnapshot>> = null;
     try {
@@ -273,6 +297,8 @@ export async function prepareCloudStateBeforeMount() {
       console.warn("[Cloud Sync] Could not fetch remote, keeping local data:", error);
       return;
     }
+
+    if (controller.signal.aborted) return;
 
     const remoteHasData =
       remote &&
@@ -288,9 +314,6 @@ export async function prepareCloudStateBeforeMount() {
       );
 
     if (remoteHasData) {
-      // CLOUD IS THE SOURCE OF TRUTH.
-      // Always pull remote data if it exists. Local is just a cache.
-      // Backup local before overwriting just in case.
       if (localHasData) {
         backupLocalWorkspaceData();
       }
@@ -310,6 +333,8 @@ export async function prepareCloudStateBeforeMount() {
     }
   } catch (error) {
     console.warn("[Cloud Sync] Startup sync skipped:", error);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

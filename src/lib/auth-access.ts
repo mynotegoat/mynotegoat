@@ -34,7 +34,18 @@ function normalizeApprovalStatus(value: unknown): ApprovalStatus {
   return "pending";
 }
 
+// Cache the auth access state for 30 seconds so repeated calls (e.g. navigations)
+// don't each trigger two network roundtrips.
+let cachedAccess: AuthAccessState | null = null;
+let cachedAccessAt = 0;
+const ACCESS_CACHE_TTL = 30_000;
+
 export async function resolveAuthAccessState(): Promise<AuthAccessState> {
+  const now = Date.now();
+  if (cachedAccess && now - cachedAccessAt < ACCESS_CACHE_TTL) {
+    return cachedAccess;
+  }
+
   const supabase = getSupabaseBrowserClient();
   if (!supabase) {
     return { state: "supabase-missing" };
@@ -90,8 +101,10 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
       : {};
   const planTier = normalizePlanTier(profileRow.plan_tier ?? userMetadata.plan_tier);
 
+  let result: AuthAccessState;
+
   if (isAdmin) {
-    return {
+    result = {
       state: "access-granted",
       email: user.email ?? undefined,
       userId: user.id,
@@ -99,24 +112,30 @@ export async function resolveAuthAccessState(): Promise<AuthAccessState> {
       planTier,
       isAdmin: true,
     };
-  }
-
-  if (approvalStatus !== "approved") {
-    return {
+  } else if (approvalStatus !== "approved") {
+    result = {
       state: "pending-approval",
       email: user.email ?? undefined,
       userId: user.id,
       approvalStatus,
       planTier,
     };
+  } else {
+    result = {
+      state: "access-granted",
+      email: user.email ?? undefined,
+      userId: user.id,
+      approvalStatus,
+      planTier,
+      isAdmin: false,
+    };
   }
 
-  return {
-    state: "access-granted",
-    email: user.email ?? undefined,
-    userId: user.id,
-    approvalStatus,
-    planTier,
-    isAdmin: false,
-  };
+  // Only cache successful results
+  if (result.state === "access-granted" || result.state === "pending-approval") {
+    cachedAccess = result;
+    cachedAccessAt = now;
+  }
+
+  return result;
 }
