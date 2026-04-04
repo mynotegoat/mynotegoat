@@ -15,6 +15,7 @@ import {
   type EncounterNoteRecord,
   type EncounterSection,
 } from "@/lib/encounter-notes";
+import { patients } from "@/lib/mock-data";
 
 type NewEncounterDraft = {
   patientId: string;
@@ -33,7 +34,16 @@ function nowIso() {
 }
 
 export function useEncounterNotes() {
-  const [encounters, setEncounters] = useState<EncounterNoteRecord[]>(() => loadEncounterNoteRecords());
+  const [encounters, setEncounters] = useState<EncounterNoteRecord[]>(() => {
+    const all = loadEncounterNoteRecords();
+    // Remove orphaned encounters whose patient no longer exists
+    const patientIds = new Set(patients.map((p) => p.id));
+    const valid = all.filter((enc) => patientIds.has(enc.patientId));
+    if (valid.length < all.length) {
+      saveEncounterNoteRecords(valid);
+    }
+    return valid;
+  });
 
   const updateRecords = useCallback((updater: (current: EncounterNoteRecord[]) => EncounterNoteRecord[]) => {
     setEncounters((current) => {
