@@ -30,9 +30,11 @@ import {
   type PatientRecord,
   type UpdatePatientRecordPatch,
   updatePatientRecordById,
+  deletePatientRecord,
   syncRelatedCasesGroup,
   removeFromRelatedCasesGroup,
 } from "@/lib/mock-data";
+import { loadOfficeSettings } from "@/lib/office-settings";
 import { usePlanTier } from "@/lib/plan-context";
 
 type ImagingMode = "xray" | "mri";
@@ -890,6 +892,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [showNarrativePreviewModal, setShowNarrativePreviewModal] = useState(false);
   const [encounterMessage, setEncounterMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
+
+  // Delete patient state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePasswordInput, setDeletePasswordInput] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const [activeRegionModal, setActiveRegionModal] = useState<ImagingMode | null>(null);
   const [showDiagnosisModal, setShowDiagnosisModal] = useState(false);
@@ -2142,6 +2149,25 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
   const saveAndClosePatientFile = () => {
     savePatientFile();
+    router.push("/patients");
+  };
+
+  const handleDeletePatient = () => {
+    const settings = loadOfficeSettings();
+    if (!settings.deletePassword) {
+      setDeleteError("No delete password is set. Go to Settings → Office to set one first.");
+      return;
+    }
+    if (deletePasswordInput !== settings.deletePassword) {
+      setDeleteError("Incorrect password.");
+      return;
+    }
+    const deleted = deletePatientRecord(patient.id);
+    if (!deleted) {
+      setDeleteError("Could not delete patient. Please try again.");
+      return;
+    }
+    setShowDeleteModal(false);
     router.push("/patients");
   };
 
@@ -3855,8 +3881,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       </section>
 
       <div className="panel-card flex flex-wrap items-center justify-between gap-2 p-4">
-        {saveMessage && <p className="text-sm font-semibold text-[var(--brand-primary)]">{saveMessage}</p>}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+            onClick={() => { setShowDeleteModal(true); setDeletePasswordInput(""); setDeleteError(""); }}
+            type="button"
+          >
+            Delete Patient
+          </button>
+          {saveMessage && <p className="text-sm font-semibold text-[var(--brand-primary)]">{saveMessage}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             className="rounded-xl border border-[var(--line-soft)] bg-white px-6 py-2 font-semibold"
             onClick={savePatientFile}
@@ -4620,6 +4655,50 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           <option key={name} value={name} />
         ))}
       </datalist>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
+          <div className="panel-card mx-auto w-full max-w-md p-5">
+            <h3 className="text-xl font-semibold text-red-600">Delete Patient</h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              You are about to permanently delete{" "}
+              <span className="font-semibold text-[var(--text-main)]">{patient.fullName}</span>.
+              This action cannot be undone.
+            </p>
+            <label className="mt-4 grid gap-1">
+              <span className="text-sm font-semibold text-[var(--text-muted)]">Enter Delete Password</span>
+              <input
+                autoFocus
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                onChange={(e) => { setDeletePasswordInput(e.target.value); setDeleteError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleDeletePatient(); } }}
+                placeholder="Password"
+                type="password"
+                value={deletePasswordInput}
+              />
+            </label>
+            {deleteError && (
+              <p className="mt-2 text-sm font-semibold text-red-600">{deleteError}</p>
+            )}
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={() => { setShowDeleteModal(false); setDeletePasswordInput(""); setDeleteError(""); }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white"
+                onClick={handleDeletePatient}
+                type="button"
+              >
+                Delete Patient
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

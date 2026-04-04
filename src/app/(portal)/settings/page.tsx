@@ -984,6 +984,12 @@ export default function SettingsPage() {
   const [contactCategoryDraft, setContactCategoryDraft] = useState("");
   const [contactCategoryError, setContactCategoryError] = useState("");
   const [officeSettingsMessage, setOfficeSettingsMessage] = useState("");
+  const [deletePasswordDraft, setDeletePasswordDraft] = useState("");
+  const [deletePasswordLoginEmail, setDeletePasswordLoginEmail] = useState("");
+  const [deletePasswordLoginPassword, setDeletePasswordLoginPassword] = useState("");
+  const [deletePasswordError, setDeletePasswordError] = useState("");
+  const [deletePasswordSuccess, setDeletePasswordSuccess] = useState("");
+  const [deletePasswordSaving, setDeletePasswordSaving] = useState(false);
   const [backupSelections, setBackupSelections] = useState<Record<BackupModuleId, boolean>>(() =>
     backupModules.reduce<Record<BackupModuleId, boolean>>((accumulator, module) => {
       accumulator[module.id] = true;
@@ -1174,6 +1180,50 @@ export default function SettingsPage() {
       setOfficeSettingsMessage("Could not read logo file.");
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleSetDeletePassword = async () => {
+    setDeletePasswordError("");
+    setDeletePasswordSuccess("");
+    const newPassword = deletePasswordDraft.trim();
+    if (!newPassword) {
+      setDeletePasswordError("Enter a delete password.");
+      return;
+    }
+    if (!deletePasswordLoginEmail.trim() || !deletePasswordLoginPassword) {
+      setDeletePasswordError("Enter your login email and password to verify your identity.");
+      return;
+    }
+    setDeletePasswordSaving(true);
+    try {
+      const { getSupabaseBrowserClient } = await import("@/lib/supabase-browser");
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        // No Supabase — still allow setting via simple email match
+        setDeletePasswordError("Supabase is not configured. Cannot verify identity.");
+        setDeletePasswordSaving(false);
+        return;
+      }
+      // Re-authenticate with the user's login credentials
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: deletePasswordLoginEmail.trim(),
+        password: deletePasswordLoginPassword,
+      });
+      if (authError) {
+        setDeletePasswordError("Login verification failed: " + authError.message);
+        setDeletePasswordSaving(false);
+        return;
+      }
+      // Verification succeeded — save the delete password
+      updateOfficeSettings({ deletePassword: newPassword });
+      setDeletePasswordSuccess("Delete password saved.");
+      setDeletePasswordDraft("");
+      setDeletePasswordLoginEmail("");
+      setDeletePasswordLoginPassword("");
+    } catch {
+      setDeletePasswordError("Something went wrong. Please try again.");
+    }
+    setDeletePasswordSaving(false);
   };
 
   const handleExportBackup = () => {
@@ -1439,19 +1489,58 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-          <label className="grid gap-1 sm:col-span-2">
-            <span className="text-sm font-semibold text-[var(--text-muted)]">Delete Password</span>
-            <input
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              onChange={(event) => updateOfficeSettings({ deletePassword: event.target.value })}
-              placeholder="Set a password required to delete patients"
-              type="password"
-              value={officeSettings.deletePassword}
-            />
-            <span className="text-xs text-[var(--text-muted)]">
-              This password is required when deleting a patient from the workspace. Set it to secure patient records.
-            </span>
-          </label>
+          <div className="sm:col-span-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4 space-y-3">
+            <div>
+              <h5 className="text-sm font-semibold text-[var(--text-main)]">Delete Password</h5>
+              <p className="text-xs text-[var(--text-muted)]">
+                {officeSettings.deletePassword
+                  ? "A delete password is set. To change it, verify your identity below."
+                  : "No delete password is set. Set one to enable patient deletion."}
+              </p>
+            </div>
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold text-[var(--text-muted)]">{officeSettings.deletePassword ? "New" : ""} Delete Password</span>
+              <input
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                onChange={(e) => setDeletePasswordDraft(e.target.value)}
+                placeholder={officeSettings.deletePassword ? "Enter new delete password" : "Create a delete password"}
+                type="password"
+                value={deletePasswordDraft}
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Login Email (verify identity)</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setDeletePasswordLoginEmail(e.target.value)}
+                  placeholder="you@clinic.com"
+                  type="email"
+                  value={deletePasswordLoginEmail}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Login Password (verify identity)</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setDeletePasswordLoginPassword(e.target.value)}
+                  placeholder="Your account password"
+                  type="password"
+                  value={deletePasswordLoginPassword}
+                />
+              </label>
+            </div>
+            {deletePasswordError && <p className="text-sm font-semibold text-red-600">{deletePasswordError}</p>}
+            {deletePasswordSuccess && <p className="text-sm font-semibold text-emerald-700">{deletePasswordSuccess}</p>}
+            <button
+              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={deletePasswordSaving}
+              onClick={handleSetDeletePassword}
+              type="button"
+            >
+              {deletePasswordSaving ? "Verifying..." : officeSettings.deletePassword ? "Update Delete Password" : "Set Delete Password"}
+            </button>
+          </div>
         </div>
         {officeSettingsMessage && (
           <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">{officeSettingsMessage}</p>

@@ -17,8 +17,7 @@ import {
   formatUsDateDisplay,
   type FollowUpCategory,
 } from "@/lib/follow-up-queue";
-import { createPatientRecord, deletePatientRecord, patients, type PatientMatrixField, type PatientRecord } from "@/lib/mock-data";
-import { loadOfficeSettings } from "@/lib/office-settings";
+import { createPatientRecord, patients, type PatientMatrixField, type PatientRecord } from "@/lib/mock-data";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 
 const COLUMN_ORDER_KEY = "casemate.patient-column-order.v1";
@@ -272,10 +271,6 @@ export default function PatientsPage() {
   const [columnOrder, setColumnOrder] = useState<ListColumnId[]>(() => loadColumnOrder());
   const [dragColumnId, setDragColumnId] = useState<ListColumnId | null>(null);
 
-  // Delete modal state
-  const [deleteTarget, setDeleteTarget] = useState<PatientRecord | null>(null);
-  const [deletePasswordInput, setDeletePasswordInput] = useState("");
-  const [deleteError, setDeleteError] = useState("");
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [newPatientMessage, setNewPatientMessage] = useState("");
   const [newPatientDraft, setNewPatientDraft] = useState<NewPatientDraft>({
@@ -580,26 +575,6 @@ export default function PatientsPage() {
     setDragColumnId(null);
   };
 
-  const handleDeletePatient = () => {
-    if (!deleteTarget) return;
-    const settings = loadOfficeSettings();
-    if (!settings.deletePassword) {
-      setDeleteError("No delete password is set. Go to Settings → Office to set one first.");
-      return;
-    }
-    if (deletePasswordInput !== settings.deletePassword) {
-      setDeleteError("Incorrect password.");
-      return;
-    }
-    const deleted = deletePatientRecord(deleteTarget.id);
-    if (!deleted) {
-      setDeleteError("Could not delete patient. Please try again.");
-      return;
-    }
-    setDeleteTarget(null);
-    setDeletePasswordInput("");
-    setDeleteError("");
-  };
 
   const followUpItems = useMemo(() => {
     return buildFollowUpItems(filteredPatients, {
@@ -862,7 +837,6 @@ export default function PatientsPage() {
                       </span>
                     </th>
                   ))}
-                  <th className="px-4 py-3 w-[60px]" />
                 </tr>
               </thead>
               <tbody>
@@ -915,21 +889,11 @@ export default function PatientsPage() {
                       }
                       return null;
                     })}
-                    <td className="px-4 py-3">
-                      <button
-                        className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-                        onClick={() => { setDeleteTarget(patient); setDeletePasswordInput(""); setDeleteError(""); }}
-                        title="Delete patient"
-                        type="button"
-                      >
-                        Delete
-                      </button>
-                    </td>
                   </tr>
                 ))}
                 {filteredPatients.length === 0 && (
                   <tr className="border-t border-[var(--line-soft)]">
-                    <td className="px-4 py-5 text-sm text-[var(--text-muted)]" colSpan={columnOrder.length + 1}>
+                    <td className="px-4 py-5 text-sm text-[var(--text-muted)]" colSpan={columnOrder.length}>
                       No patients match the selected filters.
                     </td>
                   </tr>
@@ -1576,49 +1540,6 @@ export default function PatientsPage() {
         </div>
       )}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
-          <div className="panel-card mx-auto w-full max-w-md p-5">
-            <h3 className="text-xl font-semibold text-red-600">Delete Patient</h3>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              You are about to permanently delete{" "}
-              <span className="font-semibold text-[var(--text-main)]">{deleteTarget.fullName}</span>.
-              This action cannot be undone.
-            </p>
-            <label className="mt-4 grid gap-1">
-              <span className="text-sm font-semibold text-[var(--text-muted)]">Enter Delete Password</span>
-              <input
-                autoFocus
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                onChange={(e) => { setDeletePasswordInput(e.target.value); setDeleteError(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleDeletePatient(); } }}
-                placeholder="Password"
-                type="password"
-                value={deletePasswordInput}
-              />
-            </label>
-            {deleteError && (
-              <p className="mt-2 text-sm font-semibold text-red-600">{deleteError}</p>
-            )}
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-              <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                onClick={() => { setDeleteTarget(null); setDeletePasswordInput(""); setDeleteError(""); }}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white"
-                onClick={handleDeletePatient}
-                type="button"
-              >
-                Delete Patient
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
