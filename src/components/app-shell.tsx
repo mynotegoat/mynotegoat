@@ -12,7 +12,7 @@ function classNames(...classes: Array<string | false | undefined>) {
 
 function buildTitle(pathname: string, items: { href: string; label: string }[]) {
   const item = items.find((entry) => pathname.startsWith(entry.href));
-  return item?.label ?? "Note Goat";
+  return item?.label ?? "My Note Goat";
 }
 
 export function AppShell({
@@ -77,22 +77,21 @@ export function AppShell({
           <div className="grid min-h-[calc(100vh-2rem)] lg:grid-cols-[250px_1fr]">
             <aside className="hidden border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] p-6 text-[#e4f4ff] lg:block">
               <div className="mb-8">
-                <div className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
+                <div className="rounded-2xl border border-white/15 bg-white/5 px-3 py-3">
                   {showBrandLogo ? (
                     <img
-                      src="/notegoat-logo.svg"
-                      alt="Note Goat"
-                      className="h-16 w-full object-contain"
+                      src="/mynotegoatlogo.png"
+                      alt="My Note Goat"
+                      className="h-20 w-full object-contain"
                       onError={() => setShowBrandLogo(false)}
                     />
                   ) : (
                     <div className="text-center text-xl font-semibold tracking-wide text-white">
-                      Note Goat
+                      My Note Goat
                     </div>
                   )}
                 </div>
-                <h2 className="mt-3 text-[28px] font-semibold">Note Goat</h2>
-                <p className="mt-1 text-sm text-[#aad0e4]">Secure office workspace</p>
+                <p className="mt-2 text-sm text-[#aad0e4]">Secure office workspace</p>
               </div>
 
               <nav className="space-y-2">
@@ -138,7 +137,7 @@ export function AppShell({
               <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-soft)] bg-white/70 px-4 py-4 lg:px-7 lg:py-5">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                    Note Goat
+                    My Note Goat
                   </div>
                   <h1 className="text-2xl font-semibold text-[var(--text-main)]">
                     {buildTitle(pathname, navItems)}

@@ -60,9 +60,7 @@ export default function PendingApprovalPage() {
   return (
     <div className="space-y-5">
       <div>
-        <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
-          Note Goat
-        </div>
+        <img src="/mynotegoatlogo.png" alt="My Note Goat" className="mx-auto mb-3 h-24 w-auto" />
         <h1 className="mt-2 text-3xl font-semibold text-[var(--text-main)]">Pending Approval</h1>
         <p className="mt-2 text-[15px] text-[var(--text-muted)]">
           Your email is verified. Your account still needs admin approval before workspace access.
