@@ -255,13 +255,13 @@ export function buildFollowUpItems(
     const initialExamRaw = matrix.initialExam ?? "";
     const patientOverrides = followUpOverrides[patient.id];
     const xrayManuallyCleared = Boolean(
-      patientOverrides?.xray.patientRefused || patientOverrides?.xray.completedPriorCare,
+      patientOverrides?.xray.patientRefused || patientOverrides?.xray.completedPriorCare || patientOverrides?.xray.notNeeded,
     );
     const mriCtManuallyCleared = Boolean(
-      patientOverrides?.mriCt.patientRefused || patientOverrides?.mriCt.completedPriorCare,
+      patientOverrides?.mriCt.patientRefused || patientOverrides?.mriCt.completedPriorCare || patientOverrides?.mriCt.notNeeded,
     );
     const specialistManuallyCleared = Boolean(
-      patientOverrides?.specialist.patientRefused || patientOverrides?.specialist.completedPriorCare,
+      patientOverrides?.specialist.patientRefused || patientOverrides?.specialist.completedPriorCare || patientOverrides?.specialist.notNeeded,
     );
     const xrayStages = {
       sent: hasMatrixValue(xraySentRaw),

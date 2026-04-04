@@ -3,6 +3,7 @@ export type FollowUpOverrideCategory = "xray" | "mriCt" | "specialist";
 export interface FollowUpCategoryOverrideFlags {
   patientRefused: boolean;
   completedPriorCare: boolean;
+  notNeeded: boolean;
 }
 
 export interface PatientFollowUpOverrideRecord {
@@ -26,6 +27,7 @@ function createDefaultFlags(): FollowUpCategoryOverrideFlags {
   return {
     patientRefused: false,
     completedPriorCare: false,
+    notNeeded: false,
   };
 }
 
@@ -37,6 +39,7 @@ function normalizeFlags(value: unknown): FollowUpCategoryOverrideFlags {
   return {
     patientRefused: Boolean(row.patientRefused),
     completedPriorCare: Boolean(row.completedPriorCare),
+    notNeeded: Boolean(row.notNeeded),
   };
 }
 
@@ -75,10 +78,13 @@ export function hasAnyFollowUpOverrideFlags(record: PatientFollowUpOverrideRecor
   return (
     record.xray.patientRefused ||
     record.xray.completedPriorCare ||
+    record.xray.notNeeded ||
     record.mriCt.patientRefused ||
     record.mriCt.completedPriorCare ||
+    record.mriCt.notNeeded ||
     record.specialist.patientRefused ||
-    record.specialist.completedPriorCare
+    record.specialist.completedPriorCare ||
+    record.specialist.notNeeded
   );
 }
 

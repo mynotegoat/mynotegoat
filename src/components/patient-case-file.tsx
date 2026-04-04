@@ -691,7 +691,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { encountersByNewest, createEncounter, setSoapSection } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis } = usePatientDiagnoses(patient.id);
-  const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare } =
+  const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
     usePatientFollowUpOverrides();
   const patientBillingRecord = getPatientBillingRecord(patient.id);
   const currentPlanTier = usePlanTier();
@@ -1311,7 +1311,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       setQuickTaskModalMessage(result.reason);
       return;
     }
-    setQuickTaskStatusMessage("Task added to My Tasks.");
+    setQuickTaskStatusMessage("Task added to To Do.");
     closeQuickTaskModal();
   };
 
@@ -2615,7 +2615,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Overrides */}
-                <div className="flex gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
+                <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
                   <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.patientRefused}
@@ -2631,6 +2631,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       type="checkbox"
                     />
                     Completed Prior Care
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    <input
+                      checked={xrayFollowUpOverride.notNeeded}
+                      onChange={(event) => setNotNeeded(patient.id, "xray", event.target.checked)}
+                      type="checkbox"
+                    />
+                    No X-Ray
                   </label>
                 </div>
               </div>
@@ -2839,7 +2847,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Overrides */}
-                <div className="flex gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
+                <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
                   <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.patientRefused}
@@ -2855,6 +2863,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       type="checkbox"
                     />
                     Completed Prior Care
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                    <input
+                      checked={mriCtFollowUpOverride.notNeeded}
+                      onChange={(event) => setNotNeeded(patient.id, "mriCt", event.target.checked)}
+                      type="checkbox"
+                    />
+                    No MRI
                   </label>
                 </div>
               </div>
@@ -2956,7 +2972,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 >
                   Add Specialist
                 </button>
-                <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-white p-2 sm:col-span-2">
+                <div className="flex flex-wrap gap-4 rounded-xl border border-[var(--line-soft)] bg-white p-2 sm:col-span-2">
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={specialistFollowUpOverride.patientRefused}
@@ -2972,6 +2988,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       type="checkbox"
                     />
                     Completed Prior Care
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
+                    <input
+                      checked={specialistFollowUpOverride.notNeeded}
+                      onChange={(event) => setNotNeeded(patient.id, "specialist", event.target.checked)}
+                      type="checkbox"
+                    />
+                    No PM
                   </label>
                 </div>
               </div>
@@ -4204,7 +4228,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </div>
 
               <p className="mb-3 text-sm text-[var(--text-muted)]">
-                Add a task while working in this patient file. It will appear in <span className="font-semibold">My Tasks</span>.
+                Add a task while working in this patient file. It will appear in <span className="font-semibold">To Do</span>.
               </p>
 
               <div className="grid gap-3 md:grid-cols-2">

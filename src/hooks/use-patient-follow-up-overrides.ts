@@ -57,6 +57,8 @@ export function usePatientFollowUpOverrides() {
             patch.completedPriorCare === undefined
               ? base[category].completedPriorCare
               : Boolean(patch.completedPriorCare),
+          notNeeded:
+            patch.notNeeded === undefined ? base[category].notNeeded : Boolean(patch.notNeeded),
         };
         const nextRecord: PatientFollowUpOverrideRecord = {
           ...base,
@@ -96,6 +98,13 @@ export function usePatientFollowUpOverrides() {
     [setCategoryFlags],
   );
 
+  const setNotNeeded = useCallback(
+    (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { notNeeded: enabled });
+    },
+    [setCategoryFlags],
+  );
+
   const clearPatientOverrides = useCallback(
     (patientId: string) => {
       const normalizedPatientId = patientId.trim();
@@ -120,6 +129,7 @@ export function usePatientFollowUpOverrides() {
     setCategoryFlags,
     setPatientRefused,
     setCompletedPriorCare,
+    setNotNeeded,
     clearPatientOverrides,
   };
 }

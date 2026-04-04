@@ -1993,7 +1993,7 @@ export default function SettingsPage() {
             </button>
           </div>
         }
-        description="Configure priority cases and dashboard behavior for task + patient follow-up queues."
+        description="Configure Case Flow rules, To Do list, and dashboard display settings."
         isOpen={expandedSections.dashboard}
         onToggle={() => toggleSection("dashboard")}
         title="Dashboard Settings"
@@ -2035,90 +2035,9 @@ export default function SettingsPage() {
           </article>
 
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-            <h4 className="text-lg font-semibold">Priority Rules</h4>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Patients matching these rules appear as Priority Alerts on the Dashboard.
-            </p>
-            <div className="mt-3 space-y-3">
-              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    checked={priorityRules.includeMriDue}
-                    onChange={(event) => setIncludeMriDue(event.target.checked)}
-                    type="checkbox"
-                  />
-                  MRI Due (Days from Initial)
-                </label>
-                <input
-                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  disabled={!priorityRules.includeMriDue}
-                  min={1}
-                  onChange={(event) => setMriDueDaysFromInitial(Number(event.target.value) || 1)}
-                  type="number"
-                  value={priorityRules.mriDueDaysFromInitial}
-                />
-              </div>
-
-              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    checked={priorityRules.includeNoUpdate}
-                    onChange={(event) => setIncludeNoUpdate(event.target.checked)}
-                    type="checkbox"
-                  />
-                  No Update
-                </label>
-                <input
-                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  disabled={!priorityRules.includeNoUpdate}
-                  min={1}
-                  onChange={(event) => setNoUpdateDaysThreshold(Number(event.target.value) || 1)}
-                  type="number"
-                  value={priorityRules.noUpdateDaysThreshold}
-                />
-              </div>
-
-              <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <input
-                    checked={priorityRules.includeRbStatusCheck}
-                    onChange={(event) => setIncludeRbStatusCheck(event.target.checked)}
-                    type="checkbox"
-                  />
-                  R&B Status Check (Days from R&B Sent)
-                </label>
-                <input
-                  className="max-w-[180px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  disabled={!priorityRules.includeRbStatusCheck}
-                  min={1}
-                  onChange={(event) => setRbStatusCheckDaysThreshold(Number(event.target.value) || 1)}
-                  type="number"
-                  value={priorityRules.rbStatusCheckDaysThreshold}
-                />
-              </div>
-
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Max priority cards</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  min={1}
-                  onChange={(event) => setMaxItems(Number(event.target.value) || 1)}
-                  type="number"
-                  value={priorityRules.maxItems}
-                />
-              </label>
-
-              <p className="text-xs text-[var(--text-muted)]">
-                MRI Due and No Update warnings pause after a case is Discharged or once R&B is sent.
-                Use R&B Status Check for post-R&B follow-up timing.
-              </p>
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
             <h4 className="text-lg font-semibold">To Do</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Controls the dashboard tasks preview and default task behavior.
+              Controls the dashboard task list preview and default behavior.
             </p>
             <div className="mt-3 space-y-3">
               <label className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -2154,14 +2073,13 @@ export default function SettingsPage() {
             </div>
           </article>
 
-          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+          <article className="xl:col-span-2 rounded-xl border border-[var(--line-soft)] bg-white p-4">
             <h4 className="text-lg font-semibold">Case Flow</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Controls which follow-up categories appear in the Case Flow section on the Dashboard.
+              Configure when each category appears and clears in the Case Flow on the Dashboard.
             </p>
 
             <div className="mt-4 space-y-4">
-              {/* Master toggle */}
               <label className="inline-flex items-center gap-2 text-sm font-semibold">
                 <input
                   checked={dashboardWorkspaceSettings.patientFollowUp.showOnDashboard}
@@ -2171,121 +2089,99 @@ export default function SettingsPage() {
                 Show Case Flow on Dashboard
               </label>
 
-              {/* Include categories */}
+              {/* X-Ray rules */}
               <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
-                <p className="mb-2 text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-                  Include in Follow-Up Queue
-                </p>
-                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  <label className="inline-flex items-center gap-2 text-sm font-medium">
-                    <input
-                      checked={dashboardWorkspaceSettings.patientFollowUp.includeXray}
-                      onChange={(event) => setFollowUpIncludeXray(event.target.checked)}
-                      type="checkbox"
-                    />
-                    X-Ray
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm font-medium">
-                    <input
-                      checked={dashboardWorkspaceSettings.patientFollowUp.includeMriCt}
-                      onChange={(event) => setFollowUpIncludeMriCt(event.target.checked)}
-                      type="checkbox"
-                    />
-                    MRI / CT
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm font-medium">
-                    <input
-                      checked={dashboardWorkspaceSettings.patientFollowUp.includeSpecialist}
-                      onChange={(event) => setFollowUpIncludeSpecialist(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Specialist
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm font-medium">
-                    <input
-                      checked={dashboardWorkspaceSettings.patientFollowUp.includeLienLop}
-                      onChange={(event) => setFollowUpIncludeLienLop(event.target.checked)}
-                      type="checkbox"
-                    />
-                    {lienLabel}
-                  </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeXray}
+                    onChange={(event) => setFollowUpIncludeXray(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <p className="text-sm font-bold">X-Ray</p>
                 </div>
-              </div>
-
-              {/* Clear-when rules */}
-              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-                  Clear Conditions
-                </p>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">X-Ray clear when</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
-                        setFollowUpXrayClearWhen(
-                          event.target.value as "sent" | "done" | "received" | "reviewed",
-                        )
+                        setFollowUpXrayClearWhen(event.target.value as "sent" | "done" | "received" | "reviewed")
                       }
                       value={dashboardWorkspaceSettings.patientFollowUp.xrayClearWhen}
                     >
                       <option value="sent">Sent</option>
-                      <option value="done">Done</option>
+                      <option value="done">Completed</option>
                       <option value="received">Report Received</option>
                       <option value="reviewed">Report Reviewed</option>
                     </select>
                   </label>
+                </div>
+              </div>
 
+              {/* MRI rules */}
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeMriCt}
+                    onChange={(event) => setFollowUpIncludeMriCt(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <p className="text-sm font-bold">MRI / CT</p>
+                </div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">MRI Due alert</span>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-2 text-sm font-medium">
+                        <input
+                          checked={priorityRules.includeMriDue}
+                          onChange={(event) => setIncludeMriDue(event.target.checked)}
+                          type="checkbox"
+                        />
+                        Alert after
+                      </label>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        disabled={!priorityRules.includeMriDue}
+                        min={1}
+                        onChange={(event) => setMriDueDaysFromInitial(Number(event.target.value) || 1)}
+                        type="number"
+                        value={priorityRules.mriDueDaysFromInitial}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from initial</span>
+                    </div>
+                  </div>
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">MRI / CT clear when</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
-                        setFollowUpMriCtClearWhen(
-                          event.target.value as "sent" | "done" | "received" | "reviewed",
-                        )
+                        setFollowUpMriCtClearWhen(event.target.value as "sent" | "done" | "received" | "reviewed")
                       }
                       value={dashboardWorkspaceSettings.patientFollowUp.mriCtClearWhen}
                     >
                       <option value="sent">Sent</option>
-                      <option value="done">Done</option>
+                      <option value="done">Completed</option>
                       <option value="received">Report Received</option>
                       <option value="reviewed">Report Reviewed</option>
                     </select>
                   </label>
+                </div>
+              </div>
 
+              {/* Specialist rules */}
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeSpecialist}
+                    onChange={(event) => setFollowUpIncludeSpecialist(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <p className="text-sm font-bold">Specialist</p>
+                </div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">{lienLabel} clear when</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {followUpLienClearStatusOptions.map((statusName) => {
-                        const checked = dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses.some(
-                          (entry) => entry.trim().toLowerCase() === statusName.trim().toLowerCase(),
-                        );
-                        return (
-                          <label
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                              checked
-                                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] text-[var(--brand-primary)]"
-                                : "border-[var(--line-soft)] bg-white"
-                            }`}
-                            key={`follow-up-lien-clear-status-${statusName}`}
-                          >
-                            <input
-                              className="sr-only"
-                              checked={checked}
-                              onChange={(event) => toggleFollowUpLienLopClearStatus(statusName, event.target.checked)}
-                              type="checkbox"
-                            />
-                            {checked && <span>&#10003;</span>}
-                            {statusName}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </label>
-
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Specialist clear when</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
@@ -2301,8 +2197,92 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Lien rules */}
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    checked={dashboardWorkspaceSettings.patientFollowUp.includeLienLop}
+                    onChange={(event) => setFollowUpIncludeLienLop(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <p className="text-sm font-bold">{lienLabel}</p>
+                </div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when status is</span>
+                    <select
+                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => {
+                        const selected = event.target.value;
+                        if (selected) {
+                          setFollowUpLienLopClearStatuses([selected]);
+                        }
+                      }}
+                      value={dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses[0] ?? ""}
+                    >
+                      {followUpLienClearStatusOptions.map((statusName) => (
+                        <option key={statusName} value={statusName}>
+                          {statusName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              {/* Additional alert rules */}
+              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+                  Additional Alert Rules
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={priorityRules.includeNoUpdate}
+                        onChange={(event) => setIncludeNoUpdate(event.target.checked)}
+                        type="checkbox"
+                      />
+                      No Update alert after
+                    </label>
+                    <input
+                      className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      disabled={!priorityRules.includeNoUpdate}
+                      min={1}
+                      onChange={(event) => setNoUpdateDaysThreshold(Number(event.target.value) || 1)}
+                      type="number"
+                      value={priorityRules.noUpdateDaysThreshold}
+                    />
+                    <span className="text-sm text-[var(--text-muted)]">days</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={priorityRules.includeRbStatusCheck}
+                        onChange={(event) => setIncludeRbStatusCheck(event.target.checked)}
+                        type="checkbox"
+                      />
+                      R&amp;B Status Check after
+                    </label>
+                    <input
+                      className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      disabled={!priorityRules.includeRbStatusCheck}
+                      min={1}
+                      onChange={(event) => setRbStatusCheckDaysThreshold(Number(event.target.value) || 1)}
+                      type="number"
+                      value={priorityRules.rbStatusCheckDaysThreshold}
+                    />
+                    <span className="text-sm text-[var(--text-muted)]">days from R&amp;B sent</span>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  MRI Due and No Update alerts pause after a case is Discharged or once R&amp;B is sent.
+                </p>
+              </div>
+
               {/* Thresholds */}
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <label className="grid gap-1">
                   <span className="text-sm font-semibold text-[var(--text-muted)]">Stale after (days)</span>
                   <input
@@ -2315,15 +2295,24 @@ export default function SettingsPage() {
                 </label>
 
                 <label className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">
-                    Max Case Flow rows on Dashboard
-                  </span>
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Max Case Flow rows</span>
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
                     min={1}
                     onChange={(event) => setFollowUpMaxItems(Number(event.target.value) || 1)}
                     type="number"
                     value={dashboardWorkspaceSettings.patientFollowUp.maxItems}
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Max alert items</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    min={1}
+                    onChange={(event) => setMaxItems(Number(event.target.value) || 1)}
+                    type="number"
+                    value={priorityRules.maxItems}
                   />
                 </label>
               </div>

@@ -22,7 +22,7 @@ export const portalNavItems: PortalNavItem[] = [
   { href: "/dashboard", label: "Dashboard", feature: "dashboard" },
   { href: "/patients", label: "Patients", feature: "patients" },
   { href: "/statistics", label: "Statistics", feature: "statistics" },
-  { href: "/tasks", label: "My Tasks", feature: "tasks" },
+  { href: "/tasks", label: "To Do", feature: "tasks" },
   { href: "/contacts", label: "Contacts", feature: "contacts" },
   { href: "/appointments", label: "Schedule", feature: "appointments" },
   { href: "/encounters", label: "Encounters", feature: "encounters" },

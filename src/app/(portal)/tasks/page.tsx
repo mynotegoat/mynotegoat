@@ -175,7 +175,7 @@ export default function TasksPage() {
       <section className="panel-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-xl font-semibold">My Tasks</h3>
+            <h3 className="text-xl font-semibold">To Do</h3>
             <p className="text-sm text-[var(--text-muted)]">
               Quick task capture with priority, status tracking, and easy cleanup.
             </p>
@@ -269,7 +269,7 @@ export default function TasksPage() {
               <option value="Done">Done</option>
             </select>
             <span className="text-[11px] text-[var(--text-muted)]">
-              Default comes from Settings → Dashboard → My Tasks.
+              Default comes from Settings → Dashboard → To Do.
             </span>
           </label>
           <label className="grid gap-1 md:col-span-2">
