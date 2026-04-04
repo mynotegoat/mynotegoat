@@ -54,7 +54,7 @@ export default function LoginClient({ verifyNotice }: LoginClientProps) {
     }
 
     if (access.state === "access-granted") {
-      router.replace("/dashboard");
+      router.replace("/patients");
       return;
     }
 

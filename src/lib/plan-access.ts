@@ -1,10 +1,8 @@
 export type PlanTier = "tracking" | "track_schedule" | "complete";
 
 export type PortalFeature =
-  | "dashboard"
   | "patients"
   | "statistics"
-  | "tasks"
   | "contacts"
   | "appointments"
   | "encounters"
@@ -19,10 +17,8 @@ export type PortalNavItem = {
 };
 
 export const portalNavItems: PortalNavItem[] = [
-  { href: "/dashboard", label: "Dashboard", feature: "dashboard" },
   { href: "/patients", label: "Patients", feature: "patients" },
   { href: "/statistics", label: "Statistics", feature: "statistics" },
-  { href: "/tasks", label: "To Do", feature: "tasks" },
   { href: "/contacts", label: "Contacts", feature: "contacts" },
   { href: "/appointments", label: "Schedule", feature: "appointments" },
   { href: "/encounters", label: "Encounters", feature: "encounters" },
@@ -33,29 +29,23 @@ export const portalNavItems: PortalNavItem[] = [
 
 const planFeatureMap: Record<PlanTier, PortalFeature[]> = {
   tracking: [
-    "dashboard",
     "patients",
     "statistics",
-    "tasks",
     "contacts",
     "keyDates",
     "settings",
   ],
   track_schedule: [
-    "dashboard",
     "patients",
     "statistics",
-    "tasks",
     "contacts",
     "appointments",
     "keyDates",
     "settings",
   ],
   complete: [
-    "dashboard",
     "patients",
     "statistics",
-    "tasks",
     "contacts",
     "appointments",
     "encounters",
@@ -102,21 +92,15 @@ export function getVisiblePortalNavItems(planTier: PlanTier) {
 
 export function getDefaultPortalPath(planTier: PlanTier) {
   const firstAllowed = getVisiblePortalNavItems(planTier)[0];
-  return firstAllowed?.href ?? "/dashboard";
+  return firstAllowed?.href ?? "/patients";
 }
 
 export function resolvePortalFeatureFromPath(pathname: string): PortalFeature | null {
-  if (pathname.startsWith("/dashboard")) {
-    return "dashboard";
-  }
   if (pathname.startsWith("/patients")) {
     return "patients";
   }
   if (pathname.startsWith("/statistics")) {
     return "statistics";
-  }
-  if (pathname.startsWith("/tasks")) {
-    return "tasks";
   }
   if (pathname.startsWith("/contacts")) {
     return "contacts";

@@ -1997,16 +1997,16 @@ export default function SettingsPage() {
             </button>
           </div>
         }
-        description="Configure Case Flow rules, To Do list, and dashboard display settings."
+        description="Configure Case Flow rules, To Do preferences, and case status display."
         isOpen={expandedSections.dashboard}
         onToggle={() => toggleSection("dashboard")}
-        title="Dashboard Settings"
+        title="Reminder Settings"
       >
         <div className="grid gap-4 xl:grid-cols-3">
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
             <h4 className="text-lg font-semibold">Case Status</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Choose which case statuses appear on Dashboard.
+              Choose which case statuses to track.
             </p>
             <div className="mt-3 grid gap-2">
               {caseStatuses.map((status) => (
@@ -2041,18 +2041,9 @@ export default function SettingsPage() {
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
             <h4 className="text-lg font-semibold">To Do</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Controls the dashboard task list preview and default behavior.
+              Controls default behavior for the To Do task list.
             </p>
             <div className="mt-3 space-y-3">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold">
-                <input
-                  checked={dashboardWorkspaceSettings.myTasks.showOnDashboard}
-                  onChange={(event) => setTasksShowOnDashboard(event.target.checked)}
-                  type="checkbox"
-                />
-                Show To Do on Dashboard
-              </label>
-
               <label className="inline-flex items-center gap-2 text-sm font-semibold">
                 <input
                   checked={dashboardWorkspaceSettings.myTasks.openOnly}
@@ -2060,19 +2051,6 @@ export default function SettingsPage() {
                   type="checkbox"
                 />
                 Default to Open tasks only
-              </label>
-
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">
-                  Max To Do items on Dashboard
-                </span>
-                <input
-                  className="max-w-[200px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  min={1}
-                  onChange={(event) => setTasksMaxItems(Number(event.target.value) || 1)}
-                  type="number"
-                  value={dashboardWorkspaceSettings.myTasks.maxItems}
-                />
               </label>
             </div>
           </article>
@@ -2090,7 +2068,7 @@ export default function SettingsPage() {
                   onChange={(event) => setFollowUpShowOnDashboard(event.target.checked)}
                   type="checkbox"
                 />
-                Show Case Flow on Dashboard
+                Enable Case Flow
               </label>
 
               {/* X-Ray rules */}

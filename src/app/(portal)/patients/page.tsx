@@ -7,6 +7,9 @@ import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
 import { usePatientFollowUpOverrides } from "@/hooks/use-patient-follow-up-overrides";
+import { useTasks } from "@/hooks/use-tasks";
+import { loadDashboardWorkspaceSettings } from "@/lib/dashboard-workspace-settings";
+import { formatUsDateFromIso, type TaskPriority, type TaskRecord } from "@/lib/tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import {
   buildFollowUpItems,
@@ -17,7 +20,7 @@ import {
 import { createPatientRecord, patients, type PatientMatrixField, type PatientRecord } from "@/lib/mock-data";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 
-type PatientView = "list" | "detail" | "followUp";
+type PatientView = "list" | "detail" | "caseFlow" | "toDo";
 
 type DetailRow = {
   label: string;
@@ -203,9 +206,26 @@ export default function PatientsPage() {
   const { contacts, addContact } = useContactDirectory();
   const { dashboardWorkspaceSettings } = useDashboardWorkspaceSettings();
   const { recordsByPatientId: followUpOverridesByPatientId } = usePatientFollowUpOverrides();
+  const { tasks, addTask, updateTask, toggleTaskDone, removeTask, clearCompleted } = useTasks();
   const defaultCaseStatus = (caseStatuses[0]?.name ?? "Active") as PatientRecord["caseStatus"];
   const defaultLienOption = lienOptions[0] ?? "Not Set";
   const [view, setView] = useState<PatientView>("list");
+
+  // To Do state
+  const [taskQuickTitle, setTaskQuickTitle] = useState("");
+  const [taskQuickPriority, setTaskQuickPriority] = useState<TaskPriority>("Medium");
+  const [taskQuickDueDate, setTaskQuickDueDate] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<"All" | "Open" | "Done">(() =>
+    loadDashboardWorkspaceSettings().myTasks.openOnly ? "Open" : "All",
+  );
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<"All" | TaskPriority>("All");
+  const [taskMessage, setTaskMessage] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskPriority, setEditTaskPriority] = useState<TaskPriority>("Medium");
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
+  const [editTaskError, setEditTaskError] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [yearDraft, setYearDraft] = useState("ALL");
   const [attorneyDraft, setAttorneyDraft] = useState("ALL");
@@ -513,6 +533,73 @@ export default function PatientsPage() {
     [followUpItems],
   );
 
+  // --- To Do helpers ---
+  const filteredTasks = useMemo(() => {
+    const query = taskSearch.trim().toLowerCase();
+    return tasks.filter((task) => {
+      if (taskStatusFilter === "Done" && !task.done) return false;
+      if (taskStatusFilter === "Open" && task.done) return false;
+      if (taskPriorityFilter !== "All" && task.priority !== taskPriorityFilter) return false;
+      if (!query) return true;
+      const dueDateUs = formatUsDateFromIso(task.dueDate).toLowerCase();
+      return task.title.toLowerCase().includes(query) || dueDateUs.includes(query);
+    });
+  }, [tasks, taskSearch, taskStatusFilter, taskPriorityFilter]);
+
+  const taskOpenCount = tasks.filter((t) => !t.done).length;
+  const taskDoneCount = tasks.length - taskOpenCount;
+
+  function formatTaskDateInput(rawValue: string) {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 8);
+    if (!digits) return "";
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  }
+
+  function toIsoFromUsDate(value: string) {
+    const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return "";
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    const yr = Number(match[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+    const d = new Date(Date.UTC(yr, month - 1, day));
+    if (Number.isNaN(d.getTime()) || d.getUTCFullYear() !== yr || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return "";
+    return `${yr}-${`${month}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+  }
+
+  function priorityBadgeClass(priority: TaskPriority) {
+    if (priority === "Urgent") return "bg-[rgba(201,66,58,0.14)] text-[#b43b34]";
+    if (priority === "High") return "bg-[rgba(238,139,42,0.18)] text-[#9a5a00]";
+    if (priority === "Medium") return "bg-[rgba(21,123,191,0.14)] text-[#0b5c93]";
+    return "bg-[rgba(25,109,58,0.12)] text-[#196d3a]";
+  }
+
+  const handleAddTask = () => {
+    const dueDateIso = taskQuickDueDate.trim() ? toIsoFromUsDate(taskQuickDueDate) : "";
+    if (taskQuickDueDate.trim() && !dueDateIso) { setTaskMessage("Enter due date as MM/DD/YYYY."); return; }
+    const result = addTask({ title: taskQuickTitle, priority: taskQuickPriority, dueDate: dueDateIso });
+    if (!result.added) { setTaskMessage(result.reason); return; }
+    setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate(""); setTaskMessage("Task added.");
+  };
+
+  const startEditingTask = (task: TaskRecord) => {
+    setEditingTaskId(task.id); setEditTaskTitle(task.title); setEditTaskPriority(task.priority);
+    setEditTaskDueDate(formatUsDateFromIso(task.dueDate)); setEditTaskError("");
+  };
+  const cancelEditingTask = () => {
+    setEditingTaskId(null); setEditTaskTitle(""); setEditTaskPriority("Medium"); setEditTaskDueDate(""); setEditTaskError("");
+  };
+  const saveEditingTask = (taskId: string) => {
+    const title = editTaskTitle.trim();
+    if (!title) { setEditTaskError("Task name is required."); return; }
+    const dueDateIso = editTaskDueDate.trim() ? toIsoFromUsDate(editTaskDueDate) : "";
+    if (editTaskDueDate.trim() && !dueDateIso) { setEditTaskError("Enter due date as MM/DD/YYYY."); return; }
+    updateTask(taskId, { title, priority: editTaskPriority, dueDate: dueDateIso });
+    setTaskMessage("Task updated."); cancelEditingTask();
+  };
+
   return (
     <div className="space-y-5">
       <section className="panel-card p-4">
@@ -548,12 +635,21 @@ export default function PatientsPage() {
           </button>
           <button
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-              view === "followUp" ? "bg-[var(--brand-primary)] text-white" : "bg-[var(--bg-soft)]"
+              view === "caseFlow" ? "bg-[var(--brand-primary)] text-white" : "bg-[var(--bg-soft)]"
             }`}
-            onClick={() => setView("followUp")}
+            onClick={() => setView("caseFlow")}
             type="button"
           >
-            Follow Up
+            Case Flow
+          </button>
+          <button
+            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+              view === "toDo" ? "bg-[var(--brand-primary)] text-white" : "bg-[var(--bg-soft)]"
+            }`}
+            onClick={() => setView("toDo")}
+            type="button"
+          >
+            To Do
           </button>
         </div>
 
@@ -750,12 +846,12 @@ export default function PatientsPage() {
         </section>
       )}
 
-      {view === "followUp" && (
+      {view === "caseFlow" && (
         <section className="panel-card overflow-hidden">
           <div className="border-b border-[var(--line-soft)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h4 className="text-lg font-semibold">Follow Up Queue</h4>
+                <h4 className="text-lg font-semibold">Case Flow</h4>
                 <p className="text-sm text-[var(--text-muted)]">
                   All filtered patients with pending follow-up steps. Categories shown:{" "}
                   {enabledFollowUpCategories.length ? enabledFollowUpCategories.join(", ") : "None selected"}.
@@ -852,6 +948,118 @@ export default function PatientsPage() {
             </table>
           </div>
         </section>
+      )}
+
+      {view === "toDo" && (
+        <div className="space-y-4">
+          <section className="panel-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-lg font-semibold">To Do</h4>
+                <p className="text-sm text-[var(--text-muted)]">Quick task capture with priority, status tracking, and easy cleanup.</p>
+              </div>
+              <div className="grid gap-1 text-right text-sm">
+                <p><span className="font-semibold text-[#0b5c93]">{taskOpenCount}</span> Open</p>
+                <p><span className="font-semibold text-[#196d3a]">{taskDoneCount}</span> Done</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="panel-card p-4">
+            <h4 className="text-lg font-semibold">Quick Add</h4>
+            <div className="mt-3 grid gap-3 md:grid-cols-12">
+              <label className="grid gap-1 md:col-span-6">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Task *</span>
+                <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickTitle(e.target.value)} placeholder="Call attorney re: lien update" value={taskQuickTitle} />
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>
+                <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickPriority(e.target.value as TaskPriority)} value={taskQuickPriority}>
+                  <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option>
+                </select>
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Due Date</span>
+                <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" inputMode="numeric" maxLength={10} onChange={(e) => setTaskQuickDueDate(formatTaskDateInput(e.target.value))} placeholder="MM/DD/YYYY" type="text" value={taskQuickDueDate} />
+              </label>
+              <div className="flex items-end md:col-span-2">
+                <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white" onClick={handleAddTask} type="button">Add Task</button>
+              </div>
+            </div>
+            {taskMessage && <p className="mt-3 text-sm font-semibold text-[var(--text-muted)]">{taskMessage}</p>}
+          </section>
+
+          <section className="panel-card p-4">
+            <div className="grid gap-3 md:grid-cols-12">
+              <label className="grid gap-1 md:col-span-7">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Search</span>
+                <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskSearch(e.target.value)} placeholder="Search task or due date..." value={taskSearch} />
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Status</span>
+                <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskStatusFilter(e.target.value as "All" | "Open" | "Done")} value={taskStatusFilter}>
+                  <option value="All">All</option><option value="Open">Open</option><option value="Done">Done</option>
+                </select>
+              </label>
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>
+                <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskPriorityFilter(e.target.value as "All" | TaskPriority)} value={taskPriorityFilter}>
+                  <option value="All">All</option><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option>
+                </select>
+              </label>
+              <div className="flex items-end md:col-span-1">
+                <button className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold" onClick={() => { if (window.confirm("Clear all completed tasks?")) clearCompleted(); }} type="button">Clear Done</button>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {filteredTasks.map((task) => (
+                <article className={`rounded-xl border px-3 py-3 ${task.done ? "border-[var(--line-soft)] bg-[var(--bg-soft)]" : "border-[var(--line-soft)] bg-white"}`} key={task.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-start gap-3">
+                      <input checked={task.done} className="mt-1" onChange={() => toggleTaskDone(task.id)} type="checkbox" />
+                      <div className="grid gap-2">
+                        {editingTaskId === task.id ? (
+                          <div className="grid gap-2 sm:grid-cols-12">
+                            <label className="grid gap-1 sm:col-span-6"><span className="text-xs font-semibold text-[var(--text-muted)]">Task</span><input className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm" onChange={(e) => setEditTaskTitle(e.target.value)} value={editTaskTitle} /></label>
+                            <label className="grid gap-1 sm:col-span-3"><span className="text-xs font-semibold text-[var(--text-muted)]">Priority</span><select className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm" onChange={(e) => setEditTaskPriority(e.target.value as TaskPriority)} value={editTaskPriority}><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
+                            <label className="grid gap-1 sm:col-span-3"><span className="text-xs font-semibold text-[var(--text-muted)]">Due Date</span><input className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm" inputMode="numeric" maxLength={10} onChange={(e) => setEditTaskDueDate(formatTaskDateInput(e.target.value))} placeholder="MM/DD/YYYY" type="text" value={editTaskDueDate} /></label>
+                          </div>
+                        ) : (
+                          <>
+                            <p className={`font-semibold ${task.done ? "text-[var(--text-muted)] line-through" : ""}`}>{task.title}</p>
+                            <p className="text-xs text-[var(--text-muted)]">Created: {new Date(task.createdAt).toLocaleDateString("en-US")}{task.dueDate ? ` • Due: ${formatUsDateFromIso(task.dueDate)}` : ""}</p>
+                          </>
+                        )}
+                        {editingTaskId === task.id && editTaskError ? <p className="text-xs font-semibold text-[#b43b34]">{editTaskError}</p> : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {editingTaskId === task.id ? (
+                        <>
+                          <button className="rounded-lg bg-[var(--brand-primary)] px-3 py-1 text-sm font-semibold text-white" onClick={() => saveEditingTask(task.id)} type="button">Save</button>
+                          <button className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold" onClick={cancelEditingTask} type="button">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${priorityBadgeClass(task.priority)}`}>{task.priority}</span>
+                          <select className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm" onChange={(e) => updateTask(task.id, { priority: e.target.value as TaskPriority })} value={task.priority}>
+                            <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option>
+                          </select>
+                          <button className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold" onClick={() => startEditingTask(task)} type="button">Edit</button>
+                        </>
+                      )}
+                      <button className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold" onClick={() => { if (!window.confirm("Remove this task?")) return; if (editingTaskId === task.id) cancelEditingTask(); removeTask(task.id); }} type="button">Remove</button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {filteredTasks.length === 0 && (
+                <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-4 text-sm text-[var(--text-muted)]">No tasks found.</p>
+              )}
+            </div>
+          </section>
+        </div>
       )}
 
       {showNewPatientModal && (

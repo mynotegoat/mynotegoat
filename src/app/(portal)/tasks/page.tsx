@@ -180,9 +180,7 @@ export default function TasksPage() {
               Quick task capture with priority, status tracking, and easy cleanup.
             </p>
             <p className="text-xs text-[var(--text-muted)]">
-              Dashboard preview:{" "}
-              {dashboardWorkspaceSettings.myTasks.showOnDashboard ? "Enabled" : "Hidden"} • Default status filter:{" "}
-              {dashboardWorkspaceSettings.myTasks.openOnly ? "Open" : "All"}
+              Default status filter: {dashboardWorkspaceSettings.myTasks.openOnly ? "Open" : "All"}
             </p>
           </div>
           <div className="grid gap-1 text-right text-sm">
@@ -269,7 +267,7 @@ export default function TasksPage() {
               <option value="Done">Done</option>
             </select>
             <span className="text-[11px] text-[var(--text-muted)]">
-              Default comes from Settings → Dashboard → To Do.
+              Default comes from Settings → Reminder Settings → To Do.
             </span>
           </label>
           <label className="grid gap-1 md:col-span-2">
