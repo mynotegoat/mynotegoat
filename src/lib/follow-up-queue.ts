@@ -1,4 +1,5 @@
 import type {
+  MriAppearMode,
   MriCtClearCondition,
   SpecialistAppearWhen,
   SpecialistClearCondition,
@@ -29,7 +30,7 @@ export type FollowUpQueueOptions = {
   includeSpecialist?: boolean;
   includeLienLop?: boolean;
   xrayAppearAuto?: boolean;
-  mriAppearAuto?: boolean;
+  mriAppearMode?: MriAppearMode;
   mriAppearDays?: number;
   specialistAppearWhen?: SpecialistAppearWhen;
   xrayClearedBy?: XrayClearCondition[];
@@ -39,6 +40,9 @@ export type FollowUpQueueOptions = {
   followUpOverrides?: PatientFollowUpOverrideMap;
   maxItems?: number;
   closedCaseStatuses?: string[];
+  xrayNoReportWarningDays?: number;
+  mriNoReportWarningDays?: number;
+  specialistNoReportWarningDays?: number;
 };
 
 export function formatUsDateDisplay(value: string) {
@@ -229,9 +233,13 @@ export function buildFollowUpItems(
   const includeLienLop = options.includeLienLop ?? true;
 
   const xrayAppearAuto = options.xrayAppearAuto ?? true;
-  const mriAppearAuto = options.mriAppearAuto ?? true;
+  const mriAppearMode: MriAppearMode = options.mriAppearMode ?? "auto";
   const mriAppearDays = options.mriAppearDays ?? 21;
-  const specialistAppearWhen = options.specialistAppearWhen ?? "mri_sent";
+  const specialistAppearWhen = options.specialistAppearWhen ?? "auto";
+
+  const xrayNoReportDays = options.xrayNoReportWarningDays ?? 14;
+  const mriNoReportDays = options.mriNoReportWarningDays ?? 14;
+  const specialistNoReportDays = options.specialistNoReportWarningDays ?? 14;
 
   const xrayClearedBySet = new Set<string>(options.xrayClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noXray"]);
   const mriCtClearedBySet = new Set<string>(options.mriCtClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noMri"]);
@@ -347,6 +355,27 @@ export function buildFollowUpItems(
             note: "",
           });
         }
+
+        // No report received warning
+        if (xrayNoReportDays > 0 && hasSent && !hasReceived) {
+          const sentDate = extractLeadingDatePart(xraySentRaw);
+          const daysSinceSent = getDaysFromToday(sentDate);
+          if (daysSinceSent !== null && daysSinceSent >= xrayNoReportDays) {
+            rows.push({
+              id: `${patient.id}-xray-no-report`,
+              patientId: patient.id,
+              patientName: patient.fullName,
+              caseNumber,
+              attorney: cleanAttorneyLabel(patient.attorney),
+              caseStatus: patient.caseStatus,
+              category: "X-Ray",
+              stage: `No report received (${daysSinceSent} days since sent)`,
+              anchorDate: sentDate,
+              daysFromAnchor: daysSinceSent,
+              note: "",
+            });
+          }
+        }
       }
     }
 
@@ -359,14 +388,19 @@ export function buildFollowUpItems(
         const hasDone = hasMatrixValue(mriDoneRaw);
         const hasReceived = hasMatrixValue(mriReceivedRaw);
 
-        // Check appear rule for auto-appear
+        // Check appear rule
         let shouldAppear = hasSent; // always show if process started
-        if (!hasSent && mriAppearAuto) {
-          const initialDate = extractLeadingDatePart(initialExamRaw);
-          if (initialDate) {
-            const daysSinceInitial = getDaysFromToday(initialDate);
-            if (daysSinceInitial !== null && daysSinceInitial >= mriAppearDays) {
-              shouldAppear = true;
+        if (!hasSent) {
+          if (mriAppearMode === "auto") {
+            // Auto: appear immediately like X-Ray (on case creation)
+            shouldAppear = true;
+          } else if (mriAppearMode === "days_from_initial") {
+            const initialDate = extractLeadingDatePart(initialExamRaw);
+            if (initialDate) {
+              const daysSinceInitial = getDaysFromToday(initialDate);
+              if (daysSinceInitial !== null && daysSinceInitial >= mriAppearDays) {
+                shouldAppear = true;
+              }
             }
           }
         }
@@ -435,6 +469,27 @@ export function buildFollowUpItems(
             note: "",
           });
         }
+
+        // No report received warning
+        if (mriNoReportDays > 0 && hasSent && !hasReceived) {
+          const sentDate = extractLeadingDatePart(mriSentRaw);
+          const daysSinceSent = getDaysFromToday(sentDate);
+          if (daysSinceSent !== null && daysSinceSent >= mriNoReportDays) {
+            rows.push({
+              id: `${patient.id}-mri-no-report`,
+              patientId: patient.id,
+              patientName: patient.fullName,
+              caseNumber,
+              attorney: cleanAttorneyLabel(patient.attorney),
+              caseStatus: patient.caseStatus,
+              category: "MRI / CT",
+              stage: `No report received (${daysSinceSent} days since sent)`,
+              anchorDate: sentDate,
+              daysFromAnchor: daysSinceSent,
+              note: "",
+            });
+          }
+        }
       }
     }
 
@@ -446,10 +501,13 @@ export function buildFollowUpItems(
         const hasSent = hasMatrixValue(specialistSentRaw);
         const hasScheduled = hasMatrixValue(specialistScheduledRaw);
 
-        // Specialist appear rule: show when MRI reaches a certain stage
+        // Specialist appear rule
         let specialistShouldAppear = hasSent; // always show if referral started
         if (!hasSent) {
-          if (specialistAppearWhen === "mri_sent" && hasMatrixValue(mriSentRaw)) {
+          if (specialistAppearWhen === "auto") {
+            // Auto: appear immediately like X-Ray (on case creation)
+            specialistShouldAppear = true;
+          } else if (specialistAppearWhen === "mri_sent" && hasMatrixValue(mriSentRaw)) {
             specialistShouldAppear = true;
           } else if (specialistAppearWhen === "mri_reviewed" && hasMatrixValue(mriReviewedRaw)) {
             specialistShouldAppear = true;
@@ -501,6 +559,27 @@ export function buildFollowUpItems(
             daysFromAnchor: getDaysFromToday(scheduledDate),
             note: stripLeadingDatePart(specialistSentRaw),
           });
+        }
+
+        // No report received warning
+        if (specialistNoReportDays > 0 && hasSent && !hasMatrixValue(specialistReportRaw)) {
+          const sentDate = extractLeadingDatePart(specialistSentRaw);
+          const daysSinceSent = getDaysFromToday(sentDate);
+          if (daysSinceSent !== null && daysSinceSent >= specialistNoReportDays) {
+            rows.push({
+              id: `${patient.id}-specialist-no-report`,
+              patientId: patient.id,
+              patientName: patient.fullName,
+              caseNumber,
+              attorney: cleanAttorneyLabel(patient.attorney),
+              caseStatus: patient.caseStatus,
+              category: "Specialist",
+              stage: `No report received (${daysSinceSent} days since sent)`,
+              anchorDate: sentDate,
+              daysFromAnchor: daysSinceSent,
+              note: "",
+            });
+          }
         }
       }
     }

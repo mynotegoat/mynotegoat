@@ -55,6 +55,7 @@ type NarrativeImagingEntry = {
   regions: string[];
   lateralityByRegion?: Record<string, string>;
   flexExtRegions?: string[];
+  scheduledDate?: string;
   doneDate: string;
   reportReceivedDate: string;
   reportReviewedDate: string;
@@ -64,7 +65,9 @@ type NarrativeSpecialistEntry = {
   specialist: string;
   sentDate: string;
   scheduledDate: string;
+  completedDate?: string;
   reportReceivedDate: string;
+  reportReviewedDate?: string;
 };
 
 export interface NarrativeReportBuildInput {
@@ -345,6 +348,7 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     XRAY_REVIEWED_DATE: input.xrayReferrals[0]?.reportReviewedDate || "-",
     MRI_CT_SUMMARY: formatImagingSummary(input.mriReferrals, "MRI/CT"),
     MRI_SENT_DATE: input.mriReferrals[0]?.sentDate || "-",
+    MRI_SCHEDULED_DATE: input.mriReferrals[0]?.scheduledDate || "-",
     MRI_COMPLETED_DATE: input.mriReferrals[0]?.doneDate || "-",
     MRI_REVIEWED_DATE: input.mriReferrals[0]?.reportReviewedDate || "-",
     IMAGING_SUMMARY: [

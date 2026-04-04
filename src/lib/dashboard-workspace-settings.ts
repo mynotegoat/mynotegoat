@@ -1,7 +1,8 @@
 export type XrayClearCondition = "patientRefused" | "completedPriorCare" | "reviewed" | "noXray";
 export type MriCtClearCondition = "patientRefused" | "completedPriorCare" | "reviewed" | "noMri";
 export type SpecialistClearCondition = "patientRefused" | "completedPriorCare" | "report" | "noPm";
-export type SpecialistAppearWhen = "mri_sent" | "mri_reviewed";
+export type MriAppearMode = "auto" | "days_from_initial";
+export type SpecialistAppearWhen = "auto" | "mri_sent" | "mri_reviewed";
 
 export const XRAY_CLEAR_OPTIONS: { value: XrayClearCondition; label: string }[] = [
   { value: "patientRefused", label: "Patient Refused" },
@@ -37,9 +38,12 @@ export interface DashboardWorkspaceSettings {
     includeSpecialist: boolean;
     includeLienLop: boolean;
     xrayAppearAuto: boolean;
-    mriAppearAuto: boolean;
+    mriAppearMode: MriAppearMode;
     mriAppearDays: number;
     specialistAppearWhen: SpecialistAppearWhen;
+    xrayNoReportWarningDays: number;
+    mriNoReportWarningDays: number;
+    specialistNoReportWarningDays: number;
     xrayClearedBy: XrayClearCondition[];
     mriCtClearedBy: MriCtClearCondition[];
     specialistClearedBy: SpecialistClearCondition[];
@@ -69,9 +73,12 @@ export function getDefaultDashboardWorkspaceSettings(): DashboardWorkspaceSettin
       includeSpecialist: true,
       includeLienLop: true,
       xrayAppearAuto: true,
-      mriAppearAuto: true,
+      mriAppearMode: "auto",
       mriAppearDays: 21,
-      specialistAppearWhen: "mri_sent",
+      specialistAppearWhen: "auto",
+      xrayNoReportWarningDays: 14,
+      mriNoReportWarningDays: 14,
+      specialistNoReportWarningDays: 14,
       xrayClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noXray"],
       mriCtClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noMri"],
       specialistClearedBy: ["patientRefused", "completedPriorCare", "report", "noPm"],
@@ -89,8 +96,12 @@ function normalizeNumber(value: unknown, min: number, max: number, fallback: num
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function normalizeMriAppearMode(value: unknown, fallback: MriAppearMode): MriAppearMode {
+  return value === "auto" || value === "days_from_initial" ? value : fallback;
+}
+
 function normalizeSpecialistAppearWhen(value: unknown, fallback: SpecialistAppearWhen): SpecialistAppearWhen {
-  return value === "mri_sent" || value === "mri_reviewed" ? value : fallback;
+  return value === "auto" || value === "mri_sent" || value === "mri_reviewed" ? value : fallback;
 }
 
 function normalizeClearArray<T extends string>(value: unknown, validSet: Set<string>, fallback: T[]): T[] {
@@ -185,15 +196,18 @@ export function normalizeDashboardWorkspaceSettings(value: unknown): DashboardWo
         typeof rawFollowUp.xrayAppearAuto === "boolean"
           ? rawFollowUp.xrayAppearAuto
           : defaults.patientFollowUp.xrayAppearAuto,
-      mriAppearAuto:
-        typeof rawFollowUp.mriAppearAuto === "boolean"
-          ? rawFollowUp.mriAppearAuto
-          : defaults.patientFollowUp.mriAppearAuto,
+      mriAppearMode: normalizeMriAppearMode(
+        rawFollowUp.mriAppearMode ?? (rawAny.mriAppearAuto === true ? "days_from_initial" : undefined),
+        defaults.patientFollowUp.mriAppearMode,
+      ),
       mriAppearDays: normalizeNumber(rawFollowUp.mriAppearDays, 1, 365, defaults.patientFollowUp.mriAppearDays),
       specialistAppearWhen: normalizeSpecialistAppearWhen(
         rawFollowUp.specialistAppearWhen,
         defaults.patientFollowUp.specialistAppearWhen,
       ),
+      xrayNoReportWarningDays: normalizeNumber(rawFollowUp.xrayNoReportWarningDays, 0, 365, defaults.patientFollowUp.xrayNoReportWarningDays),
+      mriNoReportWarningDays: normalizeNumber(rawFollowUp.mriNoReportWarningDays, 0, 365, defaults.patientFollowUp.mriNoReportWarningDays),
+      specialistNoReportWarningDays: normalizeNumber(rawFollowUp.specialistNoReportWarningDays, 0, 365, defaults.patientFollowUp.specialistNoReportWarningDays),
       xrayClearedBy: normalizeClearArray(xrayClearedByRaw, VALID_XRAY_CLEAR, defaults.patientFollowUp.xrayClearedBy),
       mriCtClearedBy: normalizeClearArray(mriCtClearedByRaw, VALID_MRI_CLEAR, defaults.patientFollowUp.mriCtClearedBy),
       specialistClearedBy: normalizeClearArray(

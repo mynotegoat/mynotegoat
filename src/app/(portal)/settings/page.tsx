@@ -928,12 +928,15 @@ export default function SettingsPage() {
     setFollowUpIncludeSpecialist,
     setFollowUpIncludeLienLop,
     setXrayAppearAuto,
-    setMriAppearAuto,
+    setMriAppearMode,
     setMriAppearDays,
     setSpecialistAppearWhen,
     toggleXrayClearedBy,
     toggleMriCtClearedBy,
     toggleSpecialistClearedBy,
+    setXrayNoReportWarningDays,
+    setMriNoReportWarningDays,
+    setSpecialistNoReportWarningDays,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
@@ -2254,6 +2257,20 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">No Report Received Warning</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">Warn after</span>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        min={0}
+                        onChange={(event) => setXrayNoReportWarningDays(Number(event.target.value) || 0)}
+                        type="number"
+                        value={dashboardWorkspaceSettings.patientFollowUp.xrayNoReportWarningDays}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2270,18 +2287,28 @@ export default function SettingsPage() {
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear</span>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={dashboardWorkspaceSettings.patientFollowUp.mriAppearMode === "auto"}
+                        name="mri-appear-mode"
+                        onChange={() => setMriAppearMode("auto")}
+                        type="radio"
+                      />
+                      Auto (on case creation)
+                    </label>
                     <div className="flex items-center gap-2">
                       <label className="inline-flex items-center gap-2 text-sm font-medium">
                         <input
-                          checked={dashboardWorkspaceSettings.patientFollowUp.mriAppearAuto}
-                          onChange={(event) => setMriAppearAuto(event.target.checked)}
-                          type="checkbox"
+                          checked={dashboardWorkspaceSettings.patientFollowUp.mriAppearMode === "days_from_initial"}
+                          name="mri-appear-mode"
+                          onChange={() => setMriAppearMode("days_from_initial")}
+                          type="radio"
                         />
-                        Auto after
+                        After
                       </label>
                       <input
                         className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                        disabled={!dashboardWorkspaceSettings.patientFollowUp.mriAppearAuto}
+                        disabled={dashboardWorkspaceSettings.patientFollowUp.mriAppearMode !== "days_from_initial"}
                         min={1}
                         onChange={(event) => setMriAppearDays(Number(event.target.value) || 1)}
                         type="number"
@@ -2310,6 +2337,20 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">No Report Received Warning</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">Warn after</span>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        min={0}
+                        onChange={(event) => setMriNoReportWarningDays(Number(event.target.value) || 0)}
+                        type="number"
+                        value={dashboardWorkspaceSettings.patientFollowUp.mriNoReportWarningDays}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2325,17 +2366,34 @@ export default function SettingsPage() {
                 </div>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-1">
-                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear when</span>
-                    <select
-                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) =>
-                        setSpecialistAppearWhen(event.target.value as "mri_sent" | "mri_reviewed")
-                      }
-                      value={dashboardWorkspaceSettings.patientFollowUp.specialistAppearWhen}
-                    >
-                      <option value="mri_sent">MRI Sent</option>
-                      <option value="mri_reviewed">MRI Reviewed</option>
-                    </select>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear</span>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={dashboardWorkspaceSettings.patientFollowUp.specialistAppearWhen === "auto"}
+                        name="specialist-appear-mode"
+                        onChange={() => setSpecialistAppearWhen("auto")}
+                        type="radio"
+                      />
+                      Auto (on case creation)
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={dashboardWorkspaceSettings.patientFollowUp.specialistAppearWhen === "mri_sent"}
+                        name="specialist-appear-mode"
+                        onChange={() => setSpecialistAppearWhen("mri_sent")}
+                        type="radio"
+                      />
+                      After MRI Sent
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={dashboardWorkspaceSettings.patientFollowUp.specialistAppearWhen === "mri_reviewed"}
+                        name="specialist-appear-mode"
+                        onChange={() => setSpecialistAppearWhen("mri_reviewed")}
+                        type="radio"
+                      />
+                      Once MRI Reviewed
+                    </label>
                   </div>
                   <div className="grid gap-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
@@ -2355,6 +2413,20 @@ export default function SettingsPage() {
                           {label}
                         </label>
                       ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">No Report Received Warning</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">Warn after</span>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        min={0}
+                        onChange={(event) => setSpecialistNoReportWarningDays(Number(event.target.value) || 0)}
+                        type="number"
+                        value={dashboardWorkspaceSettings.patientFollowUp.specialistNoReportWarningDays}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>
                   </div>
                 </div>

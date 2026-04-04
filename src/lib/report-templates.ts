@@ -114,6 +114,7 @@ export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
   { token: "XRAY_REVIEWED_DATE", label: "X-Ray Reviewed Date" },
   { token: "MRI_CT_SUMMARY", label: "MRI/CT Summary" },
   { token: "MRI_SENT_DATE", label: "MRI Sent Date" },
+  { token: "MRI_SCHEDULED_DATE", label: "MRI Scheduled Date" },
   { token: "MRI_COMPLETED_DATE", label: "MRI Completed Date" },
   { token: "MRI_REVIEWED_DATE", label: "MRI Reviewed Date" },
   { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },

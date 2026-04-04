@@ -26,6 +26,40 @@ const SORT_ASC_KEY = "casemate.patient-sort-asc.v1";
 type ListColumnId = "patient" | "initialExam" | "dateOfLoss" | "attorney" | "status";
 const defaultColumnOrder: ListColumnId[] = ["patient", "initialExam", "dateOfLoss", "attorney", "status"];
 
+// Case Flow columns
+const CF_COLUMN_ORDER_KEY = "casemate.cf-column-order.v1";
+const CF_SORT_COLUMN_KEY = "casemate.cf-sort-column.v1";
+const CF_SORT_ASC_KEY = "casemate.cf-sort-asc.v1";
+type CfColumnId = "patient" | "caseNumber" | "attorney" | "category" | "followUp" | "anchorDate" | "age" | "caseStatus";
+const defaultCfColumnOrder: CfColumnId[] = ["patient", "caseNumber", "attorney", "category", "followUp", "anchorDate", "age", "caseStatus"];
+const cfColumnLabels: Record<CfColumnId, string> = {
+  patient: "Patient",
+  caseNumber: "Case #",
+  attorney: "Attorney",
+  category: "Category",
+  followUp: "Follow Up",
+  anchorDate: "Anchor Date",
+  age: "Age",
+  caseStatus: "Case Status",
+};
+
+function loadCfColumnOrder(): CfColumnId[] {
+  if (typeof window === "undefined") return defaultCfColumnOrder;
+  try {
+    const raw = window.localStorage.getItem(CF_COLUMN_ORDER_KEY);
+    if (!raw) return defaultCfColumnOrder;
+    const parsed = JSON.parse(raw) as string[];
+    if (!Array.isArray(parsed) || parsed.length !== defaultCfColumnOrder.length) return defaultCfColumnOrder;
+    const valid = parsed.every((id) => defaultCfColumnOrder.includes(id as CfColumnId));
+    return valid ? (parsed as CfColumnId[]) : defaultCfColumnOrder;
+  } catch { return defaultCfColumnOrder; }
+}
+
+function saveCfColumnOrder(order: CfColumnId[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CF_COLUMN_ORDER_KEY, JSON.stringify(order));
+}
+
 const columnLabels: Record<ListColumnId, string> = {
   patient: "Patient",
   initialExam: "Initial Exam",
@@ -276,6 +310,20 @@ export default function PatientsPage() {
     const saved = window.localStorage.getItem(SORT_ASC_KEY);
     return saved === null ? true : saved === "true";
   });
+
+  // Case Flow sort state (persisted)
+  const [cfSortColumn, setCfSortColumn] = useState<CfColumnId>(() => {
+    if (typeof window === "undefined") return "age";
+    const saved = window.localStorage.getItem(CF_SORT_COLUMN_KEY);
+    return saved && defaultCfColumnOrder.includes(saved as CfColumnId) ? (saved as CfColumnId) : "age";
+  });
+  const [cfSortAsc, setCfSortAsc] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const saved = window.localStorage.getItem(CF_SORT_ASC_KEY);
+    return saved === null ? false : saved === "true";
+  });
+  const [cfColumnOrder, setCfColumnOrder] = useState<CfColumnId[]>(() => loadCfColumnOrder());
+  const [cfDragColumnId, setCfDragColumnId] = useState<CfColumnId | null>(null);
 
   // Column order (draggable)
   const [columnOrder, setColumnOrder] = useState<ListColumnId[]>(() => loadColumnOrder());
@@ -591,6 +639,37 @@ export default function PatientsPage() {
     setDragColumnId(null);
   };
 
+  // Case Flow sort & drag
+  const toggleCfSort = (col: CfColumnId) => {
+    if (cfSortColumn === col) {
+      setCfSortAsc((prev) => {
+        const next = !prev;
+        window.localStorage.setItem(CF_SORT_ASC_KEY, String(next));
+        return next;
+      });
+    } else {
+      setCfSortColumn(col);
+      setCfSortAsc(true);
+      window.localStorage.setItem(CF_SORT_COLUMN_KEY, col);
+      window.localStorage.setItem(CF_SORT_ASC_KEY, "true");
+    }
+  };
+  const handleCfDragStart = (col: CfColumnId) => setCfDragColumnId(col);
+  const handleCfDragOver = (e: React.DragEvent, col: CfColumnId) => {
+    e.preventDefault();
+    if (!cfDragColumnId || cfDragColumnId === col) return;
+    setCfColumnOrder((prev) => {
+      const next = [...prev];
+      const fromIndex = next.indexOf(cfDragColumnId);
+      const toIndex = next.indexOf(col);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, cfDragColumnId);
+      saveCfColumnOrder(next);
+      return next;
+    });
+  };
+  const handleCfDragEnd = () => setCfDragColumnId(null);
 
   const followUpItems = useMemo(() => {
     return buildFollowUpItems(filteredPatients, {
@@ -599,13 +678,16 @@ export default function PatientsPage() {
       includeSpecialist: followUpSettings.includeSpecialist,
       includeLienLop: followUpSettings.includeLienLop,
       xrayAppearAuto: followUpSettings.xrayAppearAuto,
-      mriAppearAuto: followUpSettings.mriAppearAuto,
+      mriAppearMode: followUpSettings.mriAppearMode,
       mriAppearDays: followUpSettings.mriAppearDays,
       specialistAppearWhen: followUpSettings.specialistAppearWhen,
       xrayClearedBy: followUpSettings.xrayClearedBy,
       mriCtClearedBy: followUpSettings.mriCtClearedBy,
       specialistClearedBy: followUpSettings.specialistClearedBy,
       lienLopClearStatuses: followUpSettings.lienLopClearStatuses,
+      xrayNoReportWarningDays: followUpSettings.xrayNoReportWarningDays,
+      mriNoReportWarningDays: followUpSettings.mriNoReportWarningDays,
+      specialistNoReportWarningDays: followUpSettings.specialistNoReportWarningDays,
       followUpOverrides: followUpOverridesByPatientId,
       closedCaseStatuses,
     });
@@ -617,7 +699,7 @@ export default function PatientsPage() {
     followUpSettings.includeSpecialist,
     followUpSettings.includeXray,
     followUpSettings.lienLopClearStatuses,
-    followUpSettings.mriAppearAuto,
+    followUpSettings.mriAppearMode,
     followUpSettings.mriAppearDays,
     followUpSettings.mriCtClearedBy,
     followUpSettings.specialistAppearWhen,
@@ -637,6 +719,32 @@ export default function PatientsPage() {
     }),
     [followUpItems],
   );
+
+  const sortedFollowUpItems = useMemo(() => {
+    const items = [...followUpItems];
+    items.sort((a, b) => {
+      let cmp = 0;
+      if (cfSortColumn === "patient") {
+        cmp = a.patientName.localeCompare(b.patientName);
+      } else if (cfSortColumn === "caseNumber") {
+        cmp = (a.caseNumber || "").localeCompare(b.caseNumber || "");
+      } else if (cfSortColumn === "attorney") {
+        cmp = (a.attorney || "").localeCompare(b.attorney || "");
+      } else if (cfSortColumn === "category") {
+        cmp = a.category.localeCompare(b.category);
+      } else if (cfSortColumn === "followUp") {
+        cmp = a.stage.localeCompare(b.stage);
+      } else if (cfSortColumn === "anchorDate") {
+        cmp = (a.anchorDate || "").localeCompare(b.anchorDate || "");
+      } else if (cfSortColumn === "age") {
+        cmp = (a.daysFromAnchor ?? -99999) - (b.daysFromAnchor ?? -99999);
+      } else if (cfSortColumn === "caseStatus") {
+        cmp = a.caseStatus.localeCompare(b.caseStatus);
+      }
+      return cfSortAsc ? cmp : -cmp;
+    });
+    return items;
+  }, [followUpItems, cfSortColumn, cfSortAsc]);
 
   // --- To Do helpers ---
   const filteredTasks = useMemo(() => {
@@ -995,69 +1103,104 @@ export default function PatientsPage() {
             <table className="min-w-[1080px] w-full border-collapse">
               <thead>
                 <tr className="bg-[var(--bg-soft)] text-left text-sm">
-                  <th className="px-4 py-3">Patient</th>
-                  <th className="px-4 py-3">Case #</th>
-                  <th className="px-4 py-3">Attorney</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Follow Up</th>
-                  <th className="px-4 py-3">Anchor Date</th>
-                  <th className="px-4 py-3">Age</th>
-                  <th className="px-4 py-3">Case Status</th>
+                  {cfColumnOrder.map((colId) => (
+                    <th
+                      key={colId}
+                      className={`cursor-pointer select-none px-4 py-3 transition-colors hover:bg-[rgba(13,121,191,0.06)] ${cfDragColumnId === colId ? "opacity-50" : ""}`}
+                      draggable
+                      onClick={() => toggleCfSort(colId)}
+                      onDragEnd={handleCfDragEnd}
+                      onDragOver={(e) => handleCfDragOver(e, colId)}
+                      onDragStart={() => handleCfDragStart(colId)}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {cfColumnLabels[colId]}
+                        {cfSortColumn === colId && (
+                          <span className="text-[10px]">{cfSortAsc ? "▲" : "▼"}</span>
+                        )}
+                      </span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {followUpItems.map((item) => (
+                {sortedFollowUpItems.map((item) => (
                   <tr key={item.id} className="border-t border-[var(--line-soft)]">
-                    <td className="px-4 py-3">
-                      <Link href={`/patients/${item.patientId}`} className="font-semibold text-[var(--brand-primary)] underline">
-                        {item.patientName}
-                      </Link>
-                      {item.note && <p className="text-xs text-[var(--text-muted)]">{item.note}</p>}
-                    </td>
-                    <td className="px-4 py-3 font-semibold">{item.caseNumber || "-"}</td>
-                    <td className="px-4 py-3">{item.attorney || "-"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getFollowUpBadgeClass(item.category)}`}>
-                        {item.category === "Lien / LOP" ? lienLabel : item.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{item.stage}</td>
-                    <td className="px-4 py-3">{item.anchorDate ? formatUsDateDisplay(item.anchorDate) : "-"}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${getAgePillClass(
-                          item.daysFromAnchor,
-                          followUpSettings.staleDaysThreshold,
-                        )}`}
-                      >
-                        {item.daysFromAnchor === null
-                          ? "No date"
-                          : item.daysFromAnchor < 0
-                            ? `In ${Math.abs(item.daysFromAnchor)}d`
-                            : item.daysFromAnchor >= followUpSettings.staleDaysThreshold
-                              ? `Stale ${item.daysFromAnchor}d`
-                              : `${item.daysFromAnchor}d`}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className="status-pill"
-                        style={{
-                          backgroundColor: withAlpha(
-                            statusConfigByName.get(item.caseStatus.toLowerCase())?.color ?? "#0d79bf",
-                            0.2,
-                          ),
-                          color: getContrastTextColor(
-                            statusConfigByName.get(item.caseStatus.toLowerCase())?.color ?? "#0d79bf",
-                          ),
-                        }}
-                      >
-                        {item.caseStatus}
-                      </span>
-                    </td>
+                    {cfColumnOrder.map((colId) => {
+                      if (colId === "patient") {
+                        return (
+                          <td key={colId} className="px-4 py-3">
+                            <Link href={`/patients/${item.patientId}`} className="font-semibold text-[var(--brand-primary)] underline">
+                              {item.patientName}
+                            </Link>
+                            {item.note && <p className="text-xs text-[var(--text-muted)]">{item.note}</p>}
+                          </td>
+                        );
+                      }
+                      if (colId === "caseNumber") {
+                        return <td key={colId} className="px-4 py-3 font-semibold">{item.caseNumber || "-"}</td>;
+                      }
+                      if (colId === "attorney") {
+                        return <td key={colId} className="px-4 py-3">{item.attorney || "-"}</td>;
+                      }
+                      if (colId === "category") {
+                        return (
+                          <td key={colId} className="px-4 py-3">
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getFollowUpBadgeClass(item.category)}`}>
+                              {item.category === "Lien / LOP" ? lienLabel : item.category}
+                            </span>
+                          </td>
+                        );
+                      }
+                      if (colId === "followUp") {
+                        return <td key={colId} className="px-4 py-3">{item.stage}</td>;
+                      }
+                      if (colId === "anchorDate") {
+                        return <td key={colId} className="px-4 py-3">{item.anchorDate ? formatUsDateDisplay(item.anchorDate) : "-"}</td>;
+                      }
+                      if (colId === "age") {
+                        return (
+                          <td key={colId} className="px-4 py-3">
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-semibold ${getAgePillClass(
+                                item.daysFromAnchor,
+                                followUpSettings.staleDaysThreshold,
+                              )}`}
+                            >
+                              {item.daysFromAnchor === null
+                                ? "No date"
+                                : item.daysFromAnchor < 0
+                                  ? `In ${Math.abs(item.daysFromAnchor)}d`
+                                  : item.daysFromAnchor >= followUpSettings.staleDaysThreshold
+                                    ? `Stale ${item.daysFromAnchor}d`
+                                    : `${item.daysFromAnchor}d`}
+                            </span>
+                          </td>
+                        );
+                      }
+                      // caseStatus
+                      return (
+                        <td key={colId} className="px-4 py-3">
+                          <span
+                            className="status-pill"
+                            style={{
+                              backgroundColor: withAlpha(
+                                statusConfigByName.get(item.caseStatus.toLowerCase())?.color ?? "#0d79bf",
+                                0.2,
+                              ),
+                              color: getContrastTextColor(
+                                statusConfigByName.get(item.caseStatus.toLowerCase())?.color ?? "#0d79bf",
+                              ),
+                            }}
+                          >
+                            {item.caseStatus}
+                          </span>
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
-                {followUpItems.length === 0 && (
+                {sortedFollowUpItems.length === 0 && (
                   <tr className="border-t border-[var(--line-soft)]">
                     <td className="px-4 py-5 text-sm text-[var(--text-muted)]" colSpan={8}>
                       No follow-up items in the current filter.

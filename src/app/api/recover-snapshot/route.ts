@@ -38,8 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No snapshots found" }, { status: 404 });
     }
 
-    // Find the user's workspace snapshot and legacy snapshot
+    // Find the user's workspace snapshot.
+    // Only check legacy "main-office" if the workspace_id contains the same user prefix
+    // (i.e., it's YOUR legacy data, not someone else's).
     const userSnapshot = allSnapshots.find((s) => s.workspace_id === workspaceId);
+    const userIdPrefix = workspaceId.split(":")[0] ?? "";
     const legacySnapshot = allSnapshots.find((s) => s.workspace_id === "main-office");
 
     // Start with the best available snapshot

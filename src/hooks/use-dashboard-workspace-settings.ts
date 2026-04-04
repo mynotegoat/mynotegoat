@@ -6,6 +6,7 @@ import {
   loadDashboardWorkspaceSettings,
   saveDashboardWorkspaceSettings,
   type DashboardWorkspaceSettings,
+  type MriAppearMode,
   type MriCtClearCondition,
   type SpecialistAppearWhen,
   type SpecialistClearCondition,
@@ -178,13 +179,13 @@ export function useDashboardWorkspaceSettings() {
     [updateSettings],
   );
 
-  const setMriAppearAuto = useCallback(
-    (enabled: boolean) => {
+  const setMriAppearMode = useCallback(
+    (mode: MriAppearMode) => {
       updateSettings((current) => ({
         ...current,
         patientFollowUp: {
           ...current.patientFollowUp,
-          mriAppearAuto: enabled,
+          mriAppearMode: mode,
         },
       }));
     },
@@ -261,6 +262,45 @@ export function useDashboardWorkspaceSettings() {
     [updateSettings],
   );
 
+  const setXrayNoReportWarningDays = useCallback(
+    (value: number) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          xrayNoReportWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const setMriNoReportWarningDays = useCallback(
+    (value: number) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          mriNoReportWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const setSpecialistNoReportWarningDays = useCallback(
+    (value: number) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          specialistNoReportWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
   const setFollowUpLienLopClearStatuses = useCallback(
     (statuses: string[]) => {
       updateSettings((current) => ({
@@ -285,12 +325,15 @@ export function useDashboardWorkspaceSettings() {
     setFollowUpIncludeSpecialist,
     setFollowUpIncludeLienLop,
     setXrayAppearAuto,
-    setMriAppearAuto,
+    setMriAppearMode,
     setMriAppearDays,
     setSpecialistAppearWhen,
     toggleXrayClearedBy,
     toggleMriCtClearedBy,
     toggleSpecialistClearedBy,
+    setXrayNoReportWarningDays,
+    setMriNoReportWarningDays,
+    setSpecialistNoReportWarningDays,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,

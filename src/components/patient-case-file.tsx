@@ -67,6 +67,7 @@ type ImagingFormState = {
   regions: string[];
   lateralityByRegion: Record<string, ImagingLaterality>;
   flexExtRegions: string[];
+  scheduledDate: string;
   doneDate: string;
   reportReceivedDate: string;
   reportReviewedDate: string;
@@ -82,7 +83,9 @@ type SpecialistReferral = {
   specialist: string;
   sentDate: string;
   scheduledDate: string;
+  completedDate: string;
   reportReceivedDate: string;
+  reportReviewedDate: string;
 };
 
 type RelatedCaseEntry = {
@@ -206,6 +209,7 @@ function emptyImagingFormState(mode: ImagingMode): ImagingFormState {
     regions: [],
     lateralityByRegion: {},
     flexExtRegions: [],
+    scheduledDate: "",
     doneDate: "",
     reportReceivedDate: "",
     reportReviewedDate: "",
@@ -771,6 +775,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     regions: [],
     lateralityByRegion: {},
     flexExtRegions: [],
+    scheduledDate: "",
     doneDate: "",
     reportReceivedDate: toUsDate(patient.matrix?.xrayReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.xrayReviewed ?? ""),
@@ -788,6 +793,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     regions: [],
     lateralityByRegion: {},
     flexExtRegions: [],
+    scheduledDate: toUsDate(patient.matrix?.mriScheduled ?? ""),
     doneDate: "",
     reportReceivedDate: toUsDate(patient.matrix?.mriReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.mriReviewed ?? ""),
@@ -1513,6 +1519,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     // Persist immediately to localStorage
     const sentDateIso = toIsoDateFromUsDate(nextEntry.sentDate);
+    const scheduledDateIso = toIsoDateFromUsDate(nextEntry.scheduledDate ?? "");
     const doneDateIso = toIsoDateFromUsDate(nextEntry.doneDate ?? "");
     const receivedDateIso = toIsoDateFromUsDate(nextEntry.reportReceivedDate ?? "");
     const reviewedDateIso = toIsoDateFromUsDate(nextEntry.reportReviewedDate ?? "");
@@ -1521,7 +1528,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const matrixFields =
       mode === "xray"
         ? { xraySent: sentDateIso, xrayDone: doneDateIso, xrayReceived: receivedDateIso, xrayReviewed: reviewedDateIso }
-        : { mriSent: sentDateIso, mriDone: doneDateIso, mriReceived: receivedDateIso, mriReviewed: reviewedDateIso };
+        : { mriSent: sentDateIso, mriScheduled: scheduledDateIso, mriDone: doneDateIso, mriReceived: receivedDateIso, mriReviewed: reviewedDateIso };
 
     updatePatientRecordById(patient.id, {
       lastUpdate: new Date().toISOString().slice(0, 10),
@@ -1594,7 +1601,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       specialist: specialistName,
       sentDate: specialistDraft.sentDate,
       scheduledDate: "",
+      completedDate: "",
       reportReceivedDate: "",
+      reportReviewedDate: "",
     };
     setSpecialistReferrals((current) => [...current, newItem]);
     setSpecialistDraft({
@@ -1654,6 +1663,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       SPECIALIST_ADDRESS: specialistContact?.address ?? "",
       REFERRAL_SENT_DATE: entry.sentDate,
       REFERRAL_SCHEDULED_DATE: entry.scheduledDate,
+      REFERRAL_COMPLETED_DATE: entry.completedDate ?? "",
+      REFERRAL_RECEIVED_DATE: entry.reportReceivedDate,
+      REFERRAL_REVIEWED_DATE: entry.reportReviewedDate ?? "",
     };
 
     const renderedHeader = documentTemplates.header.active
@@ -1841,6 +1853,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         regions: entry.regions,
         lateralityByRegion: entry.lateralityByRegion,
         flexExtRegions: entry.flexExtRegions,
+        scheduledDate: entry.scheduledDate,
         doneDate: entry.doneDate,
         reportReceivedDate: entry.reportReceivedDate,
         reportReviewedDate: entry.reportReviewedDate,
@@ -1849,7 +1862,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         specialist: entry.specialist,
         sentDate: entry.sentDate,
         scheduledDate: entry.scheduledDate,
+        completedDate: entry.completedDate,
         reportReceivedDate: entry.reportReceivedDate,
+        reportReviewedDate: entry.reportReviewedDate,
       })),
       promptValues,
     });
@@ -2809,9 +2824,20 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </div>
                 </div>
 
-                {/* Row 3: Completed + Report Received + Report Reviewed */}
+                {/* Row 3: Scheduled + Completed + Received + Reviewed */}
                 <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-3">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-4 gap-3">
+                    <label className="grid gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Scheduled</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) => setMri((current) => ({ ...current, scheduledDate: formatUsDateInput(event.target.value) }))}
+                        placeholder="MM/DD/YYYY"
+                        value={mri.scheduledDate}
+                      />
+                    </label>
                     <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
                       <input
@@ -2925,9 +2951,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </p>
                   <p>Center: {entry.center}</p>
                   <p>Regions: {formatImagingRegionsSummary(entry, "mri")}</p>
-                  <p>Done: {entry.doneDate || "-"}</p>
-                  <p>Report Received: {entry.reportReceivedDate || "-"}</p>
-                  <p>Report Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  <p>Scheduled: {entry.scheduledDate || "-"}</p>
+                  <p>Completed: {entry.doneDate || "-"}</p>
+                  <p>Received: {entry.reportReceivedDate || "-"}</p>
+                  <p>Reviewed: {entry.reportReviewedDate || "-"}</p>
                   <div className="mt-2 flex gap-2">
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
@@ -3052,7 +3079,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <p className="font-semibold">{entry.specialist}</p>
                   <p>Sent: {entry.sentDate || "-"}</p>
                   <p>Scheduled: {entry.scheduledDate || "-"}</p>
-                  <p>Report Received: {entry.reportReceivedDate ? "Yes" : "No"}</p>
+                  <p>Completed: {entry.completedDate || "-"}</p>
+                  <p>Received: {entry.reportReceivedDate || "-"}</p>
+                  <p>Reviewed: {entry.reportReviewedDate || "-"}</p>
                   <div className="mt-2 flex gap-2">
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
@@ -4538,48 +4567,58 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
               </div>
 
-              <div className="space-y-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold">
+              <div className="grid grid-cols-3 gap-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Completed</span>
                   <input
-                    checked={Boolean(editingSpecialist.reportReceivedDate)}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setEditingSpecialist((current) => {
-                        if (!current) {
-                          return current;
-                        }
-                        if (!checked) {
-                          return {
-                            ...current,
-                            reportReceivedDate: "",
-                          };
-                        }
-                        return {
-                          ...current,
-                          reportReceivedDate: current.reportReceivedDate || getTodayUsDate(),
-                        };
-                      });
-                    }}
-                    type="checkbox"
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingSpecialist((current) =>
+                        current
+                          ? { ...current, completedDate: formatUsDateInput(event.target.value) }
+                          : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingSpecialist.completedDate ?? ""}
                   />
-                  Report Received
                 </label>
-
-                <input
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  disabled={!editingSpecialist.reportReceivedDate}
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) =>
-                    setEditingSpecialist((current) =>
-                      current
-                        ? { ...current, reportReceivedDate: formatUsDateInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                  placeholder="Report Received Date (MM/DD/YYYY)"
-                  value={editingSpecialist.reportReceivedDate}
-                />
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Received</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingSpecialist((current) =>
+                        current
+                          ? { ...current, reportReceivedDate: formatUsDateInput(event.target.value) }
+                          : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingSpecialist.reportReceivedDate}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Reviewed</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingSpecialist((current) =>
+                        current
+                          ? { ...current, reportReviewedDate: formatUsDateInput(event.target.value) }
+                          : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingSpecialist.reportReviewedDate ?? ""}
+                  />
+                </label>
               </div>
             </div>
 
