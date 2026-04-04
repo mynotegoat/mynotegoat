@@ -84,6 +84,7 @@ export function MacroSettingsPanel() {
     addQuestion,
     updateQuestion,
     removeQuestion,
+    moveQuestion,
     resetToDefaults,
   } = useMacroTemplates();
 
@@ -506,9 +507,11 @@ export function MacroSettingsPanel() {
                 </div>
 
                 <div className="mt-3 space-y-2">
-                  {selectedMacro.questions.map((question) => {
+                  {selectedMacro.questions.map((question, questionIndex) => {
                     const choiceKey = `${selectedMacro.id}::${question.id}`;
                     const choiceDraft = newChoiceDrafts[choiceKey] ?? "";
+                    const isFirst = questionIndex === 0;
+                    const isLast = questionIndex === selectedMacro.questions.length - 1;
                     const addChoice = () => {
                       const value = choiceDraft.trim();
                       if (!value) return;
@@ -524,6 +527,27 @@ export function MacroSettingsPanel() {
                       className="rounded-xl border border-[var(--line-soft)] bg-white p-2 space-y-2"
                     >
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Move up/down arrows */}
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            className="rounded border border-[var(--line-soft)] px-1 py-0 text-xs leading-none text-[var(--text-muted)] hover:bg-[var(--bg-soft)] disabled:opacity-30"
+                            disabled={isFirst}
+                            onClick={() => moveQuestion(selectedMacro.id, question.id, "up")}
+                            title="Move up"
+                            type="button"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            className="rounded border border-[var(--line-soft)] px-1 py-0 text-xs leading-none text-[var(--text-muted)] hover:bg-[var(--bg-soft)] disabled:opacity-30"
+                            disabled={isLast}
+                            onClick={() => moveQuestion(selectedMacro.id, question.id, "down")}
+                            title="Move down"
+                            type="button"
+                          >
+                            ▼
+                          </button>
+                        </div>
                         <input
                           className="flex-1 rounded-lg border border-[var(--line-soft)] px-2 py-1 font-semibold"
                           onChange={(event) =>

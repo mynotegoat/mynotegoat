@@ -133,6 +133,21 @@ export function useMacroTemplates() {
     [updateMacro],
   );
 
+  const moveQuestion = useCallback(
+    (macroId: string, questionId: string, direction: "up" | "down") => {
+      updateMacro(macroId, (current) => {
+        const idx = current.questions.findIndex((q) => q.id === questionId);
+        if (idx < 0) return current;
+        const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+        if (targetIdx < 0 || targetIdx >= current.questions.length) return current;
+        const next = [...current.questions];
+        [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+        return { ...current, questions: next };
+      });
+    },
+    [updateMacro],
+  );
+
   const resetToDefaults = useCallback(() => {
     const defaults = getDefaultMacroLibrary();
     setMacroLibrary(defaults);
@@ -168,6 +183,7 @@ export function useMacroTemplates() {
     addQuestion,
     updateQuestion,
     removeQuestion,
+    moveQuestion,
     resetToDefaults,
   };
 }
