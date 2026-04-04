@@ -2460,13 +2460,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.xray && (
-              <div className="mt-3 grid gap-2">
+              <div className="mt-3 space-y-3">
                 {/* Row 1: Sent Date + Imaging Center */}
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-[140px_1fr] gap-2">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Sent Date</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Sent Date</span>
                     <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       inputMode="numeric"
                       maxLength={10}
                       onChange={(event) =>
@@ -2477,9 +2477,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                   </label>
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Imaging Center</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Imaging Center</span>
                     <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       list="imaging-centers"
                       onChange={(event) => setXray((current) => ({ ...current, center: event.target.value }))}
                       placeholder="Select or type center"
@@ -2487,33 +2487,36 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                   </label>
                 </div>
+
                 {/* Row 2: Regions */}
-                <div className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">Regions</span>
-                  <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-left"
-                    onClick={(event) => {
-                      setRegionModalAnchor(getPopupAnchorFromEvent(event));
-                      setActiveRegionModal("xray");
-                    }}
-                    type="button"
-                  >
-                    Select / Update Regions
-                  </button>
-                  <div className="rounded-xl border border-[#b7ccdc] bg-white/90 p-1.5">
+                <div className="grid gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Regions</span>
+                    <button
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold text-[var(--brand-primary)] transition hover:bg-[#ecf4fa]"
+                      onClick={(event) => {
+                        setRegionModalAnchor(getPopupAnchorFromEvent(event));
+                        setActiveRegionModal("xray");
+                      }}
+                      type="button"
+                    >
+                      Select / Update
+                    </button>
+                  </div>
+                  <div className="min-h-[36px] rounded-lg border border-[#b7ccdc] bg-white/90 px-2 py-1.5">
                     {xray.regions.length === 0 ? (
-                      <p className="text-sm text-[var(--text-muted)]">No regions selected.</p>
+                      <p className="text-xs text-[var(--text-muted)]">No regions selected.</p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {xray.regions.map((region) => (
                           <span
                             key={`xray-region-${region}`}
-                            className="inline-flex items-center gap-1 rounded-full border border-[#9ab8cc] bg-[#ecf4fa] px-2.5 py-1 text-sm font-semibold text-[#35566f]"
+                            className="inline-flex items-center gap-1 rounded-full border border-[#9ab8cc] bg-[#ecf4fa] px-2 py-0.5 text-xs font-semibold text-[#35566f]"
                           >
                             {formatRegionLabel(region, xray.lateralityByRegion)}
                             {xray.flexExtRegions.includes(region) && (
-                              <span className="rounded-full bg-[#0d79bf] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-white">
-                                Flex/Ext
+                              <span className="rounded-full bg-[#0d79bf] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                                F/E
                               </span>
                             )}
                           </span>
@@ -2522,57 +2525,62 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     )}
                   </div>
                 </div>
+
                 {/* Row 3: Completed + Report Received + Report Reviewed */}
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Completed</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setXray((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))
-                      }
-                      placeholder="MM/DD/YYYY"
-                      value={xray.doneDate}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Report Received</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setXray((current) => ({
-                          ...current,
-                          reportReceivedDate: formatUsDateInput(event.target.value),
-                        }))
-                      }
-                      placeholder="MM/DD/YYYY"
-                      value={xray.reportReceivedDate}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Report Reviewed</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setXray((current) => ({
-                          ...current,
-                          reportReviewedDate: formatUsDateInput(event.target.value),
-                        }))
-                      }
-                      placeholder="MM/DD/YYYY"
-                      value={xray.reportReviewedDate}
-                    />
-                  </label>
+                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          setXray((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))
+                        }
+                        placeholder="MM/DD/YYYY"
+                        value={xray.doneDate}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          setXray((current) => ({
+                            ...current,
+                            reportReceivedDate: formatUsDateInput(event.target.value),
+                          }))
+                        }
+                        placeholder="MM/DD/YYYY"
+                        value={xray.reportReceivedDate}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          setXray((current) => ({
+                            ...current,
+                            reportReviewedDate: formatUsDateInput(event.target.value),
+                          }))
+                        }
+                        placeholder="MM/DD/YYYY"
+                        value={xray.reportReviewedDate}
+                      />
+                    </label>
+                  </div>
                 </div>
+
+                {/* Actions */}
                 <div className="flex gap-2">
                   <button
-                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                     onClick={() => saveImagingReferral("xray")}
                     type="button"
                   >
@@ -2580,7 +2588,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </button>
                   {editingXrayReferralId && (
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
                       onClick={() => cancelImagingReferralEdit("xray")}
                       type="button"
                     >
@@ -2588,8 +2596,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                   )}
                 </div>
-                <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-white p-2">
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
+
+                {/* Overrides */}
+                <div className="flex gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.patientRefused}
                       onChange={(event) => setPatientRefused(patient.id, "xray", event.target.checked)}
@@ -2597,7 +2607,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Patient Refused
                   </label>
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.completedPriorCare}
                       onChange={(event) => setCompletedPriorCare(patient.id, "xray", event.target.checked)}
@@ -2669,8 +2679,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.mri && (
-              <div className="mt-3 grid gap-2">
-                <label className="inline-flex items-center gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold">
+              <div className="mt-3 space-y-3">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs font-semibold">
                   <input
                     checked={Boolean(mri.isCt)}
                     onChange={(event) =>
@@ -2683,12 +2693,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   />
                   CT instead of MRI
                 </label>
+
                 {/* Row 1: Sent Date + Imaging Center */}
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-[140px_1fr] gap-2">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Sent Date</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Sent Date</span>
                     <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       inputMode="numeric"
                       maxLength={10}
                       onChange={(event) => setMri((current) => ({ ...current, sentDate: formatUsDateInput(event.target.value) }))}
@@ -2697,9 +2708,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                   </label>
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Imaging Center</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Imaging Center</span>
                     <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       list="imaging-centers"
                       onChange={(event) => setMri((current) => ({ ...current, center: event.target.value }))}
                       placeholder="Select or type center"
@@ -2707,28 +2718,31 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                   </label>
                 </div>
+
                 {/* Row 2: Regions */}
-                <div className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">Regions</span>
-                  <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-left"
-                    onClick={(event) => {
-                      setRegionModalAnchor(getPopupAnchorFromEvent(event));
-                      setActiveRegionModal("mri");
-                    }}
-                    type="button"
-                  >
-                    Select / Update Regions
-                  </button>
-                  <div className="rounded-xl border border-[#b7ccdc] bg-white/90 p-1.5">
+                <div className="grid gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Regions</span>
+                    <button
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold text-[var(--brand-primary)] transition hover:bg-[#ecf4fa]"
+                      onClick={(event) => {
+                        setRegionModalAnchor(getPopupAnchorFromEvent(event));
+                        setActiveRegionModal("mri");
+                      }}
+                      type="button"
+                    >
+                      Select / Update
+                    </button>
+                  </div>
+                  <div className="min-h-[36px] rounded-lg border border-[#b7ccdc] bg-white/90 px-2 py-1.5">
                     {mri.regions.length === 0 ? (
-                      <p className="text-sm text-[var(--text-muted)]">No regions selected.</p>
+                      <p className="text-xs text-[var(--text-muted)]">No regions selected.</p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {mri.regions.map((region) => (
                           <span
                             key={`mri-region-${region}`}
-                            className="inline-flex items-center rounded-full border border-[#9ab8cc] bg-[#ecf4fa] px-2.5 py-1 text-sm font-semibold text-[#35566f]"
+                            className="inline-flex items-center rounded-full border border-[#9ab8cc] bg-[#ecf4fa] px-2 py-0.5 text-xs font-semibold text-[#35566f]"
                           >
                             {formatRegionLabel(region, mri.lateralityByRegion)}
                           </span>
@@ -2737,55 +2751,60 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     )}
                   </div>
                 </div>
+
                 {/* Row 3: Completed + Report Received + Report Reviewed */}
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Completed</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) => setMri((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))}
-                      placeholder="MM/DD/YYYY"
-                      value={mri.doneDate}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Report Received</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setMri((current) => ({
-                          ...current,
-                          reportReceivedDate: formatUsDateInput(event.target.value),
-                        }))
-                      }
-                      placeholder="MM/DD/YYYY"
-                      value={mri.reportReceivedDate}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Report Reviewed</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setMri((current) => ({
-                          ...current,
-                          reportReviewedDate: formatUsDateInput(event.target.value),
-                        }))
-                      }
-                      placeholder="MM/DD/YYYY"
-                      value={mri.reportReviewedDate}
-                    />
-                  </label>
+                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) => setMri((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))}
+                        placeholder="MM/DD/YYYY"
+                        value={mri.doneDate}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          setMri((current) => ({
+                            ...current,
+                            reportReceivedDate: formatUsDateInput(event.target.value),
+                          }))
+                        }
+                        placeholder="MM/DD/YYYY"
+                        value={mri.reportReceivedDate}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
+                      <input
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        inputMode="numeric"
+                        maxLength={10}
+                        onChange={(event) =>
+                          setMri((current) => ({
+                            ...current,
+                            reportReviewedDate: formatUsDateInput(event.target.value),
+                          }))
+                        }
+                        placeholder="MM/DD/YYYY"
+                        value={mri.reportReviewedDate}
+                      />
+                    </label>
+                  </div>
                 </div>
+
+                {/* Actions */}
                 <div className="flex gap-2">
                   <button
-                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                     onClick={() => saveImagingReferral("mri")}
                     type="button"
                   >
@@ -2793,7 +2812,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </button>
                   {editingMriReferralId && (
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
                       onClick={() => cancelImagingReferralEdit("mri")}
                       type="button"
                     >
@@ -2801,8 +2820,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                   )}
                 </div>
-                <div className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-white p-2 sm:col-span-2">
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
+
+                {/* Overrides */}
+                <div className="flex gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.patientRefused}
                       onChange={(event) => setPatientRefused(patient.id, "mriCt", event.target.checked)}
@@ -2810,7 +2831,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Patient Refused
                   </label>
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.completedPriorCare}
                       onChange={(event) => setCompletedPriorCare(patient.id, "mriCt", event.target.checked)}
