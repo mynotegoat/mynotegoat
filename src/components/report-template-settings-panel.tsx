@@ -13,6 +13,72 @@ function insertionTokenForField(fieldToken: string) {
   return `{{${fieldToken}}}`;
 }
 
+type FieldCategory = {
+  label: string;
+  tokens: string[];
+};
+
+const autoFieldCategories: FieldCategory[] = [
+  {
+    label: "Office",
+    tokens: ["TODAY_DATE", "OFFICE_NAME", "OFFICE_ADDRESS", "OFFICE_PHONE", "OFFICE_FAX", "OFFICE_EMAIL", "DOCTOR_NAME"],
+  },
+  {
+    label: "Patient",
+    tokens: ["PATIENT_FULL_NAME", "PATIENT_FIRST_NAME", "PATIENT_LAST_NAME", "PATIENT_DOB", "PATIENT_PHONE", "PATIENT_EMAIL"],
+  },
+  {
+    label: "Case Info",
+    tokens: ["DATE_OF_INJURY", "INITIAL_EXAM", "CASE_NUMBER", "CASE_STATUS", "LIEN_STATUS", "PRIOR_CARE", "PATIENT_NOTES"],
+  },
+  {
+    label: "Findings",
+    tokens: ["XRAY_FINDINGS", "MRI_CT_FINDINGS", "SPECIALIST_RECOMMENDATIONS"],
+  },
+  {
+    label: "Billing",
+    tokens: ["BILLED_AMOUNT", "PAID_AMOUNT", "PERCENTAGE_PAID", "PAID_DATE", "TOTAL_CHARGE_AMOUNT"],
+  },
+  {
+    label: "Dates & Status",
+    tokens: ["DISCHARGE_DATE", "RB_SENT_DATE", "REVIEW_STATUS"],
+  },
+  {
+    label: "Encounters",
+    tokens: [
+      "FIRST_ENCOUNTER_DATE", "LATEST_ENCOUNTER_DATE", "ENCOUNTER_COUNT", "ENCOUNTER_TIMELINE",
+    ],
+  },
+  {
+    label: "SOAP — First",
+    tokens: ["FIRST_SUBJECTIVE", "FIRST_OBJECTIVE", "FIRST_ASSESSMENT", "FIRST_PLAN"],
+  },
+  {
+    label: "SOAP — Latest",
+    tokens: ["LATEST_SUBJECTIVE", "LATEST_OBJECTIVE", "LATEST_ASSESSMENT", "LATEST_PLAN"],
+  },
+  {
+    label: "SOAP — All",
+    tokens: ["ALL_SUBJECTIVE", "ALL_OBJECTIVE", "ALL_ASSESSMENT", "ALL_PLAN"],
+  },
+  {
+    label: "SOAP — Macro",
+    tokens: ["MACRO_SUBJECTIVE", "MACRO_OBJECTIVE", "MACRO_ASSESSMENT", "MACRO_PLAN"],
+  },
+  {
+    label: "Diagnosis & Charges",
+    tokens: ["DIAGNOSIS_LIST", "DIAGNOSIS_CODES", "CHARGE_LEDGER"],
+  },
+  {
+    label: "Imaging & Referrals",
+    tokens: ["XRAY_SUMMARY", "MRI_CT_SUMMARY", "IMAGING_SUMMARY", "SPECIALIST_SUMMARY"],
+  },
+];
+
+const tokenLabelMap = Object.fromEntries(
+  narrativeReportAutoFields.map((f) => [f.token, f.label]),
+);
+
 export function ReportTemplateSettingsPanel() {
   const {
     reportTemplates,
@@ -31,6 +97,7 @@ export function ReportTemplateSettingsPanel() {
     reportTemplates.templates[0]?.id ?? null,
   );
   const [templateNameDraft, setTemplateNameDraft] = useState("Insurance Narrative");
+  const [autoFieldSearch, setAutoFieldSearch] = useState("");
   const [error, setError] = useState("");
 
   const [promptLabelDraft, setPromptLabelDraft] = useState("");
@@ -261,46 +328,107 @@ export function ReportTemplateSettingsPanel() {
                 Selected: {usedFieldTokens.length}
               </span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {narrativeReportAutoFields.map((field) => {
-                const used = usedFieldTokens.includes(field.token);
+
+            <input
+              className="mb-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              onChange={(event) => setAutoFieldSearch(event.target.value)}
+              placeholder="Search fields... (e.g. objective, patient, billing)"
+              value={autoFieldSearch}
+            />
+
+            {(() => {
+              const q = autoFieldSearch.trim().toLowerCase();
+
+              const filteredCategories = autoFieldCategories
+                .map((cat) => {
+                  const matchingTokens = cat.tokens.filter((token) => {
+                    if (!q) return true;
+                    const label = (tokenLabelMap[token] ?? token).toLowerCase();
+                    return token.toLowerCase().includes(q) || label.includes(q) || cat.label.toLowerCase().includes(q);
+                  });
+                  return { ...cat, tokens: matchingTokens };
+                })
+                .filter((cat) => cat.tokens.length > 0);
+
+              const filteredPrompts = selectedTemplate.prompts.filter((prompt) => {
+                if (!q) return true;
                 return (
-                  <button
-                    className={`rounded-full border px-3 py-1 text-sm font-semibold ${
-                      used
-                        ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] text-[var(--brand-primary)]"
-                        : "border-[var(--line-soft)] bg-white"
-                    }`}
-                    key={field.token}
-                    onClick={() => insertTextAtCursor(insertionTokenForField(field.token))}
-                    title={field.label}
-                    type="button"
-                  >
-                    {used ? "✓ " : ""}
-                    {field.token}
-                  </button>
+                  prompt.token.toLowerCase().includes(q) ||
+                  prompt.label.toLowerCase().includes(q)
                 );
-              })}
-              {selectedTemplate.prompts.map((prompt) => {
-                const used = usedFieldTokens.includes(prompt.token);
+              });
+
+              if (filteredCategories.length === 0 && filteredPrompts.length === 0) {
                 return (
-                  <button
-                    className={`rounded-full border px-3 py-1 text-sm font-semibold ${
-                      used
-                        ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] text-[var(--brand-primary)]"
-                        : "border-[var(--line-soft)] bg-white"
-                    }`}
-                    key={prompt.id}
-                    onClick={() => insertTextAtCursor(insertionTokenForField(prompt.token))}
-                    title={prompt.label}
-                    type="button"
-                  >
-                    {used ? "✓ " : ""}
-                    {prompt.token}
-                  </button>
+                  <p className="py-4 text-center text-sm text-[var(--text-muted)]">
+                    No fields match &ldquo;{autoFieldSearch.trim()}&rdquo;
+                  </p>
                 );
-              })}
-            </div>
+              }
+
+              return (
+                <div className="space-y-3">
+                  {filteredCategories.map((cat) => (
+                    <div key={cat.label}>
+                      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+                        {cat.label}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {cat.tokens.map((token) => {
+                          const used = usedFieldTokens.includes(token);
+                          const label = tokenLabelMap[token] ?? token;
+                          return (
+                            <button
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                used
+                                  ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] text-[var(--brand-primary)]"
+                                  : "border-[var(--line-soft)] bg-white hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.04)]"
+                              }`}
+                              key={token}
+                              onClick={() => insertTextAtCursor(insertionTokenForField(token))}
+                              title={label}
+                              type="button"
+                            >
+                              {used ? "✓ " : ""}
+                              {token}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredPrompts.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+                        Custom Prompts
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filteredPrompts.map((prompt) => {
+                          const used = usedFieldTokens.includes(prompt.token);
+                          return (
+                            <button
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                used
+                                  ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] text-[var(--brand-primary)]"
+                                  : "border-[var(--line-soft)] bg-white hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.04)]"
+                              }`}
+                              key={prompt.id}
+                              onClick={() => insertTextAtCursor(insertionTokenForField(prompt.token))}
+                              title={prompt.label}
+                              type="button"
+                            >
+                              {used ? "✓ " : ""}
+                              {prompt.token}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </article>
 
           <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">

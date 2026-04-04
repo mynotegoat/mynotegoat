@@ -409,6 +409,8 @@ export type CreatePatientDraft = {
   lastName: string;
   attorney?: string;
   dob?: string;
+  sex?: PatientRecord["sex"];
+  maritalStatus?: PatientRecord["maritalStatus"];
   dateOfLoss: string;
   initialExam?: string;
   phone?: string;
@@ -452,6 +454,8 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
     id: createPatientId(),
     fullName,
     dob,
+    sex: draft.sex || undefined,
+    maritalStatus: draft.maritalStatus || undefined,
     phone,
     email: cleanString(draft.email),
     address: cleanString(draft.address),

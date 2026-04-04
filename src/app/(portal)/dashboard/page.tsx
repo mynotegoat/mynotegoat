@@ -7,9 +7,9 @@ import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
 import { usePatientFollowUpOverrides } from "@/hooks/use-patient-follow-up-overrides";
 import { usePriorityCaseRules } from "@/hooks/use-priority-case-rules";
-import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
+import { withAlpha } from "@/lib/color-utils";
 import { buildFollowUpItems, formatUsDateDisplay } from "@/lib/follow-up-queue";
-import { dashboardStats, patients } from "@/lib/mock-data";
+import { appointments, patients } from "@/lib/mock-data";
 import { loadTasks, type TaskPriority, type TaskRecord } from "@/lib/tasks";
 
 function parseDateValue(dateValue: string) {
@@ -135,6 +135,51 @@ export default function DashboardPage() {
     return counts;
   }, []);
 
+  const computedStats = useMemo(() => {
+    const activeStatuses = new Set(
+      caseStatuses
+        .filter((status) => !status.isCaseClosed)
+        .map((status) => status.name.toLowerCase()),
+    );
+    const totalActive = patients.filter((p) =>
+      activeStatuses.has(p.caseStatus.toLowerCase()),
+    ).length;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayAppointments = appointments.filter((a) =>
+      a.start.startsWith(todayStr),
+    ).length;
+
+    const dischargedPatients = patients.filter((p) => {
+      const status = p.caseStatus.toLowerCase();
+      return status.includes("discharg") || status.includes("paid") || status.includes("dropped");
+    });
+    let avgDays = 0;
+    if (dischargedPatients.length > 0) {
+      const totalDays = dischargedPatients.reduce((sum, p) => {
+        const initial = parseDateValue(p.matrix?.initialExam ?? "");
+        const discharge = parseDateValue(p.matrix?.discharge ?? "");
+        if (initial && discharge) {
+          return sum + Math.max(0, Math.floor((discharge.getTime() - initial.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+        return sum;
+      }, 0);
+      const countWithDates = dischargedPatients.filter((p) => {
+        const initial = parseDateValue(p.matrix?.initialExam ?? "");
+        const discharge = parseDateValue(p.matrix?.discharge ?? "");
+        return initial && discharge;
+      }).length;
+      avgDays = countWithDates > 0 ? totalDays / countWithDates : 0;
+    }
+
+    return [
+      { label: "Total Active Cases", value: String(totalActive) },
+      { label: "Total Patients", value: String(patients.length) },
+      { label: "Today Appointments", value: String(todayAppointments) },
+      { label: "Avg Days Initial To Discharge", value: avgDays > 0 ? avgDays.toFixed(1) : "-" },
+    ];
+  }, [caseStatuses]);
+
   const dashboardStatuses = useMemo(
     () => caseStatuses.filter((status) => status.showOnDashboard),
     [caseStatuses],
@@ -145,7 +190,6 @@ export default function DashboardPage() {
   );
 
   const priorityCases = useMemo(() => {
-    const selectedStatuses = new Set(priorityRules.statusNames.map((status) => status.toLowerCase()));
     const closedStatuses = new Set(closedCaseStatuses.map((status) => status.toLowerCase()));
 
     return patients
@@ -155,10 +199,6 @@ export default function DashboardPage() {
         }
 
         const reasons: string[] = [];
-
-        if (selectedStatuses.has(patient.caseStatus.toLowerCase())) {
-          reasons.push(`Status: ${patient.caseStatus}`);
-        }
 
         const statusLower = patient.caseStatus.toLowerCase();
         const rbSentDate = extractLeadingDate(patient.matrix?.rbSent);
@@ -176,11 +216,11 @@ export default function DashboardPage() {
 
         const isDischarged = statusLower.includes("discharg");
         const isPaid = statusLower.includes("paid");
-        const pauseAdditionalRules = isDischarged || Boolean(rbSentDate);
+        const pauseRules = isDischarged || Boolean(rbSentDate);
 
         if (
           priorityRules.includeMriDue &&
-          !pauseAdditionalRules &&
+          !pauseRules &&
           !hasMriLogged &&
           initialExamDays !== null &&
           initialExamDays >= priorityRules.mriDueDaysFromInitial
@@ -190,7 +230,7 @@ export default function DashboardPage() {
 
         if (
           priorityRules.includeNoUpdate &&
-          !pauseAdditionalRules &&
+          !pauseRules &&
           staleDays >= priorityRules.noUpdateDaysThreshold
         ) {
           reasons.push(`No update ${staleDays}d`);
@@ -289,39 +329,35 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {dashboardStats.map((card) => (
+        {computedStats.map((card) => (
           <StatCard key={card.label} label={card.label} value={card.value} />
         ))}
       </section>
 
       <section className="panel-card p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-xl font-semibold">Dashboard Status Categories</h3>
+          <h3 className="text-xl font-semibold">Case Status</h3>
           <p className="text-sm text-[var(--text-muted)]">
-            Configured in Settings with &quot;Show on Dashboard&quot;.
+            Configured in Settings
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="flex flex-wrap gap-3">
           {dashboardStatuses.map((status) => (
             <div
               key={status.name}
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3"
+              className="flex items-center gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-4 py-3"
             >
-                <p className="text-sm text-[var(--text-muted)]">{status.name}</p>
-                <div className="mt-1 flex items-center justify-between">
-                  <p className="text-3xl font-semibold">{statusCounts[status.name] ?? 0}</p>
-                  <span
-                    className="status-pill"
-                    style={{
-                      backgroundColor: withAlpha(status.color, 0.2),
-                      color: getContrastTextColor(status.color),
-                    }}
-                  >
-                    Visible
-                  </span>
-                </div>
+              <span
+                aria-hidden
+                className="inline-block h-3 w-3 shrink-0 rounded"
+                style={{ backgroundColor: withAlpha(status.color, 0.7) }}
+              />
+              <div>
+                <p className="text-xs text-[var(--text-muted)]">{status.name}</p>
+                <p className="text-2xl font-semibold leading-tight">{statusCounts[status.name] ?? 0}</p>
               </div>
-            ))}
+            </div>
+          ))}
           {dashboardStatuses.length === 0 && (
             <p className="text-sm text-[var(--text-muted)]">
               No statuses selected. Go to Settings and enable &quot;Show on Dashboard&quot;.
@@ -332,17 +368,18 @@ export default function DashboardPage() {
 
       <section className="panel-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xl font-semibold">Priority Cases</h3>
+          <h3 className="text-xl font-semibold">Priority Alerts</h3>
           <p className="text-sm text-[var(--text-muted)]">Configured in Settings &gt; Dashboard</p>
         </div>
         <div className="space-y-2">
           {priorityCases.map((entry) => (
-            <div
+            <Link
               key={entry.patient.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3"
+              href={`/patients/${entry.patient.id}`}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 transition hover:border-[var(--brand-primary)] hover:shadow-sm"
             >
               <div>
-                <p className="font-semibold">{entry.patient.fullName}</p>
+                <p className="font-semibold text-[var(--brand-primary)]">{entry.patient.fullName}</p>
                 <p className="text-sm text-[var(--text-muted)]">
                   {entry.patient.attorney} • Last update {entry.patient.lastUpdate}
                 </p>
@@ -351,11 +388,11 @@ export default function DashboardPage() {
               <span className={`status-pill ${getPriorityBadgeClass(entry.reasons)}`}>
                 {entry.reasons[0]}
               </span>
-            </div>
+            </Link>
           ))}
           {priorityCases.length === 0 && (
             <p className="text-sm text-[var(--text-muted)]">
-              No priority cases match current rules. Adjust Settings &gt; Dashboard &gt; Priority Cases.
+              No priority alerts. Adjust rules in Settings &gt; Dashboard.
             </p>
           )}
         </div>

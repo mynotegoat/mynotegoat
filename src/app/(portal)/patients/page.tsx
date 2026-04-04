@@ -27,6 +27,8 @@ type DetailRow = {
 type NewPatientDraft = {
   lastName: string;
   firstName: string;
+  sex: PatientRecord["sex"] | "";
+  maritalStatus: PatientRecord["maritalStatus"] | "";
   attorney: string;
   attorneyPhone: string;
   dob: string;
@@ -217,6 +219,8 @@ export default function PatientsPage() {
   const [newPatientDraft, setNewPatientDraft] = useState<NewPatientDraft>({
     lastName: "",
     firstName: "",
+    sex: "",
+    maritalStatus: "",
     attorney: "",
     attorneyPhone: "",
     dob: "",
@@ -237,6 +241,8 @@ export default function PatientsPage() {
     setNewPatientDraft({
       lastName: "",
       firstName: "",
+      sex: "",
+      maritalStatus: "",
       attorney: "",
       attorneyPhone: "",
       dob: "",
@@ -319,6 +325,8 @@ export default function PatientsPage() {
     const createdPatient = createPatientRecord({
       firstName,
       lastName,
+      sex: newPatientDraft.sex || undefined,
+      maritalStatus: newPatientDraft.maritalStatus || undefined,
       attorney: attorneyName,
       dob: newPatientDraft.dob,
       dateOfLoss: newPatientDraft.dateOfLoss,
@@ -885,6 +893,44 @@ export default function PatientsPage() {
                     }
                     value={newPatientDraft.firstName}
                   />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Sex</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      setNewPatientDraft((current) => ({
+                        ...current,
+                        sex: event.target.value as NewPatientDraft["sex"],
+                      }))
+                    }
+                    value={newPatientDraft.sex}
+                  >
+                    <option value="">—</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Marital Status</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      setNewPatientDraft((current) => ({
+                        ...current,
+                        maritalStatus: event.target.value as NewPatientDraft["maritalStatus"],
+                      }))
+                    }
+                    value={newPatientDraft.maritalStatus}
+                  >
+                    <option value="">—</option>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                  </select>
                 </label>
 
                 <label className="grid gap-1">
