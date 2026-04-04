@@ -62,10 +62,32 @@ function getActiveWorkspaceId() {
   return window.localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? "";
 }
 
+const BACKUP_KEY = "casemate.__safety-backup__.v1";
+
+function backupLocalWorkspaceData() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    const snapshot = readLocalSnapshot();
+    if (hasMeaningfulLocalData(snapshot)) {
+      window.localStorage.setItem(BACKUP_KEY, JSON.stringify({
+        backedUpAt: new Date().toISOString(),
+        snapshot,
+      }));
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 function clearLocalWorkspaceData() {
   if (typeof window === "undefined") {
     return;
   }
+
+  // Always create a safety backup before clearing
+  backupLocalWorkspaceData();
 
   const keysToRemove: string[] = [];
   for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -73,7 +95,7 @@ function clearLocalWorkspaceData() {
     if (!key || !key.startsWith(LOCAL_KEY_PREFIX)) {
       continue;
     }
-    if (key === ACTIVE_WORKSPACE_KEY || key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`)) {
+    if (key === ACTIVE_WORKSPACE_KEY || key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`) || key === BACKUP_KEY) {
       continue;
     }
     keysToRemove.push(key);
@@ -230,6 +252,8 @@ export async function prepareCloudStateBeforeMount() {
       previousWorkspaceId && previousWorkspaceId !== authed.workspaceId;
 
     if (workspaceSwitched) {
+      // Safety: backup before clearing
+      backupLocalWorkspaceData();
       clearLocalWorkspaceData();
       window.localStorage.removeItem(getSyncAtKey(previousWorkspaceId));
     }
@@ -265,6 +289,9 @@ export async function prepareCloudStateBeforeMount() {
 
     if (remoteHasData) {
       const remoteUpdatedAtMs = parseTimestamp(remote!.updated_at ?? null);
+
+      // SAFETY: Never overwrite local data with remote unless remote is genuinely newer
+      // If local has data, only pull remote when timestamps confirm remote is newer
       const shouldPullRemote =
         !localHasData ||
         (!Number.isNaN(remoteUpdatedAtMs) &&
@@ -272,6 +299,10 @@ export async function prepareCloudStateBeforeMount() {
           remoteUpdatedAtMs > localSyncedAtMs);
 
       if (shouldPullRemote) {
+        // Backup local before overwriting
+        if (localHasData) {
+          backupLocalWorkspaceData();
+        }
         writeLocalSnapshot(remote!.snapshot as Record<string, unknown>);
         if (remote!.updated_at) {
           window.localStorage.setItem(
@@ -283,11 +314,94 @@ export async function prepareCloudStateBeforeMount() {
       }
     }
 
+    // SAFETY: If local has data but remote is empty, push local to remote (bootstrap)
+    // Never discard local data just because remote is empty
     if (localHasData) {
       await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }
   } catch (error) {
     console.warn("[Cloud Sync] Startup sync skipped:", error);
+  }
+}
+
+/**
+ * Restore data from the safety backup (if one exists).
+ * Returns true if data was restored.
+ */
+export function restoreFromSafetyBackup(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    const raw = window.localStorage.getItem(BACKUP_KEY);
+    if (!raw) {
+      return false;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.snapshot || typeof parsed.snapshot !== "object") {
+      return false;
+    }
+    writeLocalSnapshot(parsed.snapshot);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a safety backup exists with data.
+ */
+export function hasSafetyBackup(): { exists: boolean; backedUpAt: string } {
+  if (typeof window === "undefined") {
+    return { exists: false, backedUpAt: "" };
+  }
+  try {
+    const raw = window.localStorage.getItem(BACKUP_KEY);
+    if (!raw) {
+      return { exists: false, backedUpAt: "" };
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.snapshot || typeof parsed.snapshot !== "object") {
+      return { exists: false, backedUpAt: "" };
+    }
+    return { exists: true, backedUpAt: parsed.backedUpAt ?? "" };
+  } catch {
+    return { exists: false, backedUpAt: "" };
+  }
+}
+
+/**
+ * Attempt to recover data from the remote Supabase snapshot.
+ * Returns true if remote data was found and written to localStorage.
+ */
+export async function recoverFromRemote(): Promise<boolean> {
+  if (typeof window === "undefined" || !isCloudSyncEnabled()) {
+    return false;
+  }
+  try {
+    const authed = await getAuthedConfig();
+    if (!authed) {
+      return false;
+    }
+    const remote = await fetchRemoteSnapshot(authed.workspaceId);
+    if (!remote || !remote.snapshot || typeof remote.snapshot !== "object") {
+      return false;
+    }
+    const remoteSnapshot = Object.fromEntries(
+      Object.entries(remote.snapshot as Record<string, unknown>).map(
+        ([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)],
+      ),
+    );
+    if (!hasMeaningfulLocalData(remoteSnapshot)) {
+      return false;
+    }
+    writeLocalSnapshot(remote.snapshot as Record<string, unknown>);
+    if (remote.updated_at) {
+      window.localStorage.setItem(getSyncAtKey(authed.workspaceId), remote.updated_at);
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 

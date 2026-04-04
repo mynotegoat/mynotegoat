@@ -1,6 +1,7 @@
 "use client";
 
-import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { hasSafetyBackup, recoverFromRemote, restoreFromSafetyBackup } from "@/lib/cloud-state";
 import { BillingMacroSettingsPanel } from "@/components/billing-macro-settings-panel";
 import { DocumentTemplateSettingsPanel } from "@/components/document-template-settings-panel";
 import { MacroSettingsPanel } from "@/components/macro-settings-panel";
@@ -37,6 +38,7 @@ type SettingsSectionKey =
   | "reports"
   | "subscription"
   | "backup"
+  | "recovery"
   | "security";
 
 const defaultExpandedSections: Record<SettingsSectionKey, boolean> = {
@@ -53,6 +55,7 @@ const defaultExpandedSections: Record<SettingsSectionKey, boolean> = {
   reports: false,
   subscription: false,
   backup: false,
+  recovery: false,
   security: false,
 };
 
@@ -990,6 +993,12 @@ export default function SettingsPage() {
   const [deletePasswordError, setDeletePasswordError] = useState("");
   const [deletePasswordSuccess, setDeletePasswordSuccess] = useState("");
   const [deletePasswordSaving, setDeletePasswordSaving] = useState(false);
+
+  // Data recovery state
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [backupInfo, setBackupInfo] = useState<{ exists: boolean; backedUpAt: string }>({ exists: false, backedUpAt: "" });
   const [backupSelections, setBackupSelections] = useState<Record<BackupModuleId, boolean>>(() =>
     backupModules.reduce<Record<BackupModuleId, boolean>>((accumulator, module) => {
       accumulator[module.id] = true;
@@ -1017,6 +1026,10 @@ export default function SettingsPage() {
     }
     return next;
   });
+
+  useEffect(() => {
+    setBackupInfo(hasSafetyBackup());
+  }, []);
 
   const toggleSection = (sectionKey: SettingsSectionKey) => {
     setExpandedSections((current) => ({
@@ -1199,13 +1212,37 @@ export default function SettingsPage() {
       const { getSupabaseBrowserClient } = await import("@/lib/supabase-browser");
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
-        // No Supabase — still allow setting via simple email match
         setDeletePasswordError("Supabase is not configured. Cannot verify identity.");
         setDeletePasswordSaving(false);
         return;
       }
-      // Re-authenticate with the user's login credentials
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      // Verify the user's current session first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setDeletePasswordError("You must be signed in to set the delete password.");
+        setDeletePasswordSaving(false);
+        return;
+      }
+      // Verify the email matches the signed-in user
+      if (session.user.email?.toLowerCase() !== deletePasswordLoginEmail.trim().toLowerCase()) {
+        setDeletePasswordError("Email must match the currently signed-in account.");
+        setDeletePasswordSaving(false);
+        return;
+      }
+      // Use a separate Supabase client to verify password WITHOUT affecting
+      // the current session. We create a throwaway client just for verification.
+      const { createClient } = await import("@supabase/supabase-js");
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!url || !anonKey) {
+        setDeletePasswordError("Supabase configuration missing.");
+        setDeletePasswordSaving(false);
+        return;
+      }
+      const verifyClient = createClient(url, anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { error: authError } = await verifyClient.auth.signInWithPassword({
         email: deletePasswordLoginEmail.trim(),
         password: deletePasswordLoginPassword,
       });
@@ -1214,6 +1251,8 @@ export default function SettingsPage() {
         setDeletePasswordSaving(false);
         return;
       }
+      // Sign out the throwaway client immediately
+      await verifyClient.auth.signOut();
       // Verification succeeded — save the delete password
       updateOfficeSettings({ deletePassword: newPassword });
       setDeletePasswordSuccess("Delete password saved.");
@@ -2889,6 +2928,87 @@ export default function SettingsPage() {
               <p className="text-sm font-semibold text-[var(--brand-primary)]">{backupMessage}</p>
             )}
           </article>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        isOpen={expandedSections.recovery}
+        onToggle={() => toggleSection("recovery")}
+        title="Data Recovery"
+        description="Recover lost data from cloud backup or local safety snapshot."
+      >
+        <div className="space-y-4">
+          <article className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <h4 className="text-lg font-semibold text-amber-900">Recover From Cloud (Supabase)</h4>
+            <p className="mt-1 text-sm text-amber-800">
+              If your data was synced to the cloud before it was lost, this will pull the most recent cloud snapshot
+              and restore it to your local workspace. This overwrites any current local data.
+            </p>
+            <button
+              className="mt-3 rounded-xl bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+              disabled={recoveryLoading}
+              onClick={async () => {
+                setRecoveryError("");
+                setRecoveryMessage("");
+                setRecoveryLoading(true);
+                try {
+                  const recovered = await recoverFromRemote();
+                  if (recovered) {
+                    setRecoveryMessage("Data recovered from cloud! Reload the page to see your data.");
+                  } else {
+                    setRecoveryError("No cloud snapshot found for your account. The data may not have been synced.");
+                  }
+                } catch {
+                  setRecoveryError("Failed to connect to cloud. Check your internet connection.");
+                }
+                setRecoveryLoading(false);
+              }}
+              type="button"
+            >
+              {recoveryLoading ? "Recovering..." : "Recover From Cloud"}
+            </button>
+          </article>
+
+          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
+            <h4 className="text-lg font-semibold">Recover From Local Safety Backup</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              A safety backup is automatically created before any data clear or sync overwrite.
+              {backupInfo.exists
+                ? ` Last backup: ${new Date(backupInfo.backedUpAt).toLocaleString("en-US")}.`
+                : " No safety backup found."}
+            </p>
+            <button
+              className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-4 py-2 font-semibold disabled:opacity-50"
+              disabled={!backupInfo.exists || recoveryLoading}
+              onClick={() => {
+                setRecoveryError("");
+                setRecoveryMessage("");
+                const restored = restoreFromSafetyBackup();
+                if (restored) {
+                  setRecoveryMessage("Data restored from safety backup! Reload the page to see your data.");
+                } else {
+                  setRecoveryError("Could not restore from safety backup.");
+                }
+              }}
+              type="button"
+            >
+              Restore From Safety Backup
+            </button>
+          </article>
+
+          {recoveryError && <p className="text-sm font-semibold text-red-600">{recoveryError}</p>}
+          {recoveryMessage && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p className="text-sm font-semibold text-emerald-800">{recoveryMessage}</p>
+              <button
+                className="mt-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => window.location.reload()}
+                type="button"
+              >
+                Reload Page Now
+              </button>
+            </div>
+          )}
         </div>
       </CollapsibleSection>
 
