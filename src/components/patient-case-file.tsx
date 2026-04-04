@@ -699,18 +699,25 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const names = useMemo(() => getNames(patient.fullName), [patient.fullName]);
 
   const attorneyContacts = useMemo(
-    () => contacts.filter((contact) => normalizeLookupValue(contact.category) === "attorney"),
+    () =>
+      contacts
+        .filter((contact) => normalizeLookupValue(contact.category) === "attorney")
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [contacts],
   );
   const imagingCenters = useMemo(
     () =>
       contacts
         .filter((contact) => normalizeLookupValue(contact.category) === "imaging")
-        .map((contact) => contact.name),
+        .map((contact) => contact.name)
+        .sort((a, b) => a.localeCompare(b)),
     [contacts],
   );
   const specialistContactDirectory = useMemo(
-    () => contacts.filter((contact) => isSpecialistReferralContactCategory(contact.category)),
+    () =>
+      contacts
+        .filter((contact) => isSpecialistReferralContactCategory(contact.category))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [contacts],
   );
   const specialistContacts = useMemo(

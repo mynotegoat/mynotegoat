@@ -91,11 +91,13 @@ export default function ContactsPage() {
   }, [categoryOptions, editContactForm.category]);
 
   const filteredContacts = useMemo(() => {
-    if (resolvedSelectedCategory === "ALL") {
-      return contacts;
-    }
-    const target = normalizeLookupValue(resolvedSelectedCategory);
-    return contacts.filter((contact) => normalizeLookupValue(contact.category) === target);
+    const list =
+      resolvedSelectedCategory === "ALL"
+        ? contacts
+        : contacts.filter(
+            (contact) => normalizeLookupValue(contact.category) === normalizeLookupValue(resolvedSelectedCategory),
+          );
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [contacts, resolvedSelectedCategory]);
 
   const startEditing = (contact: ContactRecord) => {
