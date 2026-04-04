@@ -18,6 +18,28 @@ import {
 } from "@/lib/file-storage";
 import { patients as patientRecords } from "@/lib/mock-data";
 
+// ---------------------------------------------------------------------------
+// View mode
+// ---------------------------------------------------------------------------
+
+type FolderViewMode = "grid" | "list";
+const VIEW_MODE_KEY = "casemate.files-view-mode";
+
+function loadViewMode(): FolderViewMode {
+  if (typeof window === "undefined") return "list";
+  const stored = window.localStorage.getItem(VIEW_MODE_KEY);
+  return stored === "grid" ? "grid" : "list";
+}
+
+function saveViewMode(mode: FolderViewMode) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(VIEW_MODE_KEY, mode);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function getFileIcon(mimeType: string) {
   if (mimeType.startsWith("image/")) return "\uD83D\uDDBC\uFE0F";
   if (mimeType === "application/pdf") return "\uD83D\uDCC4";
@@ -73,7 +95,13 @@ export default function MyFilesPage() {
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [viewMode, setViewMode] = useState<FolderViewMode>(() => loadViewMode());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleViewMode = (mode: FolderViewMode) => {
+    setViewMode(mode);
+    saveViewMode(mode);
+  };
 
   // Derived data
   const subfolders = useMemo(
@@ -298,11 +326,31 @@ export default function MyFilesPage() {
           </>
         )}
 
+        {/* View mode toggle */}
+        <div className="ml-auto flex items-center gap-0.5 rounded-lg border border-[var(--line-soft)] bg-white p-0.5">
+          <button
+            className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-blue-600 text-white" : "text-[var(--text-muted)] hover:text-[var(--text-heading)]"}`}
+            onClick={() => toggleViewMode("list")}
+            title="List view"
+            type="button"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" /></svg>
+          </button>
+          <button
+            className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-[var(--text-muted)] hover:text-[var(--text-heading)]"}`}
+            onClick={() => toggleViewMode("grid")}
+            title="Grid view"
+            type="button"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect height="7" rx="1" width="7" x="3" y="3" /><rect height="7" rx="1" width="7" x="14" y="3" /><rect height="7" rx="1" width="7" x="3" y="14" /><rect height="7" rx="1" width="7" x="14" y="14" /></svg>
+          </button>
+        </div>
+
         {message && (
-          <span className="ml-auto text-sm text-green-700">{message}</span>
+          <span className="text-sm text-green-700">{message}</span>
         )}
         {uploadError && (
-          <span className="ml-auto text-sm text-red-600">{uploadError}</span>
+          <span className="text-sm text-red-600">{uploadError}</span>
         )}
       </div>
 
@@ -349,8 +397,8 @@ export default function MyFilesPage() {
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Folders grid */}
-        {subfolders.length > 0 && (
+        {/* Folders — Grid view */}
+        {subfolders.length > 0 && viewMode === "grid" && (
           <div className="mb-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
               Folders
@@ -433,6 +481,118 @@ export default function MyFilesPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Folders — List view */}
+        {subfolders.length > 0 && viewMode === "list" && (
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+              Folders
+            </p>
+            <div className="overflow-hidden rounded-xl border border-[var(--line-soft)]">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--line-soft)] bg-[var(--bg-soft)]">
+                    <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">Name</th>
+                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] sm:table-cell">Items</th>
+                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] md:table-cell">Created</th>
+                    <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subfolders.map((folder) => {
+                    const childFolderCount = state.folders.filter((f) => f.parentId === folder.id).length;
+                    const childFileCount = state.files.filter((f) => f.folderId === folder.id).length;
+                    const itemCount = childFolderCount + childFileCount;
+
+                    return (
+                      <tr
+                        key={folder.id}
+                        className="group border-b border-[var(--line-soft)] last:border-b-0 hover:bg-[var(--bg-soft)] cursor-pointer"
+                        onClick={() => {
+                          if (renamingFolderId !== folder.id) setCurrentFolderId(folder.id);
+                        }}
+                      >
+                        <td className="px-3 py-2">
+                          {renamingFolderId === folder.id ? (
+                            <form
+                              className="flex items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleRenameFolder(folder.id);
+                              }}
+                            >
+                              <input
+                                autoFocus
+                                className="w-48 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                value={renameValue}
+                              />
+                              <button className="text-xs text-blue-600 hover:underline" type="submit">Save</button>
+                              <button
+                                className="text-xs text-[var(--text-muted)] hover:underline"
+                                onClick={() => setRenamingFolderId(null)}
+                                type="button"
+                              >
+                                Cancel
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">
+                                {folder.isSystemFolder ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}
+                              </span>
+                              <span className="font-medium text-[var(--text-heading)]">
+                                {folder.name}
+                              </span>
+                              {folder.isSystemFolder && (
+                                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">System</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-2 text-[var(--text-muted)] sm:table-cell">
+                          {itemCount > 0 ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "Empty"}
+                        </td>
+                        <td className="hidden px-3 py-2 text-[var(--text-muted)] md:table-cell">
+                          {formatDate(folder.createdAt)}
+                        </td>
+                        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                          {!folder.isSystemFolder && renamingFolderId !== folder.id && (
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                                onClick={() => {
+                                  setRenamingFolderId(folder.id);
+                                  setRenameValue(folder.name);
+                                }}
+                                type="button"
+                              >
+                                Rename
+                              </button>
+                              <button
+                                className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                                disabled={deletingFolderId === folder.id}
+                                onClick={() => {
+                                  if (confirm(`Delete folder "${folder.name}" and all files inside?`)) {
+                                    handleDeleteFolder(folder.id);
+                                  }
+                                }}
+                                type="button"
+                              >
+                                {deletingFolderId === folder.id ? "..." : "Delete"}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
