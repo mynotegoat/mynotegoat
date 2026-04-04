@@ -30,6 +30,8 @@ import {
   type PatientRecord,
   type UpdatePatientRecordPatch,
   updatePatientRecordById,
+  syncRelatedCasesGroup,
+  removeFromRelatedCasesGroup,
 } from "@/lib/mock-data";
 import { usePlanTier } from "@/lib/plan-context";
 
@@ -833,7 +835,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   );
 
   const [relatedCaseDraft, setRelatedCaseDraft] = useState("");
-  const [relatedCases, setRelatedCases] = useState<RelatedCaseEntry[]>([]);
+  const [relatedCases, setRelatedCases] = useState<RelatedCaseEntry[]>(
+    () => (patient.relatedCases ?? []).map((entry) => ({
+      patientId: entry.patientId,
+      fullName: entry.fullName,
+      dateOfLoss: entry.dateOfLoss,
+    })),
+  );
   const [selectedRelatedPatientId, setSelectedRelatedPatientId] = useState<string | null>(null);
   const [relatedCaseMessage, setRelatedCaseMessage] = useState("");
   const [showRelatedCaseSuggestions, setShowRelatedCaseSuggestions] = useState(false);
@@ -1969,22 +1977,30 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
-    setRelatedCases((current) => [
-      ...current,
+    const nextRelated = [
+      ...relatedCases,
       {
         patientId: targetPatient.id,
         fullName: targetPatient.fullName,
         dateOfLoss: targetPatient.dateOfLoss,
       },
-    ]);
+    ];
+    setRelatedCases(nextRelated);
     setRelatedCaseDraft("");
     setSelectedRelatedPatientId(null);
     setRelatedCaseMessage("");
     setShowRelatedCaseSuggestions(false);
+
+    // Persist and sync bidirectionally — all group members get linked to each other
+    const allRelatedIds = nextRelated.map((entry) => entry.patientId);
+    syncRelatedCasesGroup(patient.id, allRelatedIds);
   };
 
-  const removeRelatedCase = (patientId: string) => {
-    setRelatedCases((current) => current.filter((entry) => entry.patientId !== patientId));
+  const removeRelatedCase = (removePatientId: string) => {
+    setRelatedCases((current) => current.filter((entry) => entry.patientId !== removePatientId));
+
+    // Persist and remove bidirectionally
+    removeFromRelatedCasesGroup(patient.id, removePatientId);
   };
 
   const openRelatedCaseNavigatePrompt = (entry: RelatedCaseEntry, event?: MouseEvent<HTMLElement>) => {
@@ -2098,6 +2114,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       address: patientAddress.trim(),
       caseStatus: caseStatus as PatientRecord["caseStatus"],
       lastUpdate: new Date().toISOString().slice(0, 10),
+      relatedCases: relatedCases.length > 0 ? relatedCases : undefined,
       xrayReferrals,
       mriReferrals,
       matrix: {

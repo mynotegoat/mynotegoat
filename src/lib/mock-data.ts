@@ -58,6 +58,7 @@ export interface PatientRecord {
   lastUpdate: string;
   priority: PatientPriority;
   matrix?: Partial<Record<PatientMatrixField, string>>;
+  relatedCases?: { patientId: string; fullName: string; dateOfLoss: string }[];
   xrayReferrals?: unknown[];
   mriReferrals?: unknown[];
 }
@@ -305,6 +306,7 @@ function normalizePatientRecord(value: unknown, index: number): PatientRecord | 
     lastUpdate,
     priority: normalizePriority(value.priority),
     matrix: normalizeMatrix(value.matrix),
+    relatedCases: Array.isArray(value.relatedCases) ? value.relatedCases : undefined,
     xrayReferrals: Array.isArray(value.xrayReferrals) ? value.xrayReferrals : undefined,
     mriReferrals: Array.isArray(value.mriReferrals) ? value.mriReferrals : undefined,
   };
@@ -474,7 +476,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
 export type UpdatePatientRecordPatch = Partial<
   Pick<
     PatientRecord,
-    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "xrayReferrals" | "mriReferrals"
+    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "relatedCases" | "xrayReferrals" | "mriReferrals"
   > & {
     matrix: Partial<Record<PatientMatrixField, string>>;
   }
@@ -505,4 +507,80 @@ export function updatePatientRecordById(patientId: string, patch: UpdatePatientR
   const nextPatients = patients.map((entry) => (entry.id === normalizedPatientId ? nextPatient : entry));
   persistPatients(nextPatients);
   return nextPatient;
+}
+
+/**
+ * Sync related cases bidirectionally across all members of a group.
+ * When patient A links to B and C, this ensures B also links to A+C, and C links to A+B.
+ */
+export function syncRelatedCasesGroup(sourcePatientId: string, relatedIds: string[]) {
+  // Build the full group: source + all related
+  const groupIds = new Set([sourcePatientId, ...relatedIds]);
+  const patientMap = new Map(patients.map((p) => [p.id, p]));
+
+  const nextPatients = patients.map((p) => {
+    if (!groupIds.has(p.id)) {
+      return p;
+    }
+    // This patient's related list = everyone in the group except themselves
+    const related = Array.from(groupIds)
+      .filter((id) => id !== p.id)
+      .map((id) => {
+        const other = patientMap.get(id);
+        return other
+          ? { patientId: other.id, fullName: other.fullName, dateOfLoss: other.dateOfLoss }
+          : null;
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+    return { ...p, relatedCases: related.length > 0 ? related : undefined };
+  });
+
+  persistPatients(nextPatients);
+}
+
+/**
+ * Remove a patient from a related cases group.
+ * Removes the link in both directions and updates the remaining group.
+ */
+export function removeFromRelatedCasesGroup(sourcePatientId: string, removePatientId: string) {
+  const sourcePatient = patients.find((p) => p.id === sourcePatientId);
+  if (!sourcePatient) return;
+
+  // Get current group from source (excluding the one being removed)
+  const remainingRelated = (sourcePatient.relatedCases ?? [])
+    .filter((entry) => entry.patientId !== removePatientId)
+    .map((entry) => entry.patientId);
+
+  // Full remaining group including source
+  const remainingGroupIds = new Set([sourcePatientId, ...remainingRelated]);
+
+  const patientMap = new Map(patients.map((p) => [p.id, p]));
+
+  const nextPatients = patients.map((p) => {
+    // The removed patient: strip source from their list
+    if (p.id === removePatientId) {
+      const updated = (p.relatedCases ?? []).filter((entry) => entry.patientId !== sourcePatientId);
+      return { ...p, relatedCases: updated.length > 0 ? updated : undefined };
+    }
+
+    // Members of the remaining group: rebuild their list
+    if (remainingGroupIds.has(p.id)) {
+      const related = Array.from(remainingGroupIds)
+        .filter((id) => id !== p.id)
+        .map((id) => {
+          const other = patientMap.get(id);
+          return other
+            ? { patientId: other.id, fullName: other.fullName, dateOfLoss: other.dateOfLoss }
+            : null;
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+      return { ...p, relatedCases: related.length > 0 ? related : undefined };
+    }
+
+    return p;
+  });
+
+  persistPatients(nextPatients);
 }
