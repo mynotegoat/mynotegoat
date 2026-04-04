@@ -580,7 +580,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         margin: 0 0 14px 0;
       }
       .office-logo {
-        max-height: 96px;
+        max-height: 160px;
         width: auto;
         object-fit: contain;
         display: block;

@@ -229,7 +229,7 @@ function buildSoapPrintHtml(config: {
         margin-bottom: 18px;
       }
       .logo {
-        max-height: 90px;
+        max-height: 160px;
         width: auto;
         object-fit: contain;
         display: block;

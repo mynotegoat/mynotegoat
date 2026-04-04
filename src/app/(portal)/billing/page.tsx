@@ -264,7 +264,7 @@ function buildPrintHtml(config: {
         justify-content: flex-end;
       }
       .logo-wrap img {
-        max-height: 74px;
+        max-height: 160px;
         width: auto;
         object-fit: contain;
       }
