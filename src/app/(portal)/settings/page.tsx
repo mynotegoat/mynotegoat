@@ -2952,11 +2952,40 @@ export default function SettingsPage() {
                 setRecoveryMessage("");
                 setRecoveryLoading(true);
                 try {
-                  const recovered = await recoverFromRemote();
+                  // First try the direct client-side recovery
+                  let recovered = await recoverFromRemote();
+                  if (!recovered) {
+                    // Fall back to the server-side recovery API that uses service role key
+                    const { getSupabaseBrowserClient } = await import("@/lib/supabase-browser");
+                    const supabase = getSupabaseBrowserClient();
+                    let workspaceId = "main-office";
+                    if (supabase) {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session?.user?.id) {
+                        workspaceId = `${session.user.id}:main-office`;
+                      }
+                    }
+                    const res = await fetch("/api/recover-snapshot", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ workspaceId }),
+                    });
+                    if (res.ok) {
+                      const result = await res.json();
+                      if (result.snapshot && typeof result.snapshot === "object") {
+                        for (const [key, value] of Object.entries(result.snapshot)) {
+                          if (typeof key === "string" && key.startsWith("casemate.") && key !== "casemate.__safety-backup__.v1") {
+                            window.localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+                          }
+                        }
+                        recovered = true;
+                      }
+                    }
+                  }
                   if (recovered) {
                     setRecoveryMessage("Data recovered from cloud! Reload the page to see your data.");
                   } else {
-                    setRecoveryError("No cloud snapshot found for your account. The data may not have been synced.");
+                    setRecoveryError("No cloud snapshot found for your account.");
                   }
                 } catch {
                   setRecoveryError("Failed to connect to cloud. Check your internet connection.");
