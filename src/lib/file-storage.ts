@@ -1,0 +1,135 @@
+"use client";
+
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+
+const BUCKET_NAME = "user-files";
+
+// ---------------------------------------------------------------------------
+// Get the authenticated user's ID
+// ---------------------------------------------------------------------------
+
+async function getAuthUserId(): Promise<string | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Upload a file to Supabase Storage
+// ---------------------------------------------------------------------------
+
+export async function uploadFileToStorage(
+  folderId: string,
+  file: File,
+): Promise<{ storagePath: string; error: string | null }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { storagePath: "", error: "Supabase not configured" };
+
+  const userId = await getAuthUserId();
+  if (!userId) return { storagePath: "", error: "Not authenticated" };
+
+  // Prefix with timestamp to avoid name collisions
+  const timestamp = Date.now();
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const storagePath = `${userId}/${folderId}/${timestamp}-${safeName}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(storagePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) {
+    return { storagePath: "", error: error.message };
+  }
+
+  return { storagePath, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Get a signed URL for preview/download (1 hour expiry)
+// ---------------------------------------------------------------------------
+
+export async function getSignedUrl(
+  storagePath: string,
+): Promise<{ url: string; error: string | null }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { url: "", error: "Supabase not configured" };
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .createSignedUrl(storagePath, 3600);
+
+  if (error || !data?.signedUrl) {
+    return { url: "", error: error?.message ?? "Could not generate URL" };
+  }
+
+  return { url: data.signedUrl, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Delete a file from Supabase Storage
+// ---------------------------------------------------------------------------
+
+export async function deleteFileFromStorage(
+  storagePath: string,
+): Promise<{ error: string | null }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { error: "Supabase not configured" };
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .remove([storagePath]);
+
+  return { error: error?.message ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// Delete multiple files from Supabase Storage
+// ---------------------------------------------------------------------------
+
+export async function deleteFilesFromStorage(
+  storagePaths: string[],
+): Promise<{ error: string | null }> {
+  if (storagePaths.length === 0) return { error: null };
+
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { error: "Supabase not configured" };
+
+  const { error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .remove(storagePaths);
+
+  return { error: error?.message ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// Trigger browser download
+// ---------------------------------------------------------------------------
+
+export async function downloadFile(storagePath: string, fileName: string) {
+  const { url, error } = await getSignedUrl(storagePath);
+  if (error || !url) return;
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ---------------------------------------------------------------------------
+// Format file size for display
+// ---------------------------------------------------------------------------
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}
