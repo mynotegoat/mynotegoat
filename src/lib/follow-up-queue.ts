@@ -1,6 +1,8 @@
 import type {
-  FollowUpImagingClearStage,
-  FollowUpSpecialistClearStage,
+  MriCtClearCondition,
+  SpecialistAppearWhen,
+  SpecialistClearCondition,
+  XrayClearCondition,
 } from "@/lib/dashboard-workspace-settings";
 import type { PatientRecord } from "@/lib/mock-data";
 import type { PatientFollowUpOverrideMap } from "@/lib/patient-follow-up-overrides";
@@ -26,9 +28,13 @@ export type FollowUpQueueOptions = {
   includeMriCt?: boolean;
   includeSpecialist?: boolean;
   includeLienLop?: boolean;
-  xrayClearWhen?: FollowUpImagingClearStage;
-  mriCtClearWhen?: FollowUpImagingClearStage;
-  specialistClearWhen?: FollowUpSpecialistClearStage;
+  xrayAppearAuto?: boolean;
+  mriAppearAuto?: boolean;
+  mriAppearDays?: number;
+  specialistAppearWhen?: SpecialistAppearWhen;
+  xrayClearedBy?: XrayClearCondition[];
+  mriCtClearedBy?: MriCtClearCondition[];
+  specialistClearedBy?: SpecialistClearCondition[];
   lienLopClearStatuses?: string[];
   followUpOverrides?: PatientFollowUpOverrideMap;
   maxItems?: number;
@@ -157,35 +163,6 @@ function cleanAttorneyLabel(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function hasReachedImagingClearStage(
-  stages: { sent: boolean; done: boolean; received: boolean; reviewed: boolean },
-  clearWhen: FollowUpImagingClearStage,
-) {
-  if (clearWhen === "sent") {
-    return stages.sent;
-  }
-  if (clearWhen === "done") {
-    return stages.done;
-  }
-  if (clearWhen === "received") {
-    return stages.received;
-  }
-  return stages.reviewed;
-}
-
-function hasReachedSpecialistClearStage(
-  stages: { sent: boolean; scheduled: boolean; report: boolean },
-  clearWhen: FollowUpSpecialistClearStage,
-) {
-  if (clearWhen === "sent") {
-    return stages.sent;
-  }
-  if (clearWhen === "scheduled") {
-    return stages.scheduled;
-  }
-  return stages.report;
-}
-
 function buildNormalizedStatusSet(statuses: string[]) {
   return new Set(statuses.map((status) => status.trim().toLowerCase()).filter(Boolean));
 }
@@ -206,6 +183,42 @@ function matchesLienClearStatus(lienRaw: string, clearStatuses: Set<string>) {
   return false;
 }
 
+function isXrayCleared(
+  clearedBy: Set<string>,
+  overrides: { patientRefused: boolean; completedPriorCare: boolean; notNeeded: boolean } | undefined,
+  xrayReviewedHasValue: boolean,
+) {
+  if (clearedBy.has("patientRefused") && overrides?.patientRefused) return true;
+  if (clearedBy.has("completedPriorCare") && overrides?.completedPriorCare) return true;
+  if (clearedBy.has("reviewed") && xrayReviewedHasValue) return true;
+  if (clearedBy.has("noXray") && overrides?.notNeeded) return true;
+  return false;
+}
+
+function isMriCtCleared(
+  clearedBy: Set<string>,
+  overrides: { patientRefused: boolean; completedPriorCare: boolean; notNeeded: boolean } | undefined,
+  mriReviewedHasValue: boolean,
+) {
+  if (clearedBy.has("patientRefused") && overrides?.patientRefused) return true;
+  if (clearedBy.has("completedPriorCare") && overrides?.completedPriorCare) return true;
+  if (clearedBy.has("reviewed") && mriReviewedHasValue) return true;
+  if (clearedBy.has("noMri") && overrides?.notNeeded) return true;
+  return false;
+}
+
+function isSpecialistCleared(
+  clearedBy: Set<string>,
+  overrides: { patientRefused: boolean; completedPriorCare: boolean; notNeeded: boolean } | undefined,
+  specialistReportHasValue: boolean,
+) {
+  if (clearedBy.has("patientRefused") && overrides?.patientRefused) return true;
+  if (clearedBy.has("completedPriorCare") && overrides?.completedPriorCare) return true;
+  if (clearedBy.has("report") && specialistReportHasValue) return true;
+  if (clearedBy.has("noPm") && overrides?.notNeeded) return true;
+  return false;
+}
+
 export function buildFollowUpItems(
   patientRows: PatientRecord[],
   options: FollowUpQueueOptions = {},
@@ -214,9 +227,16 @@ export function buildFollowUpItems(
   const includeMriCt = options.includeMriCt ?? true;
   const includeSpecialist = options.includeSpecialist ?? true;
   const includeLienLop = options.includeLienLop ?? true;
-  const xrayClearWhen = options.xrayClearWhen ?? "reviewed";
-  const mriCtClearWhen = options.mriCtClearWhen ?? "reviewed";
-  const specialistClearWhen = options.specialistClearWhen ?? "report";
+
+  const xrayAppearAuto = options.xrayAppearAuto ?? true;
+  const mriAppearAuto = options.mriAppearAuto ?? true;
+  const mriAppearDays = options.mriAppearDays ?? 21;
+  const specialistAppearWhen = options.specialistAppearWhen ?? "mri_sent";
+
+  const xrayClearedBySet = new Set<string>(options.xrayClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noXray"]);
+  const mriCtClearedBySet = new Set<string>(options.mriCtClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noMri"]);
+  const specialistClearedBySet = new Set<string>(options.specialistClearedBy ?? ["patientRefused", "completedPriorCare", "report", "noPm"]);
+
   const lienLopClearStatuses = buildNormalizedStatusSet(options.lienLopClearStatuses ?? []);
   const followUpOverrides = options.followUpOverrides ?? {};
   const maxItems =
@@ -253,227 +273,239 @@ export function buildFollowUpItems(
     const specialistReportRaw = matrix.specialistReport ?? "";
     const lienRaw = matrix.lien ?? "";
     const initialExamRaw = matrix.initialExam ?? "";
+
     const patientOverrides = followUpOverrides[patient.id];
-    const xrayManuallyCleared = Boolean(
-      patientOverrides?.xray.patientRefused || patientOverrides?.xray.completedPriorCare || patientOverrides?.xray.notNeeded,
-    );
-    const mriCtManuallyCleared = Boolean(
-      patientOverrides?.mriCt.patientRefused || patientOverrides?.mriCt.completedPriorCare || patientOverrides?.mriCt.notNeeded,
-    );
-    const specialistManuallyCleared = Boolean(
-      patientOverrides?.specialist.patientRefused || patientOverrides?.specialist.completedPriorCare || patientOverrides?.specialist.notNeeded,
-    );
-    const xrayStages = {
-      sent: hasMatrixValue(xraySentRaw),
-      done: hasMatrixValue(xrayDoneRaw),
-      received: hasMatrixValue(xrayReceivedRaw),
-      reviewed: hasMatrixValue(xrayReviewedRaw),
-    };
-    const xrayClearedByStage = hasReachedImagingClearStage(xrayStages, xrayClearWhen);
-    const mriStages = {
-      sent: hasMatrixValue(mriSentRaw),
-      done: hasMatrixValue(mriDoneRaw),
-      received: hasMatrixValue(mriReceivedRaw),
-      reviewed: hasMatrixValue(mriReviewedRaw),
-    };
-    const mriCtClearedByStage = hasReachedImagingClearStage(mriStages, mriCtClearWhen);
-    const specialistStages = {
-      sent: hasMatrixValue(specialistSentRaw),
-      scheduled: hasMatrixValue(specialistScheduledRaw),
-      report: hasMatrixValue(specialistReportRaw),
-    };
-    const specialistClearedByStage = hasReachedSpecialistClearStage(
-      specialistStages,
-      specialistClearWhen,
-    );
 
-    if (
-      includeXray &&
-      !xrayManuallyCleared &&
-      !xrayClearedByStage &&
-      hasMatrixValue(xraySentRaw) &&
-      !hasMatrixValue(xrayDoneRaw)
-    ) {
-      const sentDate = extractLeadingDatePart(xraySentRaw);
-      rows.push({
-        id: `${patient.id}-xray-done`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "X-Ray",
-        stage: "Sent, waiting for done date",
-        anchorDate: sentDate,
-        daysFromAnchor: getDaysFromToday(sentDate),
-        note: stripLeadingDatePart(xraySentRaw),
-      });
+    // --- X-Ray ---
+    if (includeXray) {
+      const xrayCleared = isXrayCleared(xrayClearedBySet, patientOverrides?.xray, hasMatrixValue(xrayReviewedRaw));
+
+      if (!xrayCleared) {
+        const hasSent = hasMatrixValue(xraySentRaw);
+        const hasDone = hasMatrixValue(xrayDoneRaw);
+        const hasReceived = hasMatrixValue(xrayReceivedRaw);
+
+        if (xrayAppearAuto && !hasSent) {
+          // Auto-appear: X-Ray not started yet
+          const anchorDate = toUsDateCanonical(patient.dateOfLoss);
+          rows.push({
+            id: `${patient.id}-xray-needs-sent`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "X-Ray",
+            stage: "Needs to be sent",
+            anchorDate,
+            daysFromAnchor: getDaysFromToday(anchorDate),
+            note: "",
+          });
+        } else if (hasSent && !hasDone) {
+          const sentDate = extractLeadingDatePart(xraySentRaw);
+          rows.push({
+            id: `${patient.id}-xray-done`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "X-Ray",
+            stage: "Sent, waiting for done date",
+            anchorDate: sentDate,
+            daysFromAnchor: getDaysFromToday(sentDate),
+            note: stripLeadingDatePart(xraySentRaw),
+          });
+        } else if (hasDone && !hasReceived) {
+          const doneDate = extractLeadingDatePart(xrayDoneRaw);
+          rows.push({
+            id: `${patient.id}-xray-report-received`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "X-Ray",
+            stage: "Done, waiting for report received",
+            anchorDate: doneDate,
+            daysFromAnchor: getDaysFromToday(doneDate),
+            note: "",
+          });
+        } else if (hasReceived && !hasMatrixValue(xrayReviewedRaw)) {
+          const receivedDate = extractLeadingDatePart(xrayReceivedRaw);
+          rows.push({
+            id: `${patient.id}-xray-review`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "X-Ray",
+            stage: "Report received, waiting for review",
+            anchorDate: receivedDate,
+            daysFromAnchor: getDaysFromToday(receivedDate),
+            note: "",
+          });
+        }
+      }
     }
 
-    if (
-      includeXray &&
-      !xrayManuallyCleared &&
-      !xrayClearedByStage &&
-      hasMatrixValue(xrayDoneRaw) &&
-      !hasMatrixValue(xrayReceivedRaw)
-    ) {
-      const doneDate = extractLeadingDatePart(xrayDoneRaw);
-      rows.push({
-        id: `${patient.id}-xray-report-received`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "X-Ray",
-        stage: "Done, waiting for report received",
-        anchorDate: doneDate,
-        daysFromAnchor: getDaysFromToday(doneDate),
-        note: "",
-      });
+    // --- MRI / CT ---
+    if (includeMriCt) {
+      const mriCleared = isMriCtCleared(mriCtClearedBySet, patientOverrides?.mriCt, hasMatrixValue(mriReviewedRaw));
+
+      if (!mriCleared) {
+        const hasSent = hasMatrixValue(mriSentRaw);
+        const hasDone = hasMatrixValue(mriDoneRaw);
+        const hasReceived = hasMatrixValue(mriReceivedRaw);
+
+        // Check appear rule for auto-appear
+        let shouldAppear = hasSent; // always show if process started
+        if (!hasSent && mriAppearAuto) {
+          const initialDate = extractLeadingDatePart(initialExamRaw);
+          if (initialDate) {
+            const daysSinceInitial = getDaysFromToday(initialDate);
+            if (daysSinceInitial !== null && daysSinceInitial >= mriAppearDays) {
+              shouldAppear = true;
+            }
+          }
+        }
+
+        if (shouldAppear && !hasSent) {
+          const anchorDate = extractLeadingDatePart(initialExamRaw) || toUsDateCanonical(patient.dateOfLoss);
+          rows.push({
+            id: `${patient.id}-mri-needs-sent`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "MRI / CT",
+            stage: "MRI due — needs to be sent",
+            anchorDate,
+            daysFromAnchor: getDaysFromToday(anchorDate),
+            note: "",
+          });
+        } else if (hasSent && !hasDone) {
+          const scheduledDate = extractLeadingDatePart(mriScheduledRaw);
+          const sentDate = extractLeadingDatePart(mriSentRaw);
+          rows.push({
+            id: `${patient.id}-mri-done`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "MRI / CT",
+            stage: scheduledDate
+              ? `Scheduled ${formatUsDateDisplay(scheduledDate)}, waiting for done date`
+              : "Sent, waiting for done date",
+            anchorDate: scheduledDate || sentDate,
+            daysFromAnchor: getDaysFromToday(scheduledDate || sentDate),
+            note: stripLeadingDatePart(mriSentRaw),
+          });
+        } else if (hasDone && !hasReceived) {
+          const doneDate = extractLeadingDatePart(mriDoneRaw);
+          rows.push({
+            id: `${patient.id}-mri-report-received`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "MRI / CT",
+            stage: "Done, waiting for report received",
+            anchorDate: doneDate,
+            daysFromAnchor: getDaysFromToday(doneDate),
+            note: "",
+          });
+        } else if (hasReceived && !hasMatrixValue(mriReviewedRaw)) {
+          const receivedDate = extractLeadingDatePart(mriReceivedRaw);
+          rows.push({
+            id: `${patient.id}-mri-review`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "MRI / CT",
+            stage: "Report received, waiting for review",
+            anchorDate: receivedDate,
+            daysFromAnchor: getDaysFromToday(receivedDate),
+            note: "",
+          });
+        }
+      }
     }
 
-    if (
-      includeXray &&
-      !xrayManuallyCleared &&
-      !xrayClearedByStage &&
-      hasMatrixValue(xrayReceivedRaw) &&
-      !hasMatrixValue(xrayReviewedRaw)
-    ) {
-      const receivedDate = extractLeadingDatePart(xrayReceivedRaw);
-      rows.push({
-        id: `${patient.id}-xray-review`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "X-Ray",
-        stage: "Report received, waiting for review",
-        anchorDate: receivedDate,
-        daysFromAnchor: getDaysFromToday(receivedDate),
-        note: "",
-      });
+    // --- Specialist ---
+    if (includeSpecialist) {
+      const specCleared = isSpecialistCleared(specialistClearedBySet, patientOverrides?.specialist, hasMatrixValue(specialistReportRaw));
+
+      if (!specCleared) {
+        const hasSent = hasMatrixValue(specialistSentRaw);
+        const hasScheduled = hasMatrixValue(specialistScheduledRaw);
+
+        // Specialist appear rule: show when MRI reaches a certain stage
+        let specialistShouldAppear = hasSent; // always show if referral started
+        if (!hasSent) {
+          if (specialistAppearWhen === "mri_sent" && hasMatrixValue(mriSentRaw)) {
+            specialistShouldAppear = true;
+          } else if (specialistAppearWhen === "mri_reviewed" && hasMatrixValue(mriReviewedRaw)) {
+            specialistShouldAppear = true;
+          }
+        }
+
+        if (specialistShouldAppear && !hasSent) {
+          const anchorDate = extractLeadingDatePart(mriSentRaw) || toUsDateCanonical(patient.dateOfLoss);
+          rows.push({
+            id: `${patient.id}-specialist-needs-sent`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "Specialist",
+            stage: "Referral needs to be sent",
+            anchorDate,
+            daysFromAnchor: getDaysFromToday(anchorDate),
+            note: "",
+          });
+        } else if (hasSent && !hasScheduled) {
+          const sentDate = extractLeadingDatePart(specialistSentRaw);
+          rows.push({
+            id: `${patient.id}-specialist-scheduled`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "Specialist",
+            stage: "Referral sent, waiting for scheduled date",
+            anchorDate: sentDate,
+            daysFromAnchor: getDaysFromToday(sentDate),
+            note: stripLeadingDatePart(specialistSentRaw),
+          });
+        } else if (hasScheduled && !hasMatrixValue(specialistReportRaw)) {
+          const scheduledDate = extractLeadingDatePart(specialistScheduledRaw);
+          rows.push({
+            id: `${patient.id}-specialist-report`,
+            patientId: patient.id,
+            patientName: patient.fullName,
+            caseNumber,
+            attorney: cleanAttorneyLabel(patient.attorney),
+            caseStatus: patient.caseStatus,
+            category: "Specialist",
+            stage: "Scheduled, waiting for specialist report",
+            anchorDate: scheduledDate,
+            daysFromAnchor: getDaysFromToday(scheduledDate),
+            note: stripLeadingDatePart(specialistSentRaw),
+          });
+        }
+      }
     }
 
-    if (
-      includeMriCt &&
-      !mriCtManuallyCleared &&
-      !mriCtClearedByStage &&
-      hasMatrixValue(mriSentRaw) &&
-      !hasMatrixValue(mriDoneRaw)
-    ) {
-      const scheduledDate = extractLeadingDatePart(mriScheduledRaw);
-      const sentDate = extractLeadingDatePart(mriSentRaw);
-      rows.push({
-        id: `${patient.id}-mri-done`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "MRI / CT",
-        stage: scheduledDate
-          ? `Scheduled ${formatUsDateDisplay(scheduledDate)}, waiting for done date`
-          : "Sent, waiting for done date",
-        anchorDate: scheduledDate || sentDate,
-        daysFromAnchor: getDaysFromToday(scheduledDate || sentDate),
-        note: stripLeadingDatePart(mriSentRaw),
-      });
-    }
-
-    if (
-      includeMriCt &&
-      !mriCtManuallyCleared &&
-      !mriCtClearedByStage &&
-      hasMatrixValue(mriDoneRaw) &&
-      !hasMatrixValue(mriReceivedRaw)
-    ) {
-      const doneDate = extractLeadingDatePart(mriDoneRaw);
-      rows.push({
-        id: `${patient.id}-mri-report-received`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "MRI / CT",
-        stage: "Done, waiting for report received",
-        anchorDate: doneDate,
-        daysFromAnchor: getDaysFromToday(doneDate),
-        note: "",
-      });
-    }
-
-    if (
-      includeMriCt &&
-      !mriCtManuallyCleared &&
-      !mriCtClearedByStage &&
-      hasMatrixValue(mriReceivedRaw) &&
-      !hasMatrixValue(mriReviewedRaw)
-    ) {
-      const receivedDate = extractLeadingDatePart(mriReceivedRaw);
-      rows.push({
-        id: `${patient.id}-mri-review`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "MRI / CT",
-        stage: "Report received, waiting for review",
-        anchorDate: receivedDate,
-        daysFromAnchor: getDaysFromToday(receivedDate),
-        note: "",
-      });
-    }
-
-    if (
-      includeSpecialist &&
-      !specialistManuallyCleared &&
-      !specialistClearedByStage &&
-      hasMatrixValue(specialistSentRaw) &&
-      !hasMatrixValue(specialistScheduledRaw)
-    ) {
-      const sentDate = extractLeadingDatePart(specialistSentRaw);
-      rows.push({
-        id: `${patient.id}-specialist-scheduled`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "Specialist",
-        stage: "Referral sent, waiting for scheduled date",
-        anchorDate: sentDate,
-        daysFromAnchor: getDaysFromToday(sentDate),
-        note: stripLeadingDatePart(specialistSentRaw),
-      });
-    }
-
-    if (
-      includeSpecialist &&
-      !specialistManuallyCleared &&
-      !specialistClearedByStage &&
-      hasMatrixValue(specialistScheduledRaw) &&
-      !hasMatrixValue(specialistReportRaw)
-    ) {
-      const scheduledDate = extractLeadingDatePart(specialistScheduledRaw);
-      rows.push({
-        id: `${patient.id}-specialist-report`,
-        patientId: patient.id,
-        patientName: patient.fullName,
-        caseNumber,
-        attorney: cleanAttorneyLabel(patient.attorney),
-        caseStatus: patient.caseStatus,
-        category: "Specialist",
-        stage: "Scheduled, waiting for specialist report",
-        anchorDate: scheduledDate,
-        daysFromAnchor: getDaysFromToday(scheduledDate),
-        note: stripLeadingDatePart(specialistSentRaw),
-      });
-    }
-
+    // --- Lien / LOP ---
     if (includeLienLop) {
       const normalizedLien = lienRaw.trim().toLowerCase();
       const lienHasValue = hasMatrixValue(lienRaw);

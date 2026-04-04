@@ -1,5 +1,28 @@
-export type FollowUpImagingClearStage = "sent" | "done" | "received" | "reviewed";
-export type FollowUpSpecialistClearStage = "sent" | "scheduled" | "report";
+export type XrayClearCondition = "patientRefused" | "completedPriorCare" | "reviewed" | "noXray";
+export type MriCtClearCondition = "patientRefused" | "completedPriorCare" | "reviewed" | "noMri";
+export type SpecialistClearCondition = "patientRefused" | "completedPriorCare" | "report" | "noPm";
+export type SpecialistAppearWhen = "mri_sent" | "mri_reviewed";
+
+export const XRAY_CLEAR_OPTIONS: { value: XrayClearCondition; label: string }[] = [
+  { value: "patientRefused", label: "Patient Refused" },
+  { value: "completedPriorCare", label: "Completed Prior Care" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "noXray", label: "No X-Ray" },
+];
+
+export const MRI_CT_CLEAR_OPTIONS: { value: MriCtClearCondition; label: string }[] = [
+  { value: "patientRefused", label: "Patient Refused" },
+  { value: "completedPriorCare", label: "Completed Prior Care" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "noMri", label: "No MRI" },
+];
+
+export const SPECIALIST_CLEAR_OPTIONS: { value: SpecialistClearCondition; label: string }[] = [
+  { value: "patientRefused", label: "Patient Refused" },
+  { value: "completedPriorCare", label: "Completed Prior Care" },
+  { value: "report", label: "Received" },
+  { value: "noPm", label: "No Spcl" },
+];
 
 export interface DashboardWorkspaceSettings {
   myTasks: {
@@ -13,9 +36,13 @@ export interface DashboardWorkspaceSettings {
     includeMriCt: boolean;
     includeSpecialist: boolean;
     includeLienLop: boolean;
-    xrayClearWhen: FollowUpImagingClearStage;
-    mriCtClearWhen: FollowUpImagingClearStage;
-    specialistClearWhen: FollowUpSpecialistClearStage;
+    xrayAppearAuto: boolean;
+    mriAppearAuto: boolean;
+    mriAppearDays: number;
+    specialistAppearWhen: SpecialistAppearWhen;
+    xrayClearedBy: XrayClearCondition[];
+    mriCtClearedBy: MriCtClearCondition[];
+    specialistClearedBy: SpecialistClearCondition[];
     lienLopClearStatuses: string[];
     staleDaysThreshold: number;
     maxItems: number;
@@ -23,6 +50,10 @@ export interface DashboardWorkspaceSettings {
 }
 
 const STORAGE_KEY = "casemate.dashboard-workspace-settings.v1";
+
+const VALID_XRAY_CLEAR: Set<string> = new Set(["patientRefused", "completedPriorCare", "reviewed", "noXray"]);
+const VALID_MRI_CLEAR: Set<string> = new Set(["patientRefused", "completedPriorCare", "reviewed", "noMri"]);
+const VALID_SPECIALIST_CLEAR: Set<string> = new Set(["patientRefused", "completedPriorCare", "report", "noPm"]);
 
 export function getDefaultDashboardWorkspaceSettings(): DashboardWorkspaceSettings {
   return {
@@ -37,9 +68,13 @@ export function getDefaultDashboardWorkspaceSettings(): DashboardWorkspaceSettin
       includeMriCt: true,
       includeSpecialist: true,
       includeLienLop: true,
-      xrayClearWhen: "reviewed",
-      mriCtClearWhen: "reviewed",
-      specialistClearWhen: "report",
+      xrayAppearAuto: true,
+      mriAppearAuto: true,
+      mriAppearDays: 21,
+      specialistAppearWhen: "mri_sent",
+      xrayClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noXray"],
+      mriCtClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noMri"],
+      specialistClearedBy: ["patientRefused", "completedPriorCare", "report", "noPm"],
       lienLopClearStatuses: ["Received"],
       staleDaysThreshold: 14,
       maxItems: 10,
@@ -54,20 +89,23 @@ function normalizeNumber(value: unknown, min: number, max: number, fallback: num
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function normalizeImagingClearStage(
-  value: unknown,
-  fallback: FollowUpImagingClearStage,
-): FollowUpImagingClearStage {
-  return value === "sent" || value === "done" || value === "received" || value === "reviewed"
-    ? value
-    : fallback;
+function normalizeSpecialistAppearWhen(value: unknown, fallback: SpecialistAppearWhen): SpecialistAppearWhen {
+  return value === "mri_sent" || value === "mri_reviewed" ? value : fallback;
 }
 
-function normalizeSpecialistClearStage(
-  value: unknown,
-  fallback: FollowUpSpecialistClearStage,
-): FollowUpSpecialistClearStage {
-  return value === "sent" || value === "scheduled" || value === "report" ? value : fallback;
+function normalizeClearArray<T extends string>(value: unknown, validSet: Set<string>, fallback: T[]): T[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+  const result: T[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry === "string" && validSet.has(entry) && !seen.has(entry)) {
+      seen.add(entry);
+      result.push(entry as T);
+    }
+  }
+  return result.length > 0 ? result : fallback;
 }
 
 function normalizeStatusList(value: unknown, fallback: string[]) {
@@ -99,6 +137,22 @@ export function normalizeDashboardWorkspaceSettings(value: unknown): DashboardWo
     DashboardWorkspaceSettings["patientFollowUp"]
   >;
 
+  // Migration: if old xrayClearWhen/mriCtClearWhen/specialistClearWhen fields exist, map them
+  const rawAny = rawFollowUp as Record<string, unknown>;
+  let xrayClearedByRaw = rawFollowUp.xrayClearedBy;
+  let mriCtClearedByRaw = rawFollowUp.mriCtClearedBy;
+  let specialistClearedByRaw = rawFollowUp.specialistClearedBy;
+
+  if (!xrayClearedByRaw && typeof rawAny.xrayClearWhen === "string") {
+    xrayClearedByRaw = ["patientRefused", "completedPriorCare", rawAny.xrayClearWhen as XrayClearCondition, "noXray"];
+  }
+  if (!mriCtClearedByRaw && typeof rawAny.mriCtClearWhen === "string") {
+    mriCtClearedByRaw = ["patientRefused", "completedPriorCare", rawAny.mriCtClearWhen as MriCtClearCondition, "noMri"];
+  }
+  if (!specialistClearedByRaw && typeof rawAny.specialistClearWhen === "string") {
+    specialistClearedByRaw = ["patientRefused", "completedPriorCare", rawAny.specialistClearWhen as SpecialistClearCondition, "noPm"];
+  }
+
   return {
     myTasks: {
       showOnDashboard:
@@ -127,17 +181,25 @@ export function normalizeDashboardWorkspaceSettings(value: unknown): DashboardWo
         typeof rawFollowUp.includeLienLop === "boolean"
           ? rawFollowUp.includeLienLop
           : defaults.patientFollowUp.includeLienLop,
-      xrayClearWhen: normalizeImagingClearStage(
-        rawFollowUp.xrayClearWhen,
-        defaults.patientFollowUp.xrayClearWhen,
+      xrayAppearAuto:
+        typeof rawFollowUp.xrayAppearAuto === "boolean"
+          ? rawFollowUp.xrayAppearAuto
+          : defaults.patientFollowUp.xrayAppearAuto,
+      mriAppearAuto:
+        typeof rawFollowUp.mriAppearAuto === "boolean"
+          ? rawFollowUp.mriAppearAuto
+          : defaults.patientFollowUp.mriAppearAuto,
+      mriAppearDays: normalizeNumber(rawFollowUp.mriAppearDays, 1, 365, defaults.patientFollowUp.mriAppearDays),
+      specialistAppearWhen: normalizeSpecialistAppearWhen(
+        rawFollowUp.specialistAppearWhen,
+        defaults.patientFollowUp.specialistAppearWhen,
       ),
-      mriCtClearWhen: normalizeImagingClearStage(
-        rawFollowUp.mriCtClearWhen,
-        defaults.patientFollowUp.mriCtClearWhen,
-      ),
-      specialistClearWhen: normalizeSpecialistClearStage(
-        rawFollowUp.specialistClearWhen,
-        defaults.patientFollowUp.specialistClearWhen,
+      xrayClearedBy: normalizeClearArray(xrayClearedByRaw, VALID_XRAY_CLEAR, defaults.patientFollowUp.xrayClearedBy),
+      mriCtClearedBy: normalizeClearArray(mriCtClearedByRaw, VALID_MRI_CLEAR, defaults.patientFollowUp.mriCtClearedBy),
+      specialistClearedBy: normalizeClearArray(
+        specialistClearedByRaw,
+        VALID_SPECIALIST_CLEAR,
+        defaults.patientFollowUp.specialistClearedBy,
       ),
       lienLopClearStatuses: normalizeStatusList(
         rawFollowUp.lienLopClearStatuses,

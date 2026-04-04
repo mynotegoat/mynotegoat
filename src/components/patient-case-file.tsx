@@ -2465,8 +2465,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           </label>
         </div>
 
-        <div className="grid items-start gap-3 p-3 xl:grid-cols-3">
-          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="grid items-start gap-5 p-4 xl:grid-cols-3">
+          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <button
               className="flex w-full items-center justify-between rounded-xl bg-[#6db5c8] px-3 py-2 text-2xl font-semibold tracking-[-0.01em] text-white"
               onClick={() => toggleImagingPanel("xray")}
@@ -2477,9 +2477,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.xray && (
-              <div className="mt-3 space-y-3">
+              <div className="mt-4 space-y-4">
                 {/* Row 1: Sent Date + Imaging Center */}
-                <div className="grid grid-cols-[140px_1fr] gap-2">
+                <div className="grid grid-cols-[140px_1fr] gap-3">
                   <label className="grid gap-1">
                     <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Sent Date</span>
                     <input
@@ -2544,12 +2544,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Row 3: Completed + Report Received + Report Reviewed */}
-                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    <label className="grid gap-1">
+                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) =>
@@ -2559,10 +2559,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         value={xray.doneDate}
                       />
                     </label>
-                    <label className="grid gap-1">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) =>
@@ -2575,10 +2575,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         value={xray.reportReceivedDate}
                       />
                     </label>
-                    <label className="grid gap-1">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) =>
@@ -2597,7 +2597,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
-                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                     onClick={() => saveImagingReferral("xray")}
                     type="button"
                   >
@@ -2605,7 +2605,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </button>
                   {editingXrayReferralId && (
                     <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2.5 text-sm font-semibold"
                       onClick={() => cancelImagingReferralEdit("xray")}
                       type="button"
                     >
@@ -2615,8 +2615,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Overrides */}
-                <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <div className="flex flex-wrap gap-5 rounded-lg border border-[var(--line-soft)] bg-white px-4 py-3">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.patientRefused}
                       onChange={(event) => setPatientRefused(patient.id, "xray", event.target.checked)}
@@ -2624,7 +2624,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Patient Refused
                   </label>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.completedPriorCare}
                       onChange={(event) => setCompletedPriorCare(patient.id, "xray", event.target.checked)}
@@ -2632,7 +2632,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Completed Prior Care
                   </label>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.notNeeded}
                       onChange={(event) => setNotNeeded(patient.id, "xray", event.target.checked)}
@@ -2693,7 +2693,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <button
               className="flex w-full items-center justify-between rounded-xl bg-[#6db5c8] px-3 py-2 text-2xl font-semibold tracking-[-0.01em] text-white"
               onClick={() => toggleImagingPanel("mri")}
@@ -2704,8 +2704,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.mri && (
-              <div className="mt-3 space-y-3">
-                <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-xs font-semibold">
+              <div className="mt-4 space-y-4">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold">
                   <input
                     checked={Boolean(mri.isCt)}
                     onChange={(event) =>
@@ -2720,7 +2720,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
 
                 {/* Row 1: Sent Date + Imaging Center */}
-                <div className="grid grid-cols-[140px_1fr] gap-2">
+                <div className="grid grid-cols-[140px_1fr] gap-3">
                   <label className="grid gap-1">
                     <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">Sent Date</span>
                     <input
@@ -2778,12 +2778,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Row 3: Completed + Report Received + Report Reviewed */}
-                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    <label className="grid gap-1">
+                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) => setMri((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))}
@@ -2791,10 +2791,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         value={mri.doneDate}
                       />
                     </label>
-                    <label className="grid gap-1">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) =>
@@ -2807,10 +2807,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         value={mri.reportReceivedDate}
                       />
                     </label>
-                    <label className="grid gap-1">
+                    <label className="grid gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
                       <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
                         inputMode="numeric"
                         maxLength={10}
                         onChange={(event) =>
@@ -2829,7 +2829,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
-                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                    className="w-full rounded-lg bg-[var(--brand-primary)] px-3 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
                     onClick={() => saveImagingReferral("mri")}
                     type="button"
                   >
@@ -2837,7 +2837,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </button>
                   {editingMriReferralId && (
                     <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2.5 text-sm font-semibold"
                       onClick={() => cancelImagingReferralEdit("mri")}
                       type="button"
                     >
@@ -2847,8 +2847,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
 
                 {/* Overrides */}
-                <div className="flex flex-wrap gap-4 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2">
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                <div className="flex flex-wrap gap-5 rounded-lg border border-[var(--line-soft)] bg-white px-4 py-3">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.patientRefused}
                       onChange={(event) => setPatientRefused(patient.id, "mriCt", event.target.checked)}
@@ -2856,7 +2856,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Patient Refused
                   </label>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.completedPriorCare}
                       onChange={(event) => setCompletedPriorCare(patient.id, "mriCt", event.target.checked)}
@@ -2864,7 +2864,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     />
                     Completed Prior Care
                   </label>
-                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.notNeeded}
                       onChange={(event) => setNotNeeded(patient.id, "mriCt", event.target.checked)}
@@ -2925,7 +2925,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </div>
           </article>
 
-          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
             <button
               className="flex w-full items-center justify-between rounded-xl bg-[#6db5c8] px-3 py-2 text-2xl font-semibold tracking-[-0.01em] text-white"
               onClick={() => toggleImagingPanel("specialist")}
@@ -2936,8 +2936,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </button>
 
             {imagingPanelsOpen.specialist && (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-1 sm:col-span-2">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1.5 sm:col-span-2">
                   <span className="text-sm font-semibold text-[var(--text-muted)]">Specialist</span>
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -2949,7 +2949,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     value={specialistDraft.specialist}
                   />
                 </label>
-                <label className="grid gap-1">
+                <label className="grid gap-1.5">
                   <span className="text-sm font-semibold text-[var(--text-muted)]">Sent Date</span>
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -2972,7 +2972,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 >
                   Add Specialist
                 </button>
-                <div className="flex flex-wrap gap-4 rounded-xl border border-[var(--line-soft)] bg-white p-2 sm:col-span-2">
+                <div className="flex flex-wrap gap-5 rounded-xl border border-[var(--line-soft)] bg-white px-4 py-3 sm:col-span-2">
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={specialistFollowUpOverride.patientRefused}
@@ -2995,7 +2995,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       onChange={(event) => setNotNeeded(patient.id, "specialist", event.target.checked)}
                       type="checkbox"
                     />
-                    No PM
+                    No Spcl
                   </label>
                 </div>
               </div>

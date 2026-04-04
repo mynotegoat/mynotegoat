@@ -924,9 +924,13 @@ export default function SettingsPage() {
     setFollowUpIncludeMriCt,
     setFollowUpIncludeSpecialist,
     setFollowUpIncludeLienLop,
-    setFollowUpXrayClearWhen,
-    setFollowUpMriCtClearWhen,
-    setFollowUpSpecialistClearWhen,
+    setXrayAppearAuto,
+    setMriAppearAuto,
+    setMriAppearDays,
+    setSpecialistAppearWhen,
+    toggleXrayClearedBy,
+    toggleMriCtClearedBy,
+    toggleSpecialistClearedBy,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
@@ -2100,21 +2104,37 @@ export default function SettingsPage() {
                   <p className="text-sm font-bold">X-Ray</p>
                 </div>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-1">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear</span>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        checked={dashboardWorkspaceSettings.patientFollowUp.xrayAppearAuto}
+                        onChange={(event) => setXrayAppearAuto(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Auto (on case creation)
+                    </label>
+                  </div>
+                  <div className="grid gap-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
-                    <select
-                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) =>
-                        setFollowUpXrayClearWhen(event.target.value as "sent" | "done" | "received" | "reviewed")
-                      }
-                      value={dashboardWorkspaceSettings.patientFollowUp.xrayClearWhen}
-                    >
-                      <option value="sent">Sent</option>
-                      <option value="done">Completed</option>
-                      <option value="received">Report Received</option>
-                      <option value="reviewed">Report Reviewed</option>
-                    </select>
-                  </label>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {([
+                        ["patientRefused", "Patient Refused"],
+                        ["completedPriorCare", "Completed Prior Care"],
+                        ["reviewed", "Reviewed"],
+                        ["noXray", "No X-Ray"],
+                      ] as const).map(([val, label]) => (
+                        <label key={val} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.xrayClearedBy.includes(val)}
+                            onChange={(event) => toggleXrayClearedBy(val, event.target.checked)}
+                            type="checkbox"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2130,42 +2150,47 @@ export default function SettingsPage() {
                 </div>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-1">
-                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">MRI Due alert</span>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear</span>
                     <div className="flex items-center gap-2">
                       <label className="inline-flex items-center gap-2 text-sm font-medium">
                         <input
-                          checked={priorityRules.includeMriDue}
-                          onChange={(event) => setIncludeMriDue(event.target.checked)}
+                          checked={dashboardWorkspaceSettings.patientFollowUp.mriAppearAuto}
+                          onChange={(event) => setMriAppearAuto(event.target.checked)}
                           type="checkbox"
                         />
-                        Alert after
+                        Auto after
                       </label>
                       <input
                         className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                        disabled={!priorityRules.includeMriDue}
+                        disabled={!dashboardWorkspaceSettings.patientFollowUp.mriAppearAuto}
                         min={1}
-                        onChange={(event) => setMriDueDaysFromInitial(Number(event.target.value) || 1)}
+                        onChange={(event) => setMriAppearDays(Number(event.target.value) || 1)}
                         type="number"
-                        value={priorityRules.mriDueDaysFromInitial}
+                        value={dashboardWorkspaceSettings.patientFollowUp.mriAppearDays}
                       />
                       <span className="text-sm text-[var(--text-muted)]">days from initial</span>
                     </div>
                   </div>
-                  <label className="grid gap-1">
+                  <div className="grid gap-1">
                     <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
-                    <select
-                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) =>
-                        setFollowUpMriCtClearWhen(event.target.value as "sent" | "done" | "received" | "reviewed")
-                      }
-                      value={dashboardWorkspaceSettings.patientFollowUp.mriCtClearWhen}
-                    >
-                      <option value="sent">Sent</option>
-                      <option value="done">Completed</option>
-                      <option value="received">Report Received</option>
-                      <option value="reviewed">Report Reviewed</option>
-                    </select>
-                  </label>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {([
+                        ["patientRefused", "Patient Refused"],
+                        ["completedPriorCare", "Completed Prior Care"],
+                        ["reviewed", "Reviewed"],
+                        ["noMri", "No MRI"],
+                      ] as const).map(([val, label]) => (
+                        <label key={val} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.mriCtClearedBy.includes(val)}
+                            onChange={(event) => toggleMriCtClearedBy(val, event.target.checked)}
+                            type="checkbox"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2180,20 +2205,39 @@ export default function SettingsPage() {
                   <p className="text-sm font-bold">Specialist</p>
                 </div>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-1">
-                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Appear when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
-                        setFollowUpSpecialistClearWhen(event.target.value as "sent" | "scheduled" | "report")
+                        setSpecialistAppearWhen(event.target.value as "mri_sent" | "mri_reviewed")
                       }
-                      value={dashboardWorkspaceSettings.patientFollowUp.specialistClearWhen}
+                      value={dashboardWorkspaceSettings.patientFollowUp.specialistAppearWhen}
                     >
-                      <option value="sent">Sent</option>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="report">Report Received</option>
+                      <option value="mri_sent">MRI Sent</option>
+                      <option value="mri_reviewed">MRI Reviewed</option>
                     </select>
-                  </label>
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {([
+                        ["patientRefused", "Patient Refused"],
+                        ["completedPriorCare", "Completed Prior Care"],
+                        ["report", "Received"],
+                        ["noPm", "No Spcl"],
+                      ] as const).map(([val, label]) => (
+                        <label key={val} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.specialistClearedBy.includes(val)}
+                            onChange={(event) => toggleSpecialistClearedBy(val, event.target.checked)}
+                            type="checkbox"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 

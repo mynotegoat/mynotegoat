@@ -5,9 +5,11 @@ import {
   getDefaultDashboardWorkspaceSettings,
   loadDashboardWorkspaceSettings,
   saveDashboardWorkspaceSettings,
-  type FollowUpImagingClearStage,
-  type FollowUpSpecialistClearStage,
   type DashboardWorkspaceSettings,
+  type MriCtClearCondition,
+  type SpecialistAppearWhen,
+  type SpecialistClearCondition,
+  type XrayClearCondition,
 } from "@/lib/dashboard-workspace-settings";
 
 export function useDashboardWorkspaceSettings() {
@@ -161,41 +163,100 @@ export function useDashboardWorkspaceSettings() {
     saveDashboardWorkspaceSettings(defaults);
   }, []);
 
-  const setFollowUpXrayClearWhen = useCallback(
-    (value: FollowUpImagingClearStage) => {
+  // --- Appear rules ---
+
+  const setXrayAppearAuto = useCallback(
+    (enabled: boolean) => {
       updateSettings((current) => ({
         ...current,
         patientFollowUp: {
           ...current.patientFollowUp,
-          xrayClearWhen: value,
+          xrayAppearAuto: enabled,
         },
       }));
     },
     [updateSettings],
   );
 
-  const setFollowUpMriCtClearWhen = useCallback(
-    (value: FollowUpImagingClearStage) => {
+  const setMriAppearAuto = useCallback(
+    (enabled: boolean) => {
       updateSettings((current) => ({
         ...current,
         patientFollowUp: {
           ...current.patientFollowUp,
-          mriCtClearWhen: value,
+          mriAppearAuto: enabled,
         },
       }));
     },
     [updateSettings],
   );
 
-  const setFollowUpSpecialistClearWhen = useCallback(
-    (value: FollowUpSpecialistClearStage) => {
+  const setMriAppearDays = useCallback(
+    (value: number) => {
       updateSettings((current) => ({
         ...current,
         patientFollowUp: {
           ...current.patientFollowUp,
-          specialistClearWhen: value,
+          mriAppearDays: Math.max(1, Math.min(365, Math.round(value || 1))),
         },
       }));
+    },
+    [updateSettings],
+  );
+
+  const setSpecialistAppearWhen = useCallback(
+    (value: SpecialistAppearWhen) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          specialistAppearWhen: value,
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  // --- Cleared-by rules ---
+
+  const toggleXrayClearedBy = useCallback(
+    (condition: XrayClearCondition, enabled: boolean) => {
+      updateSettings((current) => {
+        const prev = current.patientFollowUp.xrayClearedBy;
+        const next = enabled ? [...prev.filter((c) => c !== condition), condition] : prev.filter((c) => c !== condition);
+        return {
+          ...current,
+          patientFollowUp: { ...current.patientFollowUp, xrayClearedBy: next },
+        };
+      });
+    },
+    [updateSettings],
+  );
+
+  const toggleMriCtClearedBy = useCallback(
+    (condition: MriCtClearCondition, enabled: boolean) => {
+      updateSettings((current) => {
+        const prev = current.patientFollowUp.mriCtClearedBy;
+        const next = enabled ? [...prev.filter((c) => c !== condition), condition] : prev.filter((c) => c !== condition);
+        return {
+          ...current,
+          patientFollowUp: { ...current.patientFollowUp, mriCtClearedBy: next },
+        };
+      });
+    },
+    [updateSettings],
+  );
+
+  const toggleSpecialistClearedBy = useCallback(
+    (condition: SpecialistClearCondition, enabled: boolean) => {
+      updateSettings((current) => {
+        const prev = current.patientFollowUp.specialistClearedBy;
+        const next = enabled ? [...prev.filter((c) => c !== condition), condition] : prev.filter((c) => c !== condition);
+        return {
+          ...current,
+          patientFollowUp: { ...current.patientFollowUp, specialistClearedBy: next },
+        };
+      });
     },
     [updateSettings],
   );
@@ -223,9 +284,13 @@ export function useDashboardWorkspaceSettings() {
     setFollowUpIncludeMriCt,
     setFollowUpIncludeSpecialist,
     setFollowUpIncludeLienLop,
-    setFollowUpXrayClearWhen,
-    setFollowUpMriCtClearWhen,
-    setFollowUpSpecialistClearWhen,
+    setXrayAppearAuto,
+    setMriAppearAuto,
+    setMriAppearDays,
+    setSpecialistAppearWhen,
+    toggleXrayClearedBy,
+    toggleMriCtClearedBy,
+    toggleSpecialistClearedBy,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
