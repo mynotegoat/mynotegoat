@@ -936,7 +936,9 @@ export default function SettingsPage() {
     toggleSpecialistClearedBy,
     setXrayNoReportWarningDays,
     setMriNoReportWarningDays,
+    setMriNoScheduleWarningDays,
     setSpecialistNoReportWarningDays,
+    setSpecialistNoScheduleWarningDays,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
@@ -2351,6 +2353,20 @@ export default function SettingsPage() {
                       <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>
                   </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">No Schedule Date Warning</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">Warn after</span>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        min={0}
+                        onChange={(event) => setMriNoScheduleWarningDays(Number(event.target.value) || 0)}
+                        type="number"
+                        value={dashboardWorkspaceSettings.patientFollowUp.mriNoScheduleWarningDays}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2425,6 +2441,20 @@ export default function SettingsPage() {
                         onChange={(event) => setSpecialistNoReportWarningDays(Number(event.target.value) || 0)}
                         type="number"
                         value={dashboardWorkspaceSettings.patientFollowUp.specialistNoReportWarningDays}
+                      />
+                      <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
+                    </div>
+                  </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">No Schedule Date Warning</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">Warn after</span>
+                      <input
+                        className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        min={0}
+                        onChange={(event) => setSpecialistNoScheduleWarningDays(Number(event.target.value) || 0)}
+                        type="number"
+                        value={dashboardWorkspaceSettings.patientFollowUp.specialistNoScheduleWarningDays}
                       />
                       <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>

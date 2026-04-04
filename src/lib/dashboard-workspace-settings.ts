@@ -43,7 +43,9 @@ export interface DashboardWorkspaceSettings {
     specialistAppearWhen: SpecialistAppearWhen;
     xrayNoReportWarningDays: number;
     mriNoReportWarningDays: number;
+    mriNoScheduleWarningDays: number;
     specialistNoReportWarningDays: number;
+    specialistNoScheduleWarningDays: number;
     xrayClearedBy: XrayClearCondition[];
     mriCtClearedBy: MriCtClearCondition[];
     specialistClearedBy: SpecialistClearCondition[];
@@ -78,7 +80,9 @@ export function getDefaultDashboardWorkspaceSettings(): DashboardWorkspaceSettin
       specialistAppearWhen: "auto",
       xrayNoReportWarningDays: 14,
       mriNoReportWarningDays: 14,
+      mriNoScheduleWarningDays: 3,
       specialistNoReportWarningDays: 14,
+      specialistNoScheduleWarningDays: 3,
       xrayClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noXray"],
       mriCtClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noMri"],
       specialistClearedBy: ["patientRefused", "completedPriorCare", "report", "noPm"],
@@ -207,7 +211,9 @@ export function normalizeDashboardWorkspaceSettings(value: unknown): DashboardWo
       ),
       xrayNoReportWarningDays: normalizeNumber(rawFollowUp.xrayNoReportWarningDays, 0, 365, defaults.patientFollowUp.xrayNoReportWarningDays),
       mriNoReportWarningDays: normalizeNumber(rawFollowUp.mriNoReportWarningDays, 0, 365, defaults.patientFollowUp.mriNoReportWarningDays),
+      mriNoScheduleWarningDays: normalizeNumber(rawFollowUp.mriNoScheduleWarningDays, 0, 365, defaults.patientFollowUp.mriNoScheduleWarningDays),
       specialistNoReportWarningDays: normalizeNumber(rawFollowUp.specialistNoReportWarningDays, 0, 365, defaults.patientFollowUp.specialistNoReportWarningDays),
+      specialistNoScheduleWarningDays: normalizeNumber(rawFollowUp.specialistNoScheduleWarningDays, 0, 365, defaults.patientFollowUp.specialistNoScheduleWarningDays),
       xrayClearedBy: normalizeClearArray(xrayClearedByRaw, VALID_XRAY_CLEAR, defaults.patientFollowUp.xrayClearedBy),
       mriCtClearedBy: normalizeClearArray(mriCtClearedByRaw, VALID_MRI_CLEAR, defaults.patientFollowUp.mriCtClearedBy),
       specialistClearedBy: normalizeClearArray(

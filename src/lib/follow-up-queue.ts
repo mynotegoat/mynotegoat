@@ -42,7 +42,9 @@ export type FollowUpQueueOptions = {
   closedCaseStatuses?: string[];
   xrayNoReportWarningDays?: number;
   mriNoReportWarningDays?: number;
+  mriNoScheduleWarningDays?: number;
   specialistNoReportWarningDays?: number;
+  specialistNoScheduleWarningDays?: number;
 };
 
 export function formatUsDateDisplay(value: string) {
@@ -239,7 +241,9 @@ export function buildFollowUpItems(
 
   const xrayNoReportDays = options.xrayNoReportWarningDays ?? 14;
   const mriNoReportDays = options.mriNoReportWarningDays ?? 14;
+  const mriNoScheduleDays = options.mriNoScheduleWarningDays ?? 3;
   const specialistNoReportDays = options.specialistNoReportWarningDays ?? 14;
+  const specialistNoScheduleDays = options.specialistNoScheduleWarningDays ?? 3;
 
   const xrayClearedBySet = new Set<string>(options.xrayClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noXray"]);
   const mriCtClearedBySet = new Set<string>(options.mriCtClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noMri"]);
@@ -490,6 +494,28 @@ export function buildFollowUpItems(
             });
           }
         }
+
+        // No schedule date warning
+        const hasScheduled = hasMatrixValue(mriScheduledRaw);
+        if (mriNoScheduleDays > 0 && hasSent && !hasScheduled && !hasDone) {
+          const sentDate = extractLeadingDatePart(mriSentRaw);
+          const daysSinceSent = getDaysFromToday(sentDate);
+          if (daysSinceSent !== null && daysSinceSent >= mriNoScheduleDays) {
+            rows.push({
+              id: `${patient.id}-mri-no-schedule`,
+              patientId: patient.id,
+              patientName: patient.fullName,
+              caseNumber,
+              attorney: cleanAttorneyLabel(patient.attorney),
+              caseStatus: patient.caseStatus,
+              category: "MRI / CT",
+              stage: `Appt not scheduled (${daysSinceSent} days since sent)`,
+              anchorDate: sentDate,
+              daysFromAnchor: daysSinceSent,
+              note: "",
+            });
+          }
+        }
       }
     }
 
@@ -575,6 +601,27 @@ export function buildFollowUpItems(
               caseStatus: patient.caseStatus,
               category: "Specialist",
               stage: `No report received (${daysSinceSent} days since sent)`,
+              anchorDate: sentDate,
+              daysFromAnchor: daysSinceSent,
+              note: "",
+            });
+          }
+        }
+
+        // No schedule date warning
+        if (specialistNoScheduleDays > 0 && hasSent && !hasScheduled) {
+          const sentDate = extractLeadingDatePart(specialistSentRaw);
+          const daysSinceSent = getDaysFromToday(sentDate);
+          if (daysSinceSent !== null && daysSinceSent >= specialistNoScheduleDays) {
+            rows.push({
+              id: `${patient.id}-specialist-no-schedule`,
+              patientId: patient.id,
+              patientName: patient.fullName,
+              caseNumber,
+              attorney: cleanAttorneyLabel(patient.attorney),
+              caseStatus: patient.caseStatus,
+              category: "Specialist",
+              stage: `Appt not scheduled (${daysSinceSent} days since sent)`,
               anchorDate: sentDate,
               daysFromAnchor: daysSinceSent,
               note: "",

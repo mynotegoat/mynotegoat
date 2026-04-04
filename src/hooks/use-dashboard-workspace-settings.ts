@@ -288,6 +288,19 @@ export function useDashboardWorkspaceSettings() {
     [updateSettings],
   );
 
+  const setMriNoScheduleWarningDays = useCallback(
+    (value: number) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          mriNoScheduleWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
   const setSpecialistNoReportWarningDays = useCallback(
     (value: number) => {
       updateSettings((current) => ({
@@ -295,6 +308,19 @@ export function useDashboardWorkspaceSettings() {
         patientFollowUp: {
           ...current.patientFollowUp,
           specialistNoReportWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const setSpecialistNoScheduleWarningDays = useCallback(
+    (value: number) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          specialistNoScheduleWarningDays: Math.max(0, Math.min(365, Math.round(value || 0))),
         },
       }));
     },
@@ -333,7 +359,9 @@ export function useDashboardWorkspaceSettings() {
     toggleSpecialistClearedBy,
     setXrayNoReportWarningDays,
     setMriNoReportWarningDays,
+    setMriNoScheduleWarningDays,
     setSpecialistNoReportWarningDays,
+    setSpecialistNoScheduleWarningDays,
     setFollowUpLienLopClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,

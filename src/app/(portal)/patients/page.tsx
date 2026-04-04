@@ -687,7 +687,9 @@ export default function PatientsPage() {
       lienLopClearStatuses: followUpSettings.lienLopClearStatuses,
       xrayNoReportWarningDays: followUpSettings.xrayNoReportWarningDays,
       mriNoReportWarningDays: followUpSettings.mriNoReportWarningDays,
+      mriNoScheduleWarningDays: followUpSettings.mriNoScheduleWarningDays,
       specialistNoReportWarningDays: followUpSettings.specialistNoReportWarningDays,
+      specialistNoScheduleWarningDays: followUpSettings.specialistNoScheduleWarningDays,
       followUpOverrides: followUpOverridesByPatientId,
       closedCaseStatuses,
     });
