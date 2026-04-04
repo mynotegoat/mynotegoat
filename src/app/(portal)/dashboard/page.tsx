@@ -315,16 +315,58 @@ export default function DashboardPage() {
     ],
   );
 
-  const followUpCounts = useMemo(
-    () => ({
-      total: dashboardFollowUpItems.length,
-      xray: dashboardFollowUpItems.filter((item) => item.category === "X-Ray").length,
-      mri: dashboardFollowUpItems.filter((item) => item.category === "MRI / CT").length,
-      specialist: dashboardFollowUpItems.filter((item) => item.category === "Specialist").length,
-      lienLop: dashboardFollowUpItems.filter((item) => item.category === "Lien / LOP").length,
-    }),
-    [dashboardFollowUpItems],
-  );
+  const caseFlowItems = useMemo(() => {
+    type CaseFlowItem = {
+      id: string;
+      patientId: string;
+      patientName: string;
+      detail: string;
+      subDetail: string;
+      tag: string;
+      tagClass: string;
+      staleDays: number;
+    };
+
+    const items: CaseFlowItem[] = [];
+
+    // Add priority alerts
+    for (const entry of priorityCases) {
+      for (const reason of entry.reasons) {
+        items.push({
+          id: `priority-${entry.patient.id}-${reason}`,
+          patientId: entry.patient.id,
+          patientName: entry.patient.fullName,
+          detail: reason,
+          subDetail: `${entry.patient.attorney} • Last update ${entry.patient.lastUpdate}`,
+          tag: reason.split(" ")[0] === "No" ? "No Update" : reason.split(" ")[0] === "R&B" ? "R&B Check" : reason,
+          tagClass: getPriorityBadgeClass([reason]),
+          staleDays: entry.staleDays,
+        });
+      }
+    }
+
+    // Add follow-up items
+    for (const item of dashboardFollowUpItems) {
+      const isStale =
+        item.daysFromAnchor !== null &&
+        item.daysFromAnchor >= dashboardWorkspaceSettings.patientFollowUp.staleDaysThreshold;
+      items.push({
+        id: `followup-${item.id}`,
+        patientId: item.patientId,
+        patientName: item.patientName,
+        detail: item.stage,
+        subDetail: `Case ${item.caseNumber || "-"} • ${item.anchorDate ? formatUsDateDisplay(item.anchorDate) : "No date"}${isStale ? ` • Stale ${item.daysFromAnchor}d` : ""}`,
+        tag: item.category === "Lien / LOP" ? lienLabel : item.category,
+        tagClass: "",
+        staleDays: item.daysFromAnchor ?? 0,
+      });
+    }
+
+    // Sort: highest stale days first
+    items.sort((a, b) => b.staleDays - a.staleDays);
+
+    return items;
+  }, [priorityCases, dashboardFollowUpItems, dashboardWorkspaceSettings.patientFollowUp.staleDaysThreshold, lienLabel]);
 
   return (
     <div className="space-y-5">
@@ -366,123 +408,81 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="panel-card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xl font-semibold">Priority Alerts</h3>
-          <p className="text-sm text-[var(--text-muted)]">Configured in Settings &gt; Dashboard</p>
-        </div>
-        <div className="space-y-2">
-          {priorityCases.map((entry) => (
-            <Link
-              key={entry.patient.id}
-              href={`/patients/${entry.patient.id}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 transition hover:border-[var(--brand-primary)] hover:shadow-sm"
-            >
-              <div>
-                <p className="font-semibold text-[var(--brand-primary)]">{entry.patient.fullName}</p>
-                <p className="text-sm text-[var(--text-muted)]">
-                  {entry.patient.attorney} • Last update {entry.patient.lastUpdate}
-                </p>
-                <p className="text-xs text-[var(--text-muted)]">{entry.reasons.join(" • ")}</p>
-              </div>
-              <span className={`status-pill ${getPriorityBadgeClass(entry.reasons)}`}>
-                {entry.reasons[0]}
-              </span>
-            </Link>
-          ))}
-          {priorityCases.length === 0 && (
+      <section className="grid gap-4 xl:grid-cols-2">
+        <article className="panel-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xl font-semibold">Case Flow</h3>
             <p className="text-sm text-[var(--text-muted)]">
-              No priority alerts. Adjust rules in Settings &gt; Dashboard.
+              {caseFlowItems.length} item{caseFlowItems.length !== 1 ? "s" : ""}
             </p>
-          )}
-        </div>
-      </section>
+          </div>
+          <div className="space-y-2">
+            {caseFlowItems.map((item) => (
+              <Link
+                key={item.id}
+                href={`/patients/${item.patientId}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2.5 transition hover:border-[var(--brand-primary)] hover:shadow-sm"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-[var(--brand-primary)]">{item.patientName}</p>
+                  <p className="text-sm text-[var(--text-muted)]">{item.detail}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{item.subDetail}</p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    item.tagClass
+                      ? `status-pill ${item.tagClass}`
+                      : "bg-[var(--bg-soft)] text-[var(--text-muted)]"
+                  }`}
+                >
+                  {item.tag}
+                </span>
+              </Link>
+            ))}
+            {caseFlowItems.length === 0 && (
+              <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 text-sm text-[var(--text-muted)]">
+                No case flow items. All patients are up to date.
+              </p>
+            )}
+          </div>
+        </article>
 
-      {(dashboardWorkspaceSettings.myTasks.showOnDashboard ||
-        dashboardWorkspaceSettings.patientFollowUp.showOnDashboard) && (
-        <section className="grid gap-4 xl:grid-cols-2">
-          {dashboardWorkspaceSettings.myTasks.showOnDashboard && (
-            <article className="panel-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-xl font-semibold">My Tasks</h3>
-                <p className="text-sm text-[var(--text-muted)]">
-                  Open {taskCounts.open} • Done {taskCounts.done}
-                </p>
-              </div>
-              <div className="space-y-2">
-                {dashboardTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className={`font-semibold ${task.done ? "text-[var(--text-muted)] line-through" : ""}`}>
-                        {task.title}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {task.dueDate ? `Due ${formatUsDateDisplay(task.dueDate)}` : "No due date"}
-                      </p>
-                    </div>
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getTaskPriorityBadgeClass(task.priority)}`}>
-                      {task.priority}
-                    </span>
-                  </div>
-                ))}
-                {dashboardTasks.length === 0 && (
-                  <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 text-sm text-[var(--text-muted)]">
-                    No tasks to show.
-                  </p>
-                )}
-              </div>
-            </article>
-          )}
-
-          {dashboardWorkspaceSettings.patientFollowUp.showOnDashboard && (
-            <article className="panel-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-xl font-semibold">Patient Follow Up</h3>
-                <p className="text-sm text-[var(--text-muted)]">
-                  X-Ray {followUpCounts.xray} • MRI/CT {followUpCounts.mri} • Specialist{" "}
-                  {followUpCounts.specialist} • {lienLabel} {followUpCounts.lienLop}
-                </p>
-              </div>
-              <div className="space-y-2">
-                {dashboardFollowUpItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Link
-                        className="font-semibold text-[var(--brand-primary)] underline underline-offset-2"
-                        href={`/patients/${item.patientId}`}
-                      >
-                        {item.patientName}
-                      </Link>
-                      <span className="rounded-full bg-[var(--bg-soft)] px-2 py-1 text-xs font-semibold text-[var(--text-muted)]">
-                        {item.category === "Lien / LOP" ? lienLabel : item.category}
-                      </span>
-                    </div>
-                    <p className="text-sm text-[var(--text-muted)]">{item.stage}</p>
+        {dashboardWorkspaceSettings.myTasks.showOnDashboard && (
+          <article className="panel-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xl font-semibold">To Do</h3>
+              <p className="text-sm text-[var(--text-muted)]">
+                Open {taskCounts.open} • Done {taskCounts.done}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {dashboardTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className={`font-semibold ${task.done ? "text-[var(--text-muted)] line-through" : ""}`}>
+                      {task.title}
+                    </p>
                     <p className="text-xs text-[var(--text-muted)]">
-                      Case {item.caseNumber || "-"} • {item.anchorDate ? formatUsDateDisplay(item.anchorDate) : "No date"}
-                      {item.daysFromAnchor !== null &&
-                      item.daysFromAnchor >= dashboardWorkspaceSettings.patientFollowUp.staleDaysThreshold
-                        ? ` • Stale ${item.daysFromAnchor}d`
-                        : ""}
+                      {task.dueDate ? `Due ${formatUsDateDisplay(task.dueDate)}` : "No due date"}
                     </p>
                   </div>
-                ))}
-                {dashboardFollowUpItems.length === 0 && (
-                  <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 text-sm text-[var(--text-muted)]">
-                    No follow-up items to show.
-                  </p>
-                )}
-              </div>
-            </article>
-          )}
-        </section>
-      )}
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getTaskPriorityBadgeClass(task.priority)}`}>
+                    {task.priority}
+                  </span>
+                </div>
+              ))}
+              {dashboardTasks.length === 0 && (
+                <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-3 text-sm text-[var(--text-muted)]">
+                  No tasks to show.
+                </p>
+              )}
+            </div>
+          </article>
+        )}
+      </section>
     </div>
   );
 }

@@ -2116,7 +2116,7 @@ export default function SettingsPage() {
           </article>
 
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-            <h4 className="text-lg font-semibold">My Tasks</h4>
+            <h4 className="text-lg font-semibold">To Do</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Controls the dashboard tasks preview and default task behavior.
             </p>
@@ -2127,7 +2127,7 @@ export default function SettingsPage() {
                   onChange={(event) => setTasksShowOnDashboard(event.target.checked)}
                   type="checkbox"
                 />
-                Show My Tasks on Dashboard
+                Show To Do on Dashboard
               </label>
 
               <label className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -2141,7 +2141,7 @@ export default function SettingsPage() {
 
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">
-                  Max tasks shown on Dashboard
+                  Max To Do items on Dashboard
                 </span>
                 <input
                   className="max-w-[200px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -2155,9 +2155,9 @@ export default function SettingsPage() {
           </article>
 
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-            <h4 className="text-lg font-semibold">Patient Follow Up</h4>
+            <h4 className="text-lg font-semibold">Case Flow</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Controls dashboard follow-up preview and follow-up queue behavior in Patients.
+              Controls which follow-up categories appear in the Case Flow section on the Dashboard.
             </p>
 
             <div className="mt-4 space-y-4">
@@ -2168,7 +2168,7 @@ export default function SettingsPage() {
                   onChange={(event) => setFollowUpShowOnDashboard(event.target.checked)}
                   type="checkbox"
                 />
-                Show Patient Follow Up on Dashboard
+                Show Case Flow on Dashboard
               </label>
 
               {/* Include categories */}
@@ -2217,9 +2217,9 @@ export default function SettingsPage() {
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
                   Clear Conditions
                 </p>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">X-Ray</span>
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">X-Ray clear when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
@@ -2237,7 +2237,7 @@ export default function SettingsPage() {
                   </label>
 
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">MRI / CT</span>
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">MRI / CT clear when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
@@ -2255,7 +2255,37 @@ export default function SettingsPage() {
                   </label>
 
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Specialist</span>
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">{lienLabel} clear when</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {followUpLienClearStatusOptions.map((statusName) => {
+                        const checked = dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses.some(
+                          (entry) => entry.trim().toLowerCase() === statusName.trim().toLowerCase(),
+                        );
+                        return (
+                          <label
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                              checked
+                                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] text-[var(--brand-primary)]"
+                                : "border-[var(--line-soft)] bg-white"
+                            }`}
+                            key={`follow-up-lien-clear-status-${statusName}`}
+                          >
+                            <input
+                              className="sr-only"
+                              checked={checked}
+                              onChange={(event) => toggleFollowUpLienLopClearStatus(statusName, event.target.checked)}
+                              type="checkbox"
+                            />
+                            {checked && <span>&#10003;</span>}
+                            {statusName}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Specialist clear when</span>
                     <select
                       className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                       onChange={(event) =>
@@ -2268,42 +2298,6 @@ export default function SettingsPage() {
                       <option value="report">Report Received</option>
                     </select>
                   </label>
-                </div>
-              </div>
-
-              {/* Lien clear statuses */}
-              <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-                  {lienLabel} Clear Statuses
-                </p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Follow-up clears when the status matches one of these.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {followUpLienClearStatusOptions.map((statusName) => {
-                    const checked = dashboardWorkspaceSettings.patientFollowUp.lienLopClearStatuses.some(
-                      (entry) => entry.trim().toLowerCase() === statusName.trim().toLowerCase(),
-                    );
-                    return (
-                      <label
-                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
-                          checked
-                            ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] text-[var(--brand-primary)]"
-                            : "border-[var(--line-soft)] bg-white"
-                        }`}
-                        key={`follow-up-lien-clear-status-${statusName}`}
-                      >
-                        <input
-                          className="sr-only"
-                          checked={checked}
-                          onChange={(event) => toggleFollowUpLienLopClearStatus(statusName, event.target.checked)}
-                          type="checkbox"
-                        />
-                        {checked && <span>&#10003;</span>}
-                        {statusName}
-                      </label>
-                    );
-                  })}
                 </div>
               </div>
 
@@ -2322,7 +2316,7 @@ export default function SettingsPage() {
 
                 <label className="grid gap-1">
                   <span className="text-sm font-semibold text-[var(--text-muted)]">
-                    Max follow-up rows on Dashboard
+                    Max Case Flow rows on Dashboard
                   </span>
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
