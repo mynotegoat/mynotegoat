@@ -86,10 +86,16 @@ export const RichTextTemplateEditor = forwardRef<
 ) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
+  const isFocusedRef = useRef(false);
 
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
     if (!editor) {
+      return;
+    }
+    // Skip syncing when the user is actively typing — the editor already has the
+    // latest content and resetting innerHTML would destroy the cursor position.
+    if (isFocusedRef.current) {
       return;
     }
     const nextHtml = normalizeIncomingValue(value);
@@ -133,6 +139,7 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
+    isFocusedRef.current = true;
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -145,6 +152,7 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
+    isFocusedRef.current = true;
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -335,7 +343,8 @@ export const RichTextTemplateEditor = forwardRef<
         className={`rich-text-editor ${minHeightClassName} w-full overflow-auto bg-white px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus:outline-none`}
         contentEditable
         data-placeholder={placeholder}
-        onBlur={emitChange}
+        onFocus={() => { isFocusedRef.current = true; }}
+        onBlur={() => { isFocusedRef.current = false; emitChange(); }}
         onInput={emitChange}
         spellCheck
         style={{ fontFamily }}

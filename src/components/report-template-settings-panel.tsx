@@ -71,7 +71,7 @@ const autoFieldCategories: FieldCategory[] = [
   },
   {
     label: "Imaging & Referrals",
-    tokens: ["XRAY_SUMMARY", "MRI_CT_SUMMARY", "IMAGING_SUMMARY", "SPECIALIST_SUMMARY"],
+    tokens: ["XRAY_SUMMARY", "XRAY_SENT_DATE", "XRAY_COMPLETED_DATE", "XRAY_REVIEWED_DATE", "MRI_CT_SUMMARY", "MRI_SENT_DATE", "MRI_COMPLETED_DATE", "MRI_REVIEWED_DATE", "SPECIALIST_SUMMARY"],
   },
 ];
 

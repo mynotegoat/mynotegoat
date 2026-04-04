@@ -340,7 +340,13 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     TOTAL_CHARGE_AMOUNT: formatCurrency(totalChargeAmount),
 
     XRAY_SUMMARY: formatImagingSummary(input.xrayReferrals, "X-Ray"),
+    XRAY_SENT_DATE: input.xrayReferrals[0]?.sentDate || "-",
+    XRAY_COMPLETED_DATE: input.xrayReferrals[0]?.doneDate || "-",
+    XRAY_REVIEWED_DATE: input.xrayReferrals[0]?.reportReviewedDate || "-",
     MRI_CT_SUMMARY: formatImagingSummary(input.mriReferrals, "MRI/CT"),
+    MRI_SENT_DATE: input.mriReferrals[0]?.sentDate || "-",
+    MRI_COMPLETED_DATE: input.mriReferrals[0]?.doneDate || "-",
+    MRI_REVIEWED_DATE: input.mriReferrals[0]?.reportReviewedDate || "-",
     IMAGING_SUMMARY: [
       "X-Ray:",
       formatImagingSummary(input.xrayReferrals, "X-Ray"),

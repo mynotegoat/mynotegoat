@@ -109,8 +109,13 @@ export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
   { token: "CHARGE_LEDGER", label: "Charge Ledger" },
   { token: "TOTAL_CHARGE_AMOUNT", label: "Total Charge Amount" },
   { token: "XRAY_SUMMARY", label: "X-Ray Summary" },
+  { token: "XRAY_SENT_DATE", label: "X-Ray Sent Date" },
+  { token: "XRAY_COMPLETED_DATE", label: "X-Ray Completed Date" },
+  { token: "XRAY_REVIEWED_DATE", label: "X-Ray Reviewed Date" },
   { token: "MRI_CT_SUMMARY", label: "MRI/CT Summary" },
-  { token: "IMAGING_SUMMARY", label: "Imaging Summary" },
+  { token: "MRI_SENT_DATE", label: "MRI Sent Date" },
+  { token: "MRI_COMPLETED_DATE", label: "MRI Completed Date" },
+  { token: "MRI_REVIEWED_DATE", label: "MRI Reviewed Date" },
   { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },
 ];
 
