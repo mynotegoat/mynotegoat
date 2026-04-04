@@ -289,7 +289,11 @@ export default function TasksPage() {
           <div className="flex items-end md:col-span-1">
             <button
               className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
-              onClick={clearCompleted}
+              onClick={() => {
+                if (window.confirm("Are you sure you want to clear all completed tasks?")) {
+                  clearCompleted();
+                }
+              }}
               type="button"
             >
               Clear Done
@@ -411,6 +415,9 @@ export default function TasksPage() {
                   <button
                     className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold"
                     onClick={() => {
+                      if (!window.confirm("Are you sure you want to remove this task?")) {
+                        return;
+                      }
                       if (editingTaskId === task.id) {
                         cancelEditingTask();
                       }

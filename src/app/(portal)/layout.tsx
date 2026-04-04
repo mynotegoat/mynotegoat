@@ -11,6 +11,7 @@ import {
 } from "@/lib/cloud-state";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
+import { PlanTierProvider } from "@/lib/plan-context";
 
 export default function PortalLayout({
   children,
@@ -89,9 +90,11 @@ export default function PortalLayout({
   }
 
   return (
-    <AppShell planTier={planTier}>
-      <CloudStateSync />
-      {children}
-    </AppShell>
+    <PlanTierProvider planTier={planTier}>
+      <AppShell planTier={planTier}>
+        <CloudStateSync />
+        {children}
+      </AppShell>
+    </PlanTierProvider>
   );
 }

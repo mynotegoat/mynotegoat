@@ -31,6 +31,7 @@ import {
   type UpdatePatientRecordPatch,
   updatePatientRecordById,
 } from "@/lib/mock-data";
+import { usePlanTier } from "@/lib/plan-context";
 
 type ImagingMode = "xray" | "mri";
 type ImagingPanelKey = "xray" | "mri" | "specialist";
@@ -691,6 +692,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare } =
     usePatientFollowUpOverrides();
   const patientBillingRecord = getPatientBillingRecord(patient.id);
+  const currentPlanTier = usePlanTier();
+  const isCompletePlan = currentPlanTier === "complete";
   const names = useMemo(() => getNames(patient.fullName), [patient.fullName]);
 
   const attorneyContacts = useMemo(
@@ -3526,14 +3529,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
       <section className="panel-card p-4">
         <button
-          className="flex w-full items-center justify-between rounded-xl bg-[#72bdcf] px-3 py-2 text-center text-lg font-semibold text-white"
-          onClick={() => toggleSectionPanel("letters")}
+          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-center text-lg font-semibold text-white ${isCompletePlan ? "bg-[#72bdcf]" : "bg-gray-400"}`}
+          onClick={() => isCompletePlan && toggleSectionPanel("letters")}
           type="button"
         >
-          <span>Letters</span>
-          <span className="text-xl">{sectionPanelsOpen.letters ? "−" : "+"}</span>
+          <span>Letters{!isCompletePlan ? " — Complete Plan" : ""}</span>
+          {isCompletePlan ? (
+            <span className="text-xl">{sectionPanelsOpen.letters ? "−" : "+"}</span>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>
+          )}
         </button>
-        {sectionPanelsOpen.letters && (
+        {isCompletePlan && sectionPanelsOpen.letters && (
           <>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
               Generate school notes, work notes, gym notes, and other custom letters from saved templates.
@@ -3588,14 +3595,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
       <section className="panel-card p-4">
         <button
-          className="flex w-full items-center justify-between rounded-xl bg-[#72bdcf] px-3 py-2 text-center text-lg font-semibold text-white"
-          onClick={() => toggleSectionPanel("narrative")}
+          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-center text-lg font-semibold text-white ${isCompletePlan ? "bg-[#72bdcf]" : "bg-gray-400"}`}
+          onClick={() => isCompletePlan && toggleSectionPanel("narrative")}
           type="button"
         >
-          <span>Full Narrative Report</span>
-          <span className="text-xl">{sectionPanelsOpen.narrative ? "−" : "+"}</span>
+          <span>Full Narrative Report{!isCompletePlan ? " — Complete Plan" : ""}</span>
+          {isCompletePlan ? (
+            <span className="text-xl">{sectionPanelsOpen.narrative ? "−" : "+"}</span>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>
+          )}
         </button>
-        {sectionPanelsOpen.narrative && (
+        {isCompletePlan && sectionPanelsOpen.narrative && (
           <>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
               Build a long-form narrative from patient demographics, encounters, diagnoses, imaging, specialist referrals, and custom prompt inputs.
