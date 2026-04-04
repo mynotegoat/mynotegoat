@@ -509,6 +509,20 @@ export function updatePatientRecordById(patientId: string, patch: UpdatePatientR
   return nextPatient;
 }
 
+export function deletePatientRecord(patientId: string): boolean {
+  const normalizedPatientId = cleanString(patientId);
+  if (!normalizedPatientId) {
+    return false;
+  }
+  const index = patients.findIndex((entry) => entry.id === normalizedPatientId);
+  if (index === -1) {
+    return false;
+  }
+  const nextPatients = patients.filter((entry) => entry.id !== normalizedPatientId);
+  persistPatients(nextPatients);
+  return true;
+}
+
 /**
  * Sync related cases bidirectionally across all members of a group.
  * When patient A links to B and C, this ensures B also links to A+C, and C links to A+B.

@@ -1439,6 +1439,19 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+          <label className="grid gap-1 sm:col-span-2">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Delete Password</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => updateOfficeSettings({ deletePassword: event.target.value })}
+              placeholder="Set a password required to delete patients"
+              type="password"
+              value={officeSettings.deletePassword}
+            />
+            <span className="text-xs text-[var(--text-muted)]">
+              This password is required when deleting a patient from the workspace. Set it to secure patient records.
+            </span>
+          </label>
         </div>
         {officeSettingsMessage && (
           <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">{officeSettingsMessage}</p>

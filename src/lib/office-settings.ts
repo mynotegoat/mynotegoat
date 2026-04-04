@@ -8,6 +8,7 @@ export interface OfficeSettings {
   address: string;
   doctorName: string;
   logoDataUrl: string;
+  deletePassword: string;
 }
 
 const STORAGE_KEY = "casemate.office-settings.v1";
@@ -20,6 +21,7 @@ const defaultOfficeSettings: OfficeSettings = {
   address: "815 E. Colorado St. Unit 250, Glendale, CA 91205",
   doctorName: "Dr. Mike Galstyan",
   logoDataUrl: "",
+  deletePassword: "",
 };
 
 function normalizeString(value: unknown, fallback = "") {
@@ -60,6 +62,7 @@ export function normalizeOfficeSettings(value: unknown): OfficeSettings {
     address: normalizeString(row.address, defaultOfficeSettings.address),
     doctorName: normalizeString(row.doctorName, defaultOfficeSettings.doctorName),
     logoDataUrl: normalizeLogoDataUrl(row.logoDataUrl),
+    deletePassword: normalizeString(row.deletePassword),
   };
 }
 

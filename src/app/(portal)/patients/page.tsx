@@ -17,8 +17,38 @@ import {
   formatUsDateDisplay,
   type FollowUpCategory,
 } from "@/lib/follow-up-queue";
-import { createPatientRecord, patients, type PatientMatrixField, type PatientRecord } from "@/lib/mock-data";
+import { createPatientRecord, deletePatientRecord, patients, type PatientMatrixField, type PatientRecord } from "@/lib/mock-data";
+import { loadOfficeSettings } from "@/lib/office-settings";
 import { formatUsPhoneInput } from "@/lib/phone-format";
+
+const COLUMN_ORDER_KEY = "casemate.patient-column-order.v1";
+type ListColumnId = "patient" | "initialExam" | "dateOfLoss" | "attorney" | "status";
+const defaultColumnOrder: ListColumnId[] = ["patient", "initialExam", "dateOfLoss", "attorney", "status"];
+
+const columnLabels: Record<ListColumnId, string> = {
+  patient: "Patient",
+  initialExam: "Initial Exam",
+  dateOfLoss: "Date Of Loss",
+  attorney: "Attorney",
+  status: "Status",
+};
+
+function loadColumnOrder(): ListColumnId[] {
+  if (typeof window === "undefined") return defaultColumnOrder;
+  try {
+    const raw = window.localStorage.getItem(COLUMN_ORDER_KEY);
+    if (!raw) return defaultColumnOrder;
+    const parsed = JSON.parse(raw) as string[];
+    if (!Array.isArray(parsed) || parsed.length !== defaultColumnOrder.length) return defaultColumnOrder;
+    const valid = parsed.every((id) => defaultColumnOrder.includes(id as ListColumnId));
+    return valid ? (parsed as ListColumnId[]) : defaultColumnOrder;
+  } catch { return defaultColumnOrder; }
+}
+
+function saveColumnOrder(order: ListColumnId[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order));
+}
 
 type PatientView = "list" | "detail" | "caseFlow" | "toDo";
 
@@ -230,10 +260,22 @@ export default function PatientsPage() {
   const [yearDraft, setYearDraft] = useState("ALL");
   const [attorneyDraft, setAttorneyDraft] = useState("ALL");
   const [statusDraft, setStatusDraft] = useState("ALL");
-  const [search, setSearch] = useState("");
   const [year, setYear] = useState("ALL");
   const [attorney, setAttorney] = useState("ALL");
   const [status, setStatus] = useState("ALL");
+
+  // Sort state
+  const [sortColumn, setSortColumn] = useState<ListColumnId>("patient");
+  const [sortAsc, setSortAsc] = useState(true);
+
+  // Column order (draggable)
+  const [columnOrder, setColumnOrder] = useState<ListColumnId[]>(() => loadColumnOrder());
+  const [dragColumnId, setDragColumnId] = useState<ListColumnId | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<PatientRecord | null>(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [showNewPatientModal, setShowNewPatientModal] = useState(false);
   const [newPatientMessage, setNewPatientMessage] = useState("");
   const [newPatientDraft, setNewPatientDraft] = useState<NewPatientDraft>({
@@ -460,18 +502,18 @@ export default function PatientsPage() {
   ]);
 
   const applyFilters = () => {
-    setSearch(searchDraft.trim());
     setYear(yearDraft);
     setAttorney(attorneyDraft);
     setStatus(statusDraft);
   };
 
   const filteredPatients = useMemo(() => {
-    return patients.filter((patient) => {
+    const q = searchDraft.trim().toLowerCase();
+    const filtered = patients.filter((patient) => {
       const matchesSearch =
-        !search.trim() ||
-        patient.fullName.toLowerCase().includes(search.toLowerCase()) ||
-        patient.attorney.toLowerCase().includes(search.toLowerCase());
+        !q ||
+        patient.fullName.toLowerCase().includes(q) ||
+        patient.attorney.toLowerCase().includes(q);
 
       const matchesYear =
         year === "ALL" ||
@@ -485,7 +527,79 @@ export default function PatientsPage() {
 
       return matchesSearch && matchesYear && matchesAttorney && matchesStatus;
     });
-  }, [attorney, search, status, year]);
+
+    // Sort
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortColumn === "patient") {
+        cmp = a.fullName.localeCompare(b.fullName);
+      } else if (sortColumn === "attorney") {
+        cmp = cleanAttorneyLabel(a.attorney).localeCompare(cleanAttorneyLabel(b.attorney));
+      } else if (sortColumn === "dateOfLoss") {
+        cmp = (a.dateOfLoss || "").localeCompare(b.dateOfLoss || "");
+      } else if (sortColumn === "initialExam") {
+        const aDate = a.matrix?.initialExam || "";
+        const bDate = b.matrix?.initialExam || "";
+        cmp = aDate.localeCompare(bDate);
+      } else if (sortColumn === "status") {
+        cmp = a.caseStatus.localeCompare(b.caseStatus);
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+
+    return sorted;
+  }, [attorney, searchDraft, status, year, sortColumn, sortAsc]);
+
+  const toggleSort = (col: ListColumnId) => {
+    if (sortColumn === col) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortColumn(col);
+      setSortAsc(true);
+    }
+  };
+
+  const handleColumnDragStart = (col: ListColumnId) => {
+    setDragColumnId(col);
+  };
+  const handleColumnDragOver = (e: React.DragEvent, col: ListColumnId) => {
+    e.preventDefault();
+    if (!dragColumnId || dragColumnId === col) return;
+    setColumnOrder((prev) => {
+      const next = [...prev];
+      const fromIndex = next.indexOf(dragColumnId);
+      const toIndex = next.indexOf(col);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, dragColumnId);
+      saveColumnOrder(next);
+      return next;
+    });
+  };
+  const handleColumnDragEnd = () => {
+    setDragColumnId(null);
+  };
+
+  const handleDeletePatient = () => {
+    if (!deleteTarget) return;
+    const settings = loadOfficeSettings();
+    if (!settings.deletePassword) {
+      setDeleteError("No delete password is set. Go to Settings → Office to set one first.");
+      return;
+    }
+    if (deletePasswordInput !== settings.deletePassword) {
+      setDeleteError("Incorrect password.");
+      return;
+    }
+    const deleted = deletePatientRecord(deleteTarget.id);
+    if (!deleted) {
+      setDeleteError("Could not delete patient. Please try again.");
+      return;
+    }
+    setDeleteTarget(null);
+    setDeletePasswordInput("");
+    setDeleteError("");
+  };
 
   const followUpItems = useMemo(() => {
     return buildFollowUpItems(filteredPatients, {
@@ -654,28 +768,15 @@ export default function PatientsPage() {
         </div>
 
         <div className="mt-4 space-y-3 rounded-xl border border-[var(--line-soft)] bg-white p-3">
-          <div className="grid gap-3 md:grid-cols-[180px_1fr_170px] md:items-center">
-            <label className="text-sm font-semibold text-[var(--text-muted)]">Patient Name</label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Search</span>
             <input
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
               onChange={(event) => setSearchDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  applyFilters();
-                }
-              }}
-              placeholder="Search patient or attorney"
+              placeholder="Search patient or attorney..."
               value={searchDraft}
             />
-            <button
-              className="rounded-xl bg-[#1f6b2c] px-4 py-2 font-semibold text-white"
-              onClick={applyFilters}
-              type="button"
-            >
-              SEARCH
-            </button>
-          </div>
+          </label>
 
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_96px]">
             <label className="grid gap-1 text-sm font-semibold text-[var(--text-muted)]">
@@ -743,53 +844,92 @@ export default function PatientsPage() {
             <table className="min-w-full border-collapse">
               <thead>
                 <tr className="bg-[var(--bg-soft)] text-left text-sm">
-                  <th className="px-4 py-3">Patient</th>
-                  <th className="px-4 py-3">Attorney</th>
-                  <th className="px-4 py-3">Date Of Loss</th>
-                  <th className="px-4 py-3">Initial Exam</th>
-                  <th className="px-4 py-3">Priority</th>
-                  <th className="px-4 py-3">Status</th>
+                  {columnOrder.map((colId) => (
+                    <th
+                      key={colId}
+                      className={`cursor-pointer select-none px-4 py-3 transition-colors hover:bg-[rgba(13,121,191,0.06)] ${dragColumnId === colId ? "opacity-50" : ""}`}
+                      draggable
+                      onClick={() => toggleSort(colId)}
+                      onDragEnd={handleColumnDragEnd}
+                      onDragOver={(e) => handleColumnDragOver(e, colId)}
+                      onDragStart={() => handleColumnDragStart(colId)}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {columnLabels[colId]}
+                        {sortColumn === colId && (
+                          <span className="text-[10px]">{sortAsc ? "▲" : "▼"}</span>
+                        )}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 w-[60px]" />
                 </tr>
               </thead>
               <tbody>
                 {filteredPatients.map((patient) => (
                   <tr key={patient.id} className="border-t border-[var(--line-soft)]">
+                    {columnOrder.map((colId) => {
+                      if (colId === "patient") {
+                        return (
+                          <td key={colId} className="px-4 py-3">
+                            <Link
+                              href={`/patients/${patient.id}`}
+                              className="font-semibold text-[var(--brand-primary)] underline"
+                            >
+                              {patient.fullName}
+                            </Link>
+                            {patient.phone && (
+                              <p className="text-sm text-[var(--text-muted)]">{patient.phone}</p>
+                            )}
+                          </td>
+                        );
+                      }
+                      if (colId === "initialExam") {
+                        return <td key={colId} className="px-4 py-3">{formatLeadingDateDisplay(patient.matrix?.initialExam || "-")}</td>;
+                      }
+                      if (colId === "dateOfLoss") {
+                        return <td key={colId} className="px-4 py-3">{formatUsDateDisplay(patient.dateOfLoss)}</td>;
+                      }
+                      if (colId === "attorney") {
+                        return <td key={colId} className="px-4 py-3">{cleanAttorneyLabel(patient.attorney)}</td>;
+                      }
+                      if (colId === "status") {
+                        return (
+                          <td key={colId} className="px-4 py-3">
+                            <span
+                              className="status-pill"
+                              style={{
+                                backgroundColor: withAlpha(
+                                  statusConfigByName.get(patient.caseStatus.toLowerCase())?.color ?? "#0d79bf",
+                                  0.2,
+                                ),
+                                color: getContrastTextColor(
+                                  statusConfigByName.get(patient.caseStatus.toLowerCase())?.color ?? "#0d79bf",
+                                ),
+                              }}
+                            >
+                              {patient.caseStatus}
+                            </span>
+                          </td>
+                        );
+                      }
+                      return null;
+                    })}
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/patients/${patient.id}`}
-                        className="font-semibold text-[var(--brand-primary)] underline"
+                      <button
+                        className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        onClick={() => { setDeleteTarget(patient); setDeletePasswordInput(""); setDeleteError(""); }}
+                        title="Delete patient"
+                        type="button"
                       >
-                        {patient.fullName}
-                      </Link>
-                      <p className="text-sm text-[var(--text-muted)]">
-                        {patient.phone} • DOB {formatUsDateDisplay(patient.dob)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">{cleanAttorneyLabel(patient.attorney)}</td>
-                    <td className="px-4 py-3">{formatUsDateDisplay(patient.dateOfLoss)}</td>
-                    <td className="px-4 py-3">{formatLeadingDateDisplay(patient.matrix?.initialExam || "-")}</td>
-                    <td className="px-4 py-3">{patient.priority}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className="status-pill"
-                        style={{
-                          backgroundColor: withAlpha(
-                            statusConfigByName.get(patient.caseStatus.toLowerCase())?.color ?? "#0d79bf",
-                            0.2,
-                          ),
-                          color: getContrastTextColor(
-                            statusConfigByName.get(patient.caseStatus.toLowerCase())?.color ?? "#0d79bf",
-                          ),
-                        }}
-                      >
-                        {patient.caseStatus}
-                      </span>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filteredPatients.length === 0 && (
                   <tr className="border-t border-[var(--line-soft)]">
-                    <td className="px-4 py-5 text-sm text-[var(--text-muted)]" colSpan={6}>
+                    <td className="px-4 py-5 text-sm text-[var(--text-muted)]" colSpan={columnOrder.length + 1}>
                       No patients match the selected filters.
                     </td>
                   </tr>
@@ -1433,6 +1573,50 @@ export default function PatientsPage() {
                 ))}
               </datalist>
             </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
+          <div className="panel-card mx-auto w-full max-w-md p-5">
+            <h3 className="text-xl font-semibold text-red-600">Delete Patient</h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              You are about to permanently delete{" "}
+              <span className="font-semibold text-[var(--text-main)]">{deleteTarget.fullName}</span>.
+              This action cannot be undone.
+            </p>
+            <label className="mt-4 grid gap-1">
+              <span className="text-sm font-semibold text-[var(--text-muted)]">Enter Delete Password</span>
+              <input
+                autoFocus
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                onChange={(e) => { setDeletePasswordInput(e.target.value); setDeleteError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleDeletePatient(); } }}
+                placeholder="Password"
+                type="password"
+                value={deletePasswordInput}
+              />
+            </label>
+            {deleteError && (
+              <p className="mt-2 text-sm font-semibold text-red-600">{deleteError}</p>
+            )}
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={() => { setDeleteTarget(null); setDeletePasswordInput(""); setDeleteError(""); }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white"
+                onClick={handleDeletePatient}
+                type="button"
+              >
+                Delete Patient
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
