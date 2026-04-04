@@ -340,7 +340,7 @@ export default function ContactsPage() {
       </section>
 
       {showAddContactModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
           <div className="panel-card max-h-[85vh] w-full max-w-2xl overflow-auto p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-xl font-semibold">Add Contact</h3>

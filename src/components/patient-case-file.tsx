@@ -3875,9 +3875,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       </div>
 
       {showNarrativePromptModal && narrativePromptTemplate && (
-        <div className="fixed inset-0 z-50 bg-black/45 p-4">
-          <div className="relative h-full w-full">
-            <div className="panel-card mx-auto max-h-[84vh] w-full max-w-3xl overflow-auto p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">
+            <div className="panel-card mx-auto w-full max-w-3xl overflow-auto p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xl font-semibold">Narrative Inputs</h3>
@@ -3981,14 +3980,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </button>
               </div>
             </div>
-          </div>
         </div>
       )}
 
       {showNarrativePreviewModal && narrativePreview && (
-        <div className="fixed inset-0 z-50 bg-black/45 p-4">
-          <div className="relative h-full w-full">
-            <div className="panel-card mx-auto max-h-[90vh] w-full max-w-6xl overflow-auto p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">
+            <div className="panel-card mx-auto w-full max-w-6xl overflow-auto p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xl font-semibold">Narrative Preview</h3>
@@ -4054,7 +4051,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </article>
               </div>
             </div>
-          </div>
         </div>
       )}
 

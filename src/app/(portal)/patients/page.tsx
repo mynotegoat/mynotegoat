@@ -855,9 +855,8 @@ export default function PatientsPage() {
       )}
 
       {showNewPatientModal && (
-        <div className="fixed inset-0 z-50 bg-black/45 p-4">
-          <div className="h-full w-full overflow-y-auto">
-            <div className="panel-card mx-auto w-full max-w-6xl p-4 md:p-5">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">
+          <div className="panel-card mx-auto w-full max-w-6xl p-4 md:p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xl font-semibold">New Patient</h3>
@@ -1226,7 +1225,6 @@ export default function PatientsPage() {
                 ))}
               </datalist>
             </div>
-          </div>
         </div>
       )}
     </div>

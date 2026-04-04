@@ -73,7 +73,7 @@ export function AppShell({
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1680px] px-3 py-3 lg:px-5 lg:py-5">
-        <div className="overflow-hidden rounded-[30px] border border-white/70 bg-white/60 shadow-[0_18px_50px_rgba(16,38,58,0.1)] backdrop-blur-sm">
+        <div className="overflow-hidden rounded-[30px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(16,38,58,0.1)]">
           <div className="grid min-h-[calc(100vh-2rem)] lg:grid-cols-[250px_1fr]">
             <aside className="hidden border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] p-6 text-[#e4f4ff] lg:block">
               <div className="mb-8">
