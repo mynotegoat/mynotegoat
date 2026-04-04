@@ -288,34 +288,23 @@ export async function prepareCloudStateBeforeMount() {
       );
 
     if (remoteHasData) {
-      const remoteUpdatedAtMs = parseTimestamp(remote!.updated_at ?? null);
-
-      // SAFETY: Never overwrite local data with remote unless remote is genuinely newer
-      // If local has data, only pull remote when timestamps confirm remote is newer
-      const shouldPullRemote =
-        !localHasData ||
-        (!Number.isNaN(remoteUpdatedAtMs) &&
-          !Number.isNaN(localSyncedAtMs) &&
-          remoteUpdatedAtMs > localSyncedAtMs);
-
-      if (shouldPullRemote) {
-        // Backup local before overwriting
-        if (localHasData) {
-          backupLocalWorkspaceData();
-        }
-        writeLocalSnapshot(remote!.snapshot as Record<string, unknown>);
-        if (remote!.updated_at) {
-          window.localStorage.setItem(
-            getSyncAtKey(authed.workspaceId),
-            remote!.updated_at,
-          );
-        }
-        return;
+      // CLOUD IS THE SOURCE OF TRUTH.
+      // Always pull remote data if it exists. Local is just a cache.
+      // Backup local before overwriting just in case.
+      if (localHasData) {
+        backupLocalWorkspaceData();
       }
+      writeLocalSnapshot(remote!.snapshot as Record<string, unknown>);
+      if (remote!.updated_at) {
+        window.localStorage.setItem(
+          getSyncAtKey(authed.workspaceId),
+          remote!.updated_at,
+        );
+      }
+      return;
     }
 
-    // SAFETY: If local has data but remote is empty, push local to remote (bootstrap)
-    // Never discard local data just because remote is empty
+    // Remote is empty but local has data — push local to remote (first-time bootstrap)
     if (localHasData) {
       await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }

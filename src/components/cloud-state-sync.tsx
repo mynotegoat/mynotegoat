@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { isCloudSyncEnabled, pushLocalStateToCloud } from "@/lib/cloud-state";
 
-const AUTOSAVE_MS = 10_000;
+const AUTOSAVE_MS = 2_000;
 
 export function CloudStateSync() {
   useEffect(() => {

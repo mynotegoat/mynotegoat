@@ -9,6 +9,7 @@ import {
   prepareCloudStateBeforeMount,
   setActiveWorkspaceId,
 } from "@/lib/cloud-state";
+import { installStorageSyncInterceptor, onSyncStatusChange } from "@/lib/storage-sync-interceptor";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
 import { PlanTierProvider } from "@/lib/plan-context";
@@ -21,6 +22,7 @@ export default function PortalLayout({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [planTier, setPlanTier] = useState<PlanTier>("complete");
+  const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "error">("synced");
 
   useEffect(() => {
     let active = true;
@@ -69,6 +71,15 @@ export default function PortalLayout({
         console.warn("[Portal] Cloud bootstrap skipped:", error);
       }
 
+      // Install the real-time sync interceptor AFTER cloud state is loaded.
+      // Every localStorage write from this point forward auto-syncs to Supabase.
+      installStorageSyncInterceptor();
+      onSyncStatusChange((status) => {
+        if (active) {
+          setSyncStatus(status);
+        }
+      });
+
       if (active) {
         setMounted(true);
       }
@@ -93,6 +104,19 @@ export default function PortalLayout({
     <PlanTierProvider planTier={planTier}>
       <AppShell planTier={planTier}>
         <CloudStateSync />
+        {/* Sync status indicator */}
+        <div className="pointer-events-none fixed bottom-3 right-3 z-50">
+          {syncStatus === "syncing" && (
+            <div className="pointer-events-auto rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
+              Saving to cloud...
+            </div>
+          )}
+          {syncStatus === "error" && (
+            <div className="pointer-events-auto rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
+              Cloud sync failed — retrying
+            </div>
+          )}
+        </div>
         {children}
       </AppShell>
     </PlanTierProvider>
