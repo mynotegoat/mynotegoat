@@ -17,7 +17,7 @@ import { useScheduleSettings } from "@/hooks/use-schedule-settings";
 import { usePriorityCaseRules } from "@/hooks/use-priority-case-rules";
 import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
 import { useEmailSettings } from "@/hooks/use-email-settings";
-import { getDefaultEmailSettings } from "@/lib/email-settings";
+import { getDefaultEmailSettings, emailAutoFields, emailAutoFieldLabels, type EmailAutoField } from "@/lib/email-settings";
 import { quickStatOptions } from "@/lib/quick-stats-settings";
 import { appointmentStatusOptions } from "@/lib/schedule-appointments";
 import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
@@ -2932,9 +2932,28 @@ export default function SettingsPage() {
         title="Email Settings"
       >
         <div className="grid gap-4">
-          <p className="text-xs text-[var(--text-muted)]">
-            Use <code className="rounded bg-[var(--bg-soft)] px-1 py-0.5 font-mono text-xs">{"{{FILE_NAME}}"}</code> anywhere in the subject or body to insert the file name automatically.
-          </p>
+          <div>
+            <p className="text-xs font-semibold text-[var(--text-muted)]">Available Fields (click to copy)</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Paste these tokens into the subject or body. Patient fields auto-fill when emailing from a patient folder.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {emailAutoFields.map((field) => (
+                <button
+                  key={field}
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-mono hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`{{${field}}}`);
+                  }}
+                  title={`${emailAutoFieldLabels[field]} — click to copy {{${field}}}`}
+                  type="button"
+                >
+                  <span className="text-blue-600">{`{{${field}}}`}</span>
+                  <span className="ml-1 font-sans text-[var(--text-muted)]">{emailAutoFieldLabels[field]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Email Subject</span>
             <input
@@ -2955,9 +2974,15 @@ export default function SettingsPage() {
             />
           </label>
           <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-            <p className="text-xs font-semibold text-[var(--text-muted)]">Preview (example file: X-Ray Report.pdf)</p>
-            <p className="mt-1 text-sm"><span className="font-semibold">Subject:</span> {emailSettings.subjectTemplate.replace(/\{\{FILE_NAME\}\}/g, "X-Ray Report.pdf")}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm"><span className="font-semibold">Body:</span> {emailSettings.bodyTemplate.replace(/\{\{FILE_NAME\}\}/g, "X-Ray Report.pdf")}</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)]">Preview (example: John Doe, file X-Ray Report.pdf)</p>
+            <p className="mt-1 text-sm"><span className="font-semibold">Subject:</span> {emailSettings.subjectTemplate.replace(/\{\{\s*([A-Z_]+)\s*\}\}/g, (_, key: string) => {
+              const examples: Record<string, string> = { FILE_NAME: "X-Ray Report.pdf", FIRST_NAME: "John", LAST_NAME: "Doe", FULL_NAME: "John Doe", MR_MRS_MS_LAST_NAME: "Mr. Doe", DOB: "05/12/1990", INJURY_DATE: "03/01/2026", OFFICE_NAME: "Prime Spine", TODAY: new Date().toLocaleDateString("en-US") };
+              return examples[key] ?? "";
+            })}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm"><span className="font-semibold">Body:</span> {emailSettings.bodyTemplate.replace(/\{\{\s*([A-Z_]+)\s*\}\}/g, (_, key: string) => {
+              const examples: Record<string, string> = { FILE_NAME: "X-Ray Report.pdf", FIRST_NAME: "John", LAST_NAME: "Doe", FULL_NAME: "John Doe", MR_MRS_MS_LAST_NAME: "Mr. Doe", DOB: "05/12/1990", INJURY_DATE: "03/01/2026", OFFICE_NAME: "Prime Spine", TODAY: new Date().toLocaleDateString("en-US") };
+              return examples[key] ?? "";
+            })}</p>
           </div>
         </div>
       </CollapsibleSection>

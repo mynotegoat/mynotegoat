@@ -1,11 +1,28 @@
 const STORAGE_KEY = "casemate.email-settings.v1";
 
 export interface EmailSettings {
-  /** Template for the email subject. Use {{FILE_NAME}} as placeholder. */
+  /** Template for the email subject. Use {{FIELD}} placeholders. */
   subjectTemplate: string;
-  /** Template for the email body. Use {{FILE_NAME}} as placeholder. */
+  /** Template for the email body. Use {{FIELD}} placeholders. */
   bodyTemplate: string;
 }
+
+export const emailAutoFieldLabels = {
+  FILE_NAME: "File name",
+  FIRST_NAME: "Patient first name",
+  LAST_NAME: "Patient last name",
+  FULL_NAME: "Patient full name",
+  MR_MRS_MS_LAST_NAME: "Mr./Mrs./Ms. Last name",
+  DOB: "Date of birth",
+  INJURY_DATE: "Date of injury",
+  OFFICE_NAME: "Office name",
+  TODAY: "Today's date",
+} as const;
+
+export type EmailAutoField = keyof typeof emailAutoFieldLabels;
+export const emailAutoFields = Object.keys(emailAutoFieldLabels) as EmailAutoField[];
+
+export type EmailRenderContext = Partial<Record<EmailAutoField, string>>;
 
 export function getDefaultEmailSettings(): EmailSettings {
   return {
@@ -15,8 +32,10 @@ export function getDefaultEmailSettings(): EmailSettings {
   };
 }
 
-export function renderEmailTemplate(template: string, fileName: string): string {
-  return template.replace(/\{\{FILE_NAME\}\}/g, fileName);
+export function renderEmailTemplate(template: string, context: EmailRenderContext): string {
+  return template.replace(/\{\{\s*([A-Z_]+)\s*\}\}/g, (_, key: string) => {
+    return (context as Record<string, string | undefined>)[key] ?? "";
+  });
 }
 
 function normalize(value: unknown): EmailSettings {

@@ -16,7 +16,8 @@ import {
   getSignedUrl,
   downloadFile,
 } from "@/lib/file-storage";
-import { loadEmailSettings, renderEmailTemplate } from "@/lib/email-settings";
+import { loadEmailSettings, renderEmailTemplate, type EmailRenderContext } from "@/lib/email-settings";
+import { loadOfficeSettings } from "@/lib/office-settings";
 import { patients as patientRecords } from "@/lib/mock-data";
 
 // ---------------------------------------------------------------------------
@@ -271,13 +272,60 @@ export default function MyFilesPage() {
   const [emailingFileId, setEmailingFileId] = useState<string | null>(null);
   const [emailToast, setEmailToast] = useState("");
 
+  /** Build email context with patient info when file is inside a patient folder */
+  const buildEmailContext = (file: FileRecord): EmailRenderContext => {
+    const today = new Date();
+    const ctx: EmailRenderContext = {
+      FILE_NAME: file.name,
+      TODAY: today.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+      OFFICE_NAME: loadOfficeSettings().officeName || "",
+    };
+
+    // Walk up the folder tree to find a patient folder
+    let folderId: string | null = file.folderId;
+    while (folderId) {
+      const folder = getFolderById(state, folderId);
+      if (!folder) break;
+      if (folder.patientId) {
+        const patient = patients.find((p) => p.id === folder.patientId);
+        if (patient) {
+          const [lastName = "", firstName = ""] = patient.fullName.split(",").map((s) => s.trim());
+          ctx.FIRST_NAME = firstName;
+          ctx.LAST_NAME = lastName;
+          ctx.FULL_NAME = `${firstName} ${lastName}`.trim();
+
+          // Mr./Mrs./Ms. logic
+          const sex = patient.sex;
+          const married = patient.maritalStatus === "Married";
+          let prefix = "";
+          if (sex === "Male") prefix = "Mr.";
+          else if (sex === "Female") prefix = married ? "Mrs." : "Ms.";
+          else prefix = "Mr./Ms.";
+          ctx.MR_MRS_MS_LAST_NAME = `${prefix} ${lastName}`;
+
+          if (patient.dob) {
+            const [y, m, d] = patient.dob.split("-");
+            ctx.DOB = `${m}/${d}/${y}`;
+          }
+          if (patient.dateOfLoss) {
+            const [y, m, d] = patient.dateOfLoss.split("-");
+            ctx.INJURY_DATE = `${m}/${d}/${y}`;
+          }
+        }
+        break;
+      }
+      folderId = folder.parentId;
+    }
+    return ctx;
+  };
+
   const handleEmailFile = async (file: FileRecord) => {
     setEmailingFileId(file.id);
     try {
-      // Read customizable email settings
       const settings = loadEmailSettings();
-      const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, file.name));
-      const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, file.name));
+      const ctx = buildEmailContext(file);
+      const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, ctx));
+      const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, ctx));
 
       // Wait for the download to actually complete before opening mailto
       await downloadFile(file.storagePath, file.name);
