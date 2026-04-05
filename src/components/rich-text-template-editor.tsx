@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 export interface RichTextTemplateEditorHandle {
   focus: () => void;
@@ -87,6 +87,8 @@ export const RichTextTemplateEditor = forwardRef<
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
   const isFocusedRef = useRef(false);
+  const [formatBlockValue, setFormatBlockValue] = useState("");
+  const [fontSizeValue, setFontSizeValue] = useState("");
 
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
@@ -176,17 +178,17 @@ export const RichTextTemplateEditor = forwardRef<
         </span>
         <select
           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
-          defaultValue=""
+          value={formatBlockValue}
           onChange={(event) => {
-            const value = event.target.value;
-            if (!value) {
-              return;
-            }
-            runCommand("formatBlock", value);
-            event.currentTarget.value = "";
+            const val = event.target.value;
+            setFormatBlockValue(val);
+            if (!val) return;
+            runCommand("formatBlock", val);
+            // Reset after applying so dropdown returns to label
+            setTimeout(() => setFormatBlockValue(""), 0);
           }}
         >
-          <option value="">Paragraph</option>
+          <option value="">Format</option>
           <option value="<p>">Paragraph</option>
           <option value="<h1>">Heading 1</option>
           <option value="<h2>">Heading 2</option>
@@ -195,9 +197,10 @@ export const RichTextTemplateEditor = forwardRef<
         </select>
         <select
           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
-          defaultValue=""
+          value={fontSizeValue}
           onChange={(event) => {
             const size = event.target.value;
+            setFontSizeValue(size);
             if (!size) return;
             runCommand("fontSize", "7");
             const editor = editorRef.current;
@@ -211,7 +214,7 @@ export const RichTextTemplateEditor = forwardRef<
               });
               emitChange();
             }
-            event.currentTarget.value = "";
+            setTimeout(() => setFontSizeValue(""), 0);
           }}
         >
           <option value="">Size</option>
