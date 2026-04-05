@@ -16,6 +16,7 @@ import {
   type EncounterSection,
 } from "@/lib/encounter-notes";
 import {
+  groupMacrosByFolder,
   renderMacroTemplate,
   type MacroAnswerMap,
   type MacroTemplate,
@@ -708,6 +709,20 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       ),
     [activeSection, macroLibrary.templates],
   );
+
+  const sectionMacroFolderGroups = useMemo(
+    () => groupMacrosByFolder(sectionMacros),
+    [sectionMacros],
+  );
+
+  const [macroFoldersCollapsed, setMacroFoldersCollapsed] = useState<Set<string>>(new Set());
+  const toggleMacroFolder = (folder: string) => {
+    setMacroFoldersCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(folder)) next.delete(folder); else next.add(folder);
+      return next;
+    });
+  };
 
   const activeTreatments = useMemo(
     () => billingMacros.treatments.filter((entry) => entry.active),
@@ -1454,17 +1469,48 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
                 <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                   <p className="text-sm font-semibold">SOAP Macros: {sectionLabels[activeSection]}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {sectionMacros.map((macro) => (
-                      <button
-                        key={macro.id}
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold"
-                        onClick={() => handleRunMacroClick(macro)}
-                        type="button"
-                      >
-                        {macro.buttonName}
-                      </button>
-                    ))}
+                  <div className="mt-2 space-y-2">
+                    {sectionMacroFolderGroups.map((group) => {
+                      const isUngrouped = group.folder === "";
+                      const isCollapsed = !isUngrouped && macroFoldersCollapsed.has(group.folder);
+
+                      return (
+                        <div key={group.folder || "__ungrouped__"}>
+                          {!isUngrouped && (
+                            <button
+                              className="mb-1 flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] hover:bg-white/60"
+                              onClick={() => toggleMacroFolder(group.folder)}
+                              type="button"
+                            >
+                              <svg
+                                className={`h-3 w-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2.5}
+                                viewBox="0 0 24 24"
+                              >
+                                <path d="m9 5 7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {group.folder}
+                            </button>
+                          )}
+                          {!isCollapsed && (
+                            <div className="flex flex-wrap gap-2">
+                              {group.macros.map((macro) => (
+                                <button
+                                  key={macro.id}
+                                  className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold"
+                                  onClick={() => handleRunMacroClick(macro)}
+                                  type="button"
+                                >
+                                  {macro.buttonName}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {sectionMacros.length === 0 && (
                       <p className="text-sm text-[var(--text-muted)]">
                         No active macros in this section yet. Configure them in Settings &gt; SOAP Macro Settings.

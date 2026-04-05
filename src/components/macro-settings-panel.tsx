@@ -6,6 +6,8 @@ import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/com
 import {
   createQuestionId,
   getQuestionIdsFromBody,
+  getMacroFolderNames,
+  groupMacrosByFolder,
   insertAutoFieldToken,
   insertQuestionToken,
   macroAutoFields,
@@ -97,11 +99,46 @@ export function MacroSettingsPanel() {
   const [runOpen, setRunOpen] = useState(false);
   const [answers, setAnswers] = useState<MacroAnswerMap>({});
   const [generatedOutput, setGeneratedOutput] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [newFolderDraft, setNewFolderDraft] = useState("");
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
 
   const sectionMacros = useMemo(
     () => macroLibrary.templates.filter((template) => template.section === activeSection),
     [activeSection, macroLibrary.templates],
   );
+
+  const sectionFolderGroups = useMemo(
+    () => groupMacrosByFolder(sectionMacros),
+    [sectionMacros],
+  );
+
+  const sectionFolderNames = useMemo(
+    () => getMacroFolderNames(sectionMacros),
+    [sectionMacros],
+  );
+
+  const toggleFolderCollapse = (folderName: string) => {
+    setCollapsedFolders((current) => {
+      const next = new Set(current);
+      if (next.has(folderName)) {
+        next.delete(folderName);
+      } else {
+        next.add(folderName);
+      }
+      return next;
+    });
+  };
+
+  const handleAddFolder = () => {
+    const name = newFolderDraft.trim();
+    if (!name) return;
+    // Create a new macro inside the folder so the folder appears
+    const newId = addMacro(activeSection, name);
+    setSelectedMacroId(newId);
+    setNewFolderDraft("");
+    setShowNewFolderInput(false);
+  };
 
   const resolvedSelectedMacroId = useMemo(() => {
     if (selectedMacroId && sectionMacros.some((macro) => macro.id === selectedMacroId)) {
@@ -334,31 +371,94 @@ export function MacroSettingsPanel() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1.5fr]">
         <article className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
           <div className="mb-3 flex items-center justify-between">
-            <h4 className="text-lg font-semibold">{macroSectionLabels[activeSection]} Buttons</h4>
-            <button
-              className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
-              onClick={handleAddMacro}
-              type="button"
-            >
-              Add Macro
-            </button>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {sectionMacros.map((macro) => (
+            <h4 className="text-lg font-semibold">{macroSectionLabels[activeSection]} Macros</h4>
+            <div className="flex gap-1">
               <button
-                key={macro.id}
-                className={`rounded-xl border px-3 py-2 text-left font-semibold ${
-                  selectedMacroId === macro.id
-                    ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
-                    : "border-[var(--line-soft)] bg-white"
-                }`}
-                onClick={() => setSelectedMacroId(macro.id)}
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
+                onClick={() => { setShowNewFolderInput(true); setNewFolderDraft(""); }}
                 type="button"
               >
-                {macro.buttonName}
+                + Folder
               </button>
-            ))}
+              <button
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
+                onClick={handleAddMacro}
+                type="button"
+              >
+                + Macro
+              </button>
+            </div>
+          </div>
+
+          {/* New folder input */}
+          {showNewFolderInput && (
+            <form
+              className="mb-3 flex items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); handleAddFolder(); }}
+            >
+              <input
+                autoFocus
+                className="w-full rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-sm"
+                onChange={(e) => setNewFolderDraft(e.target.value)}
+                placeholder="Folder name (e.g., Treatments)"
+                value={newFolderDraft}
+              />
+              <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white" type="submit">Create</button>
+              <button className="rounded-lg border border-[var(--line-soft)] px-3 py-1.5 text-sm" onClick={() => setShowNewFolderInput(false)} type="button">Cancel</button>
+            </form>
+          )}
+
+          {/* Folder-grouped macro list */}
+          <div className="space-y-3">
+            {sectionFolderGroups.map((group) => {
+              const isUngrouped = group.folder === "";
+              const isCollapsed = !isUngrouped && collapsedFolders.has(group.folder);
+
+              return (
+                <div key={group.folder || "__ungrouped__"}>
+                  {/* Folder header */}
+                  {!isUngrouped && (
+                    <button
+                      className="mb-1.5 flex w-full items-center gap-1.5 rounded-lg bg-[var(--bg-soft)] px-2 py-1.5 text-left text-xs font-bold uppercase tracking-wide text-[var(--text-muted)] hover:bg-blue-50"
+                      onClick={() => toggleFolderCollapse(group.folder)}
+                      type="button"
+                    >
+                      <svg
+                        className={`h-3 w-3 shrink-0 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="m9 5 7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {group.folder}
+                      <span className="ml-auto text-[10px] font-medium text-[var(--text-muted)]">{group.macros.length}</span>
+                    </button>
+                  )}
+
+                  {/* Macro buttons */}
+                  {!isCollapsed && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {group.macros.map((macro) => (
+                        <button
+                          key={macro.id}
+                          className={`rounded-xl border px-3 py-2 text-left font-semibold text-sm ${
+                            selectedMacroId === macro.id
+                              ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
+                              : "border-[var(--line-soft)] bg-white"
+                          }`}
+                          onClick={() => setSelectedMacroId(macro.id)}
+                          type="button"
+                        >
+                          {macro.buttonName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {sectionMacros.length === 0 && (
@@ -398,19 +498,53 @@ export function MacroSettingsPanel() {
                 </div>
               </div>
 
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Button Name</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) =>
-                    updateMacro(selectedMacro.id, (current) => ({
-                      ...current,
-                      buttonName: event.target.value,
-                    }))
-                  }
-                  value={selectedMacro.buttonName}
-                />
-              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Button Name</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) =>
+                      updateMacro(selectedMacro.id, (current) => ({
+                        ...current,
+                        buttonName: event.target.value,
+                      }))
+                    }
+                    value={selectedMacro.buttonName}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Folder</span>
+                  <div className="flex gap-1">
+                    <input
+                      className="flex-1 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      list={`folder-suggestions-${selectedMacro.id}`}
+                      onChange={(event) =>
+                        updateMacro(selectedMacro.id, (current) => ({
+                          ...current,
+                          folder: event.target.value.trim() || undefined,
+                        }))
+                      }
+                      placeholder="None (top-level)"
+                      value={selectedMacro.folder ?? ""}
+                    />
+                    <datalist id={`folder-suggestions-${selectedMacro.id}`}>
+                      {sectionFolderNames.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                    {selectedMacro.folder && (
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-heading)]"
+                        onClick={() => updateMacro(selectedMacro.id, (current) => ({ ...current, folder: undefined }))}
+                        title="Remove from folder"
+                        type="button"
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </div>
+                </label>
+              </div>
 
               <div className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Template Body</span>

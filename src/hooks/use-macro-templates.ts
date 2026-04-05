@@ -60,8 +60,8 @@ export function useMacroTemplates() {
   );
 
   const addMacro = useCallback(
-    (section: MacroSection) => {
-      const newMacro = createEmptyMacro(section);
+    (section: MacroSection, folder?: string) => {
+      const newMacro = createEmptyMacro(section, folder);
       updateLibrary((current) => ({
         ...current,
         templates: [...current.templates, newMacro],

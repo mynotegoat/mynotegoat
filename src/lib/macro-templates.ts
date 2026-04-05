@@ -21,6 +21,8 @@ export interface MacroTemplate {
   body: string;
   questions: MacroQuestion[];
   active: boolean;
+  /** Optional folder name for grouping macros within a section */
+  folder?: string;
 }
 
 export interface MacroLibraryConfig {
@@ -229,6 +231,7 @@ function normalizeTemplate(value: unknown): MacroTemplate | null {
   const questions = Array.isArray(row.questions)
     ? row.questions.map(normalizeQuestion).filter((item): item is MacroQuestion => Boolean(item))
     : [];
+  const folder = typeof row.folder === "string" && row.folder.trim() ? row.folder.trim() : undefined;
   return {
     id,
     section,
@@ -236,6 +239,7 @@ function normalizeTemplate(value: unknown): MacroTemplate | null {
     body,
     questions,
     active: row.active !== false,
+    ...(folder ? { folder } : {}),
   };
 }
 
@@ -395,7 +399,7 @@ export function renderMacroTemplate(
   return withQuestions.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export function createEmptyMacro(section: MacroSection): MacroTemplate {
+export function createEmptyMacro(section: MacroSection, folder?: string): MacroTemplate {
   const timestamp = Date.now();
   return {
     id: `macro-${section}-${timestamp}`,
@@ -404,5 +408,52 @@ export function createEmptyMacro(section: MacroSection): MacroTemplate {
     body: "",
     questions: [],
     active: true,
+    ...(folder ? { folder } : {}),
   };
+}
+
+export interface MacroFolderGroup {
+  folder: string; // "" = ungrouped (top-level)
+  macros: MacroTemplate[];
+}
+
+/** Group macros by folder, preserving order. Ungrouped macros come first. */
+export function groupMacrosByFolder(macros: MacroTemplate[]): MacroFolderGroup[] {
+  const folderOrder: string[] = [];
+  const folderMap = new Map<string, MacroTemplate[]>();
+
+  for (const macro of macros) {
+    const key = macro.folder?.trim() || "";
+    if (!folderMap.has(key)) {
+      folderOrder.push(key);
+      folderMap.set(key, []);
+    }
+    folderMap.get(key)!.push(macro);
+  }
+
+  // Ungrouped ("") first, then named folders in order of first appearance
+  const result: MacroFolderGroup[] = [];
+  const ungrouped = folderMap.get("");
+  if (ungrouped?.length) {
+    result.push({ folder: "", macros: ungrouped });
+  }
+  for (const key of folderOrder) {
+    if (key === "") continue;
+    const macros = folderMap.get(key);
+    if (macros?.length) {
+      result.push({ folder: key, macros });
+    }
+  }
+  return result;
+}
+
+/** Get all unique folder names used in a macro section */
+export function getMacroFolderNames(macros: MacroTemplate[]): string[] {
+  const names = new Set<string>();
+  for (const macro of macros) {
+    if (macro.folder?.trim()) {
+      names.add(macro.folder.trim());
+    }
+  }
+  return Array.from(names).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
