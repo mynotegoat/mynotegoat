@@ -330,7 +330,7 @@ export default function KeyDatesPage() {
                       </button>
                       <button
                         className="rounded-lg border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-3 py-1 font-semibold text-[#b43b34]"
-                        onClick={() => removeKeyDate(row.id)}
+                        onClick={() => { if (window.confirm(`Delete key date "${row.reason}"?`)) removeKeyDate(row.id); }}
                         type="button"
                       >
                         Delete

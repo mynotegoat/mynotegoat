@@ -1667,7 +1667,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               <button
                                 className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold"
                                 disabled={selectedEncounter.signed}
-                                onClick={() => removeCharge(selectedEncounter.id, entry.id)}
+                                onClick={() => { if (window.confirm(`Remove charge "${entry.name}"?`)) removeCharge(selectedEncounter.id, entry.id); }}
                                 type="button"
                               >
                                 Remove

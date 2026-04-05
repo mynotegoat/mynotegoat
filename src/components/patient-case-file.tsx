@@ -2812,7 +2812,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
-                      onClick={() => removeImagingReferral("xray", entry.id)}
+                      onClick={() => { if (window.confirm("Remove this X-ray referral?")) removeImagingReferral("xray", entry.id); }}
                       type="button"
                     >
                       Remove
@@ -3055,7 +3055,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
-                      onClick={() => removeImagingReferral("mri", entry.id)}
+                      onClick={() => { if (window.confirm("Remove this MRI referral?")) removeImagingReferral("mri", entry.id); }}
                       type="button"
                     >
                       Remove
@@ -3182,7 +3182,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
-                      onClick={() => removeSpecialist(entry.id)}
+                      onClick={() => { if (window.confirm("Remove this specialist referral?")) removeSpecialist(entry.id); }}
                       type="button"
                     >
                       Remove
@@ -3345,7 +3345,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     <span>{date}</span>
                     <button
                       className="rounded-full border border-[var(--line-soft)] px-2 text-xs font-semibold"
-                      onClick={() => removeReExam(index)}
+                      onClick={() => { if (window.confirm("Remove this re-exam date?")) removeReExam(index); }}
                       type="button"
                     >
                       x
@@ -3442,7 +3442,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-full border border-[var(--line-soft)] px-2 text-xs font-semibold"
-                      onClick={() => removeRelatedCase(entry.patientId)}
+                      onClick={() => { if (window.confirm("Remove this related case?")) removeRelatedCase(entry.patientId); }}
                       type="button"
                     >
                       x
@@ -3719,7 +3719,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       <td className="px-3 py-2 text-right">
                         <button
                           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                          onClick={() => removeDiagnosis(entry.id)}
+                          onClick={() => { if (window.confirm(`Remove diagnosis "${entry.code}"?`)) removeDiagnosis(entry.id); }}
                           type="button"
                         >
                           Remove

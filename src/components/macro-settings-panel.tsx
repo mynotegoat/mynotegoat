@@ -193,6 +193,9 @@ export function MacroSettingsPanel() {
     if (!selectedMacro) {
       return;
     }
+    if (!window.confirm(`Delete macro "${selectedMacro.buttonName}"? This cannot be undone.`)) {
+      return;
+    }
     deleteMacro(selectedMacro.id);
   };
 
@@ -576,7 +579,7 @@ export function MacroSettingsPanel() {
                         </button>
                         <button
                           className="rounded-lg border border-[var(--line-soft)] px-2 py-0.5 text-xs text-[#b43b34]"
-                          onClick={() => removeQuestion(selectedMacro.id, question.id)}
+                          onClick={() => { if (window.confirm(`Remove question "${question.label}"?`)) removeQuestion(selectedMacro.id, question.id); }}
                           type="button"
                         >
                           Remove

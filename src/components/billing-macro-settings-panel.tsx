@@ -311,7 +311,7 @@ export function BillingMacroSettingsPanel() {
                 </span>
                 <button
                   className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                  onClick={() => removeTreatment(entry.id)}
+                  onClick={() => { if (window.confirm(`Remove treatment "${entry.name}"?`)) removeTreatment(entry.id); }}
                   type="button"
                 >
                   Remove
@@ -402,7 +402,7 @@ export function BillingMacroSettingsPanel() {
                       <button
                         className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
                         disabled={isLocked || billingMacros.diagnosisFolders.length <= 1}
-                        onClick={() => removeDiagnosisFolder(folder.id)}
+                        onClick={() => { if (window.confirm(`Remove folder "${folder.name}" and all its diagnoses?`)) removeDiagnosisFolder(folder.id); }}
                         type="button"
                       >
                         Remove
@@ -514,7 +514,7 @@ export function BillingMacroSettingsPanel() {
                       </label>
                       <button
                         className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                        onClick={() => removeDiagnosis(entry.id)}
+                        onClick={() => { if (window.confirm(`Remove diagnosis "${entry.code}"?`)) removeDiagnosis(entry.id); }}
                         type="button"
                       >
                         Remove
@@ -591,7 +591,7 @@ export function BillingMacroSettingsPanel() {
                   </label>
                   <button
                     className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                    onClick={() => removeBundle(bundle.id)}
+                    onClick={() => { if (window.confirm(`Remove bundle "${bundle.name}"?`)) removeBundle(bundle.id); }}
                     type="button"
                   >
                     Remove

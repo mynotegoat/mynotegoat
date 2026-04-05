@@ -227,7 +227,7 @@ export function PackageBuilderSettingsPanel() {
                   <div className="col-span-6 flex items-end lg:col-span-2">
                     <button
                       className="h-[34px] w-full rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold"
-                      onClick={() => removePackage(entry.id)}
+                      onClick={() => { if (window.confirm(`Remove package "${entry.name}"?`)) removePackage(entry.id); }}
                       type="button"
                     >
                       Remove
@@ -343,7 +343,7 @@ export function PackageBuilderSettingsPanel() {
                           </p>
                           <button
                             className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                            onClick={() => removePackageTreatment(entry.id, item.treatmentId)}
+                            onClick={() => { if (window.confirm("Remove this treatment from the package?")) removePackageTreatment(entry.id, item.treatmentId); }}
                             type="button"
                           >
                             Remove

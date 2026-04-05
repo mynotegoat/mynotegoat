@@ -521,7 +521,7 @@ export function ReportTemplateSettingsPanel() {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 font-semibold"
-                      onClick={() => removePrompt(selectedTemplate.id, prompt.id)}
+                      onClick={() => { if (window.confirm(`Remove prompt "${prompt.label}"?`)) removePrompt(selectedTemplate.id, prompt.id); }}
                       type="button"
                     >
                       Remove

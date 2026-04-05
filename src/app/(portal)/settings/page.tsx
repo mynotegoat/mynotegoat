@@ -1973,7 +1973,7 @@ export default function SettingsPage() {
                   <button
                     className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
                     disabled={appointmentTypes.length <= 1}
-                    onClick={() => removeAppointmentType(entry.id)}
+                    onClick={() => { if (window.confirm(`Remove appointment type "${entry.name}"?`)) removeAppointmentType(entry.id); }}
                     type="button"
                   >
                     Remove
@@ -2113,7 +2113,7 @@ export default function SettingsPage() {
                   </label>
                   <button
                     className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm font-semibold"
-                    onClick={() => removeRoom(room.id)}
+                    onClick={() => { if (window.confirm(`Remove room "${room.name}"?`)) removeRoom(room.id); }}
                     type="button"
                   >
                     Remove
@@ -2747,7 +2747,7 @@ export default function SettingsPage() {
                 <button
                   aria-label={`Remove ${status.name}`}
                   className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
-                  onClick={() => removeStatus(status.name)}
+                  onClick={() => { if (window.confirm(`Remove status "${status.name}"?`)) removeStatus(status.name); }}
                   type="button"
                 >
                   Remove
@@ -2853,7 +2853,7 @@ export default function SettingsPage() {
                     <button
                       className="rounded-md border border-[var(--line-soft)] px-2 py-1 text-sm"
                       disabled={lienOptions.length <= 1}
-                      onClick={() => removeLienOption(index)}
+                      onClick={() => { if (window.confirm(`Remove lien option "${lienOptions[index]}"?`)) removeLienOption(index); }}
                       type="button"
                     >
                       Remove
