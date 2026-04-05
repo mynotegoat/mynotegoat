@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useFileManager } from "@/hooks/use-file-manager";
 import {
   type FileFolder,
@@ -194,6 +194,80 @@ export default function MyFilesPage() {
 
   const handleDownload = (file: FileRecord) => {
     downloadFile(file.storagePath, file.name);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Email file (download + open mailto) — desktop approach
+  // ---------------------------------------------------------------------------
+
+  const [emailingFileId, setEmailingFileId] = useState<string | null>(null);
+
+  const handleEmailFile = async (file: FileRecord) => {
+    setEmailingFileId(file.id);
+    try {
+      // Start the download so the file is ready to attach
+      downloadFile(file.storagePath, file.name);
+
+      // Open mailto with pre-filled subject & body hint
+      const subject = encodeURIComponent(file.name);
+      const body = encodeURIComponent(
+        `Please find the attached file: ${file.name}\n\n(The file has been downloaded to your device — please attach it to this email.)`
+      );
+      window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+    } finally {
+      // Brief delay so the button shows loading state
+      setTimeout(() => setEmailingFileId(null), 1000);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Share file (Web Share API) — mobile/tablet native share sheet
+  // ---------------------------------------------------------------------------
+
+  const [sharingFileId, setSharingFileId] = useState<string | null>(null);
+  const [canShare, setCanShare] = useState(false);
+
+  useEffect(() => {
+    // Detect Web Share API with file support
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof navigator.canShare === "function");
+  }, []);
+
+  const handleShareFile = async (file: FileRecord) => {
+    setSharingFileId(file.id);
+    try {
+      const { url, error } = await getSignedUrl(file.storagePath);
+      if (error || !url) {
+        setMessage("Could not prepare file for sharing.");
+        return;
+      }
+
+      // Fetch the file as a blob so we can share it natively
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const shareFile = new File([blob], file.name, { type: file.mimeType });
+
+      const shareData: ShareData = {
+        title: file.name,
+        files: [shareFile],
+      };
+
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback: just share the URL
+        await navigator.share({
+          title: file.name,
+          text: `File: ${file.name}`,
+          url,
+        });
+      }
+    } catch (err: unknown) {
+      // User cancelled the share sheet — not an error
+      if (err instanceof Error && err.name === "AbortError") return;
+      setMessage("Share failed. Try downloading instead.");
+    } finally {
+      setSharingFileId(null);
+    }
   };
 
   const handlePreview = async (file: FileRecord) => {
@@ -651,6 +725,28 @@ export default function MyFilesPage() {
                           >
                             Download
                           </button>
+                          {/* Email button — downloads file + opens mailto */}
+                          <button
+                            className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                            disabled={emailingFileId === file.id}
+                            onClick={() => handleEmailFile(file)}
+                            title="Download file and open email to attach"
+                            type="button"
+                          >
+                            {emailingFileId === file.id ? "..." : "Email"}
+                          </button>
+                          {/* Share button — native share sheet (mobile/tablet) */}
+                          {canShare && (
+                            <button
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50"
+                              disabled={sharingFileId === file.id}
+                              onClick={() => handleShareFile(file)}
+                              title="Share file via native share sheet"
+                              type="button"
+                            >
+                              {sharingFileId === file.id ? "..." : "Share"}
+                            </button>
+                          )}
                           <button
                             className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
                             disabled={deletingFileId === file.id}
@@ -729,6 +825,26 @@ export default function MyFilesPage() {
                 >
                   Download
                 </button>
+                <button
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                  disabled={emailingFileId === previewFile.id}
+                  onClick={() => handleEmailFile(previewFile)}
+                  title="Download file and open email to attach"
+                  type="button"
+                >
+                  {emailingFileId === previewFile.id ? "..." : "Email"}
+                </button>
+                {canShare && (
+                  <button
+                    className="rounded-lg px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50"
+                    disabled={sharingFileId === previewFile.id}
+                    onClick={() => handleShareFile(previewFile)}
+                    title="Share file via native share sheet"
+                    type="button"
+                  >
+                    {sharingFileId === previewFile.id ? "..." : "Share"}
+                  </button>
+                )}
                 <button
                   className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
                   onClick={closePreview}
