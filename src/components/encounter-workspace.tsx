@@ -1784,29 +1784,73 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </label>
                   );
 
+                  // Detect if the current answer is custom free text (not one of the predefined options)
+                  const isCustomText = question.options.length > 0
+                    && !question.multiSelect
+                    && selectedAnswer !== ""
+                    && !normalizedOptions.includes(selectedAnswer);
+
                   return (
                     <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
                       <p className="text-sm font-semibold">{question.label}</p>
                       {question.options.length > 0 ? (
-                        usePainScaleColumns ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="grid gap-2 md:grid-cols-2">
-                              <div className="grid gap-2">{leftPainScaleOptions.map(renderOptionRow)}</div>
-                              <div className="grid gap-2">{rightPainScaleOptions.map(renderOptionRow)}</div>
+                        <>
+                          {usePainScaleColumns ? (
+                            <div className="mt-2 space-y-2">
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <div className="grid gap-2">{leftPainScaleOptions.map(renderOptionRow)}</div>
+                                <div className="grid gap-2">{rightPainScaleOptions.map(renderOptionRow)}</div>
+                              </div>
+                              {nonNumericOptions.length > 0 && (
+                                <div className="grid gap-2">{nonNumericOptions.map(renderOptionRow)}</div>
+                              )}
                             </div>
-                            {nonNumericOptions.length > 0 && (
-                              <div className="grid gap-2">{nonNumericOptions.map(renderOptionRow)}</div>
-                            )}
+                          ) : useMultiColumn ? (
+                            <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
+                              {columns.map((col, ci) => (
+                                <div key={ci} className="grid gap-2 content-start">{col.map(renderOptionRow)}</div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 grid gap-2">{selectableOptions.map(renderOptionRow)}</div>
+                          )}
+                          {/* Free text option — always available below predefined choices */}
+                          <div className="mt-2">
+                            <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm">
+                              {!question.multiSelect && (
+                                <input
+                                  checked={isCustomText}
+                                  onChange={() =>
+                                    setRunMacroAnswers((current) => ({
+                                      ...current,
+                                      [question.id]: "",
+                                    }))
+                                  }
+                                  type="radio"
+                                />
+                              )}
+                              <input
+                                className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                                onChange={(event) =>
+                                  setRunMacroAnswers((current) => ({
+                                    ...current,
+                                    [question.id]: event.target.value,
+                                  }))
+                                }
+                                onClick={() => {
+                                  if (!isCustomText) {
+                                    setRunMacroAnswers((current) => ({
+                                      ...current,
+                                      [question.id]: "",
+                                    }));
+                                  }
+                                }}
+                                placeholder="Other (type your answer)"
+                                value={isCustomText ? selectedAnswer : ""}
+                              />
+                            </label>
                           </div>
-                        ) : useMultiColumn ? (
-                          <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
-                            {columns.map((col, ci) => (
-                              <div key={ci} className="grid gap-2 content-start">{col.map(renderOptionRow)}</div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="mt-2 grid gap-2">{selectableOptions.map(renderOptionRow)}</div>
-                        )
+                        </>
                       ) : (
                         <input
                           className="mt-2 w-full rounded-xl border border-[var(--line-soft)] px-3 py-2"
