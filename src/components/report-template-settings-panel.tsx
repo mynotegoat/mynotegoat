@@ -264,6 +264,7 @@ export function ReportTemplateSettingsPanel() {
               className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
               disabled={reportTemplates.templates.length <= 1}
               onClick={() => {
+                if (!window.confirm(`Delete template "${selectedTemplate.name}"? This cannot be undone.`)) return;
                 removeTemplate(selectedTemplate.id);
                 if (selectedTemplateId === selectedTemplate.id) {
                   const fallback = reportTemplates.templates.find((entry) => entry.id !== selectedTemplate.id);

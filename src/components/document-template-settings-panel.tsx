@@ -518,6 +518,7 @@ export function DocumentTemplateSettingsPanel({
                     if (!selectedTemplate || !canRemoveSelectedTemplate) {
                       return;
                     }
+                    if (!window.confirm(`Delete template "${selectedTemplate.name}"? This cannot be undone.`)) return;
                     removeTemplate(selectedTemplate.id);
                     setSelectedTemplateId(null);
                   }}
