@@ -39,9 +39,7 @@ const macroTestContexts: MacroTestContext[] = [
       HE_SHE: "he",
       HIM_HER: "him",
       HIS_HER: "his",
-      MR_MRS_MS: "Mr.",
       MR_MRS_MS_LAST_NAME: "Mr. Doe",
-      MR_MS_LAST_NAME: "Mr. Doe",
     },
   },
   {
@@ -59,9 +57,7 @@ const macroTestContexts: MacroTestContext[] = [
       HE_SHE: "she",
       HIM_HER: "her",
       HIS_HER: "her",
-      MR_MRS_MS: "Ms.",
       MR_MRS_MS_LAST_NAME: "Ms. Doe",
-      MR_MS_LAST_NAME: "Ms. Doe",
     },
   },
 ];

@@ -56,9 +56,7 @@ export const macroAutoFieldLabels = {
   HE_SHE: "he/she",
   HIM_HER: "him/her",
   HIS_HER: "his/her",
-  MR_MRS_MS: "Mr./Mrs./Ms.",
   MR_MRS_MS_LAST_NAME: "Mr./Mrs./Ms. Last name",
-  MR_MS_LAST_NAME: "Mr./Ms. Last name",
 } as const;
 
 export type MacroAutoField = keyof typeof macroAutoFieldLabels;
@@ -163,7 +161,7 @@ export function getDefaultMacroLibrary(): MacroLibraryConfig {
         "macro-subjective-pain-intake",
         "subjective",
         "Pain Intake",
-        "{{MR_MS_LAST_NAME}} reports pain level [[pain_scale]]/10 in the [[pain_region]], with frequency [[frequency]] and aggravating factors [[aggravating_factors]].",
+        "{{MR_MRS_MS_LAST_NAME}} reports pain level [[pain_scale]]/10 in the [[pain_region]], with frequency [[frequency]] and aggravating factors [[aggravating_factors]].",
         [
           { id: "pain_scale", label: "Pain scale", options: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] },
           { id: "pain_region", label: "Primary region", options: [] },

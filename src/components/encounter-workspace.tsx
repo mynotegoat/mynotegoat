@@ -763,9 +763,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       HE_SHE: pronouns.heShe,
       HIM_HER: pronouns.himHer,
       HIS_HER: pronouns.hisHer,
-      MR_MRS_MS: honorifics.mrMrsMs,
       MR_MRS_MS_LAST_NAME: honorifics.mrMrsMsLastName,
-      MR_MS_LAST_NAME: honorifics.mrMsLastName,
     };
   };
 
