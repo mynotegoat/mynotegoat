@@ -575,26 +575,29 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         white-space: pre-wrap;
         word-break: break-word;
         font-family: ${safeFontFamily};
-        font-size: 18px;
-        line-height: 1.52;
+        font-size: 14px;
+        line-height: 1.6;
       }
       .header {
-        margin: 0 0 18px 0;
+        margin: 0 0 20px 0;
         white-space: pre-wrap;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
-        font-size: 16px;
-        line-height: 1.45;
+        font-size: 13px;
+        line-height: 1.5;
       }
       .header-top {
         display: flex;
         justify-content: flex-end;
         align-items: flex-start;
-        margin: 0 0 14px 0;
+        margin: 0 0 24px 0;
       }
       .office-logo {
-        max-height: 160px;
+        max-height: 100px;
+        min-height: 60px;
         width: auto;
+        max-width: 300px;
+        min-width: 120px;
         object-fit: contain;
         display: block;
       }
