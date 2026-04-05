@@ -113,13 +113,26 @@ export async function downloadFile(storagePath: string, fileName: string) {
   const { url, error } = await getSignedUrl(storagePath);
   if (error || !url) return;
 
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.target = "_blank";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  try {
+    // Fetch as blob so the download attribute works (cross-origin signed URLs
+    // cause browsers to ignore the download attribute on plain anchor clicks).
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Revoke after a short delay to allow the download to start
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  } catch {
+    // Fallback: open the signed URL in a new tab
+    window.open(url, "_blank");
+  }
 }
 
 // ---------------------------------------------------------------------------

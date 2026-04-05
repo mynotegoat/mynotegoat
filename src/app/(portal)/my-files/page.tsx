@@ -123,6 +123,7 @@ export default function MyFilesPage() {
   const [viewMode, setViewMode] = useState<FolderViewMode>(() => loadViewMode());
   const [folderSort, setFolderSort] = useState<SortState>({ column: "name", direction: "asc" });
   const [fileSort, setFileSort] = useState<SortState>({ column: "name", direction: "asc" });
+  const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleViewMode = (mode: FolderViewMode) => {
@@ -131,9 +132,23 @@ export default function MyFilesPage() {
   };
 
   // Derived data
+  const isSearching = searchQuery.trim().length > 0;
+  const searchLower = searchQuery.trim().toLowerCase();
+
+  // When searching, find all matching folders and files across the entire tree
+  const searchMatchFolders = useMemo(() => {
+    if (!isSearching) return [];
+    return state.folders.filter((f) => f.name.toLowerCase().includes(searchLower));
+  }, [state.folders, isSearching, searchLower]);
+
+  const searchMatchFiles = useMemo(() => {
+    if (!isSearching) return [];
+    return state.files.filter((f) => f.name.toLowerCase().includes(searchLower));
+  }, [state.files, isSearching, searchLower]);
+
   const subfoldersRaw = useMemo(
-    () => getFoldersInParent(state, currentFolderId),
-    [state, currentFolderId],
+    () => (isSearching ? searchMatchFolders : getFoldersInParent(state, currentFolderId)),
+    [state, currentFolderId, isSearching, searchMatchFolders],
   );
   const subfolders = useMemo(() => {
     const sorted = [...subfoldersRaw];
@@ -147,8 +162,8 @@ export default function MyFilesPage() {
   }, [subfoldersRaw, folderSort]);
 
   const filesRaw = useMemo(
-    () => (currentFolderId ? getFilesInFolder(state, currentFolderId) : []),
-    [state, currentFolderId],
+    () => (isSearching ? searchMatchFiles : currentFolderId ? getFilesInFolder(state, currentFolderId) : []),
+    [state, currentFolderId, isSearching, searchMatchFiles],
   );
   const filesInFolder = useMemo(() => {
     const sorted = [...filesRaw];
@@ -165,8 +180,13 @@ export default function MyFilesPage() {
     [state, currentFolderId],
   );
   const currentFolder = currentFolderId ? getFolderById(state, currentFolderId) : null;
-  const canUploadHere = currentFolderId !== null; // can only upload inside a folder, not at root
+  const canUploadHere = !isSearching && currentFolderId !== null;
   const isSystemFolder = currentFolder?.isSystemFolder ?? false;
+
+  const navigateToFolder = (folderId: string | null) => {
+    setSearchQuery("");
+    setCurrentFolderId(folderId);
+  };
 
   // ---------------------------------------------------------------------------
   // Folder actions
@@ -259,19 +279,19 @@ export default function MyFilesPage() {
       const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, file.name));
       const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, file.name));
 
-      // Start the download so the file is ready to attach
-      downloadFile(file.storagePath, file.name);
+      // Wait for the download to actually complete before opening mailto
+      await downloadFile(file.storagePath, file.name);
 
       // Show toast pointing to downloads
       setEmailToast(`"${file.name}" downloaded — check your Downloads folder to attach it.`);
       setTimeout(() => setEmailToast(""), 6000);
 
-      // Small delay so browser registers the download before opening mailto
+      // Give the browser a moment to register the download, then open email
       setTimeout(() => {
-        window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
-      }, 300);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      }, 600);
     } finally {
-      setTimeout(() => setEmailingFileId(null), 1000);
+      setTimeout(() => setEmailingFileId(null), 1500);
     }
   };
 
@@ -383,28 +403,60 @@ export default function MyFilesPage() {
         Upload and organize documents, imaging reports, attorney letters, and more.
       </p>
 
-      {/* Breadcrumb */}
-      <div className="mt-4 flex items-center gap-1 text-sm">
-        <button
-          className={`font-medium ${currentFolderId ? "text-blue-600 hover:underline" : "text-[var(--text-heading)]"}`}
-          onClick={() => setCurrentFolderId(null)}
-          type="button"
-        >
-          My Files
-        </button>
-        {breadcrumb.map((folder) => (
-          <span key={folder.id} className="flex items-center gap-1">
-            <span className="text-[var(--text-muted)]">/</span>
-            <button
-              className={`font-medium ${folder.id === currentFolderId ? "text-[var(--text-heading)]" : "text-blue-600 hover:underline"}`}
-              onClick={() => setCurrentFolderId(folder.id)}
-              type="button"
-            >
-              {folder.name}
-            </button>
-          </span>
-        ))}
+      {/* Search bar */}
+      <div className="mt-4 relative">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+          <svg className="h-4 w-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" /></svg>
+        </div>
+        <input
+          className="w-full rounded-xl border border-[var(--line-soft)] bg-white py-2 pl-9 pr-8 text-sm placeholder:text-[var(--text-muted)] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search folders and files..."
+          type="text"
+          value={searchQuery}
+        />
+        {searchQuery && (
+          <button
+            className="absolute inset-y-0 right-0 flex items-center pr-3 text-[var(--text-muted)] hover:text-[var(--text-heading)]"
+            onClick={() => setSearchQuery("")}
+            type="button"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+          </button>
+        )}
       </div>
+
+      {/* Breadcrumb — hidden during search */}
+      {!isSearching && (
+        <div className="mt-3 flex items-center gap-1 text-sm">
+          <button
+            className={`font-medium ${currentFolderId ? "text-blue-600 hover:underline" : "text-[var(--text-heading)]"}`}
+            onClick={() => navigateToFolder(null)}
+            type="button"
+          >
+            My Files
+          </button>
+          {breadcrumb.map((folder) => (
+            <span key={folder.id} className="flex items-center gap-1">
+              <span className="text-[var(--text-muted)]">/</span>
+              <button
+                className={`font-medium ${folder.id === currentFolderId ? "text-[var(--text-heading)]" : "text-blue-600 hover:underline"}`}
+                onClick={() => navigateToFolder(folder.id)}
+                type="button"
+              >
+                {folder.name}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search result count */}
+      {isSearching && (
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
+          Found {subfolders.length} folder{subfolders.length !== 1 ? "s" : ""} and {filesInFolder.length} file{filesInFolder.length !== 1 ? "s" : ""} matching &ldquo;{searchQuery.trim()}&rdquo;
+        </p>
+      )}
 
       {/* Toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -413,7 +465,7 @@ export default function MyFilesPage() {
             className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-medium hover:bg-[var(--bg-soft)]"
             onClick={() => {
               const parent = currentFolder?.parentId ?? null;
-              setCurrentFolderId(parent);
+              navigateToFolder(parent);
             }}
             type="button"
           >
@@ -574,7 +626,7 @@ export default function MyFilesPage() {
                   ) : (
                     <button
                       className="flex w-full flex-col items-center gap-1 rounded-xl border border-[var(--line-soft)] bg-white p-3 text-center hover:bg-[var(--bg-soft)] hover:shadow-sm transition-all"
-                      onClick={() => setCurrentFolderId(folder.id)}
+                      onClick={() => navigateToFolder(folder.id)}
                       type="button"
                     >
                       <span className="text-3xl">
@@ -658,7 +710,7 @@ export default function MyFilesPage() {
                         key={folder.id}
                         className="group border-b border-[var(--line-soft)] last:border-b-0 hover:bg-[var(--bg-soft)] cursor-pointer"
                         onClick={() => {
-                          if (renamingFolderId !== folder.id) setCurrentFolderId(folder.id);
+                          if (renamingFolderId !== folder.id) navigateToFolder(folder.id);
                         }}
                       >
                         <td className="px-3 py-2">
@@ -691,9 +743,15 @@ export default function MyFilesPage() {
                               <span className="text-lg">
                                 {folder.isSystemFolder ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}
                               </span>
-                              <span className="font-medium text-[var(--text-heading)]">
-                                {folder.name}
-                              </span>
+                              <div className="min-w-0">
+                                <span className="block font-medium text-[var(--text-heading)]">
+                                  {folder.name}
+                                </span>
+                                {isSearching && folder.parentId && (() => {
+                                  const path = getFolderPath(state, folder.id).slice(0, -1).map((f) => f.name).join(" / ");
+                                  return path ? <span className="block text-[10px] text-[var(--text-muted)] truncate">{path}</span> : null;
+                                })()}
+                              </div>
                               {folder.isSystemFolder && (
                                 <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">System</span>
                               )}
@@ -744,7 +802,7 @@ export default function MyFilesPage() {
         )}
 
         {/* Files list */}
-        {currentFolderId && filesInFolder.length > 0 && (
+        {(currentFolderId || isSearching) && filesInFolder.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
               Files
@@ -776,9 +834,24 @@ export default function MyFilesPage() {
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <span>{getFileIcon(file.mimeType)}</span>
-                          <span className="font-medium text-[var(--text-heading)] truncate max-w-[200px] sm:max-w-[300px]">
-                            {file.name}
-                          </span>
+                          <div className="min-w-0">
+                            <span className="block font-medium text-[var(--text-heading)] truncate max-w-[200px] sm:max-w-[300px]">
+                              {file.name}
+                            </span>
+                            {isSearching && (() => {
+                              const parentFolder = state.folders.find((f) => f.id === file.folderId);
+                              const path = parentFolder ? getFolderPath(state, parentFolder.id).map((f) => f.name).join(" / ") : "";
+                              return path ? (
+                                <button
+                                  className="block text-[10px] text-blue-500 hover:underline truncate max-w-[200px] sm:max-w-[300px]"
+                                  onClick={() => navigateToFolder(file.folderId)}
+                                  type="button"
+                                >
+                                  {path}
+                                </button>
+                              ) : null;
+                            })()}
+                          </div>
                         </div>
                       </td>
                       <td className="hidden px-3 py-2 text-[var(--text-muted)] sm:table-cell">
@@ -856,7 +929,7 @@ export default function MyFilesPage() {
         )}
 
         {/* Empty state */}
-        {currentFolderId && filesInFolder.length === 0 && subfolders.length === 0 && (
+        {!isSearching && currentFolderId && filesInFolder.length === 0 && subfolders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-4xl">
               {canUploadHere ? "\uD83D\uDCC2" : "\uD83D\uDCC1"}
@@ -869,7 +942,18 @@ export default function MyFilesPage() {
           </div>
         )}
 
-        {!currentFolderId && subfolders.length === 0 && (
+        {isSearching && subfolders.length === 0 && filesInFolder.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-4xl">
+              <svg className="mx-auto h-10 w-10 text-[var(--text-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" /></svg>
+            </p>
+            <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">
+              No results for &ldquo;{searchQuery.trim()}&rdquo;
+            </p>
+          </div>
+        )}
+
+        {!isSearching && !currentFolderId && subfolders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-4xl">{"\uD83D\uDCC1"}</p>
             <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">
