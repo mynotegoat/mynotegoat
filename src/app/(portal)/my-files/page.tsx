@@ -58,6 +58,30 @@ function formatDate(iso: string) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sort helpers
+// ---------------------------------------------------------------------------
+
+type SortColumn = "name" | "date";
+type SortDirection = "asc" | "desc";
+type SortState = { column: SortColumn; direction: SortDirection };
+
+function toggleSort(current: SortState, column: SortColumn): SortState {
+  if (current.column === column) {
+    return { column, direction: current.direction === "asc" ? "desc" : "asc" };
+  }
+  return { column, direction: "asc" };
+}
+
+function SortArrow({ column, sort }: { column: SortColumn; sort: SortState }) {
+  if (sort.column !== column) {
+    return <svg className="ml-1 inline h-3 w-3 opacity-30" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M7 10l5-5 5 5M7 14l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  }
+  return sort.direction === "asc"
+    ? <svg className="ml-1 inline h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M7 14l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    : <svg className="ml-1 inline h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M7 10l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
 function isImageMime(mime: string) {
   return mime.startsWith("image/");
 }
@@ -97,6 +121,8 @@ export default function MyFilesPage() {
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [viewMode, setViewMode] = useState<FolderViewMode>(() => loadViewMode());
+  const [folderSort, setFolderSort] = useState<SortState>({ column: "name", direction: "asc" });
+  const [fileSort, setFileSort] = useState<SortState>({ column: "name", direction: "asc" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleViewMode = (mode: FolderViewMode) => {
@@ -105,14 +131,35 @@ export default function MyFilesPage() {
   };
 
   // Derived data
-  const subfolders = useMemo(
+  const subfoldersRaw = useMemo(
     () => getFoldersInParent(state, currentFolderId),
     [state, currentFolderId],
   );
-  const filesInFolder = useMemo(
+  const subfolders = useMemo(() => {
+    const sorted = [...subfoldersRaw];
+    const dir = folderSort.direction === "asc" ? 1 : -1;
+    if (folderSort.column === "name") {
+      sorted.sort((a, b) => dir * a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    } else {
+      sorted.sort((a, b) => dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    }
+    return sorted;
+  }, [subfoldersRaw, folderSort]);
+
+  const filesRaw = useMemo(
     () => (currentFolderId ? getFilesInFolder(state, currentFolderId) : []),
     [state, currentFolderId],
   );
+  const filesInFolder = useMemo(() => {
+    const sorted = [...filesRaw];
+    const dir = fileSort.direction === "asc" ? 1 : -1;
+    if (fileSort.column === "name") {
+      sorted.sort((a, b) => dir * a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    } else {
+      sorted.sort((a, b) => dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    }
+    return sorted;
+  }, [filesRaw, fileSort]);
   const breadcrumb = useMemo(
     () => (currentFolderId ? getFolderPath(state, currentFolderId) : []),
     [state, currentFolderId],
@@ -586,9 +633,17 @@ export default function MyFilesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--line-soft)] bg-[var(--bg-soft)]">
-                    <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">Name</th>
+                    <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">
+                      <button className="inline-flex items-center hover:text-[var(--text-heading)]" onClick={() => setFolderSort((s) => toggleSort(s, "name"))} type="button">
+                        Name<SortArrow column="name" sort={folderSort} />
+                      </button>
+                    </th>
                     <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] sm:table-cell">Items</th>
-                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] md:table-cell">Created</th>
+                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] md:table-cell">
+                      <button className="inline-flex items-center hover:text-[var(--text-heading)]" onClick={() => setFolderSort((s) => toggleSort(s, "date"))} type="button">
+                        Created<SortArrow column="date" sort={folderSort} />
+                      </button>
+                    </th>
                     <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">Actions</th>
                   </tr>
                 </thead>
@@ -698,9 +753,17 @@ export default function MyFilesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--line-soft)] bg-[var(--bg-soft)]">
-                    <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">Name</th>
+                    <th className="px-3 py-2 text-left font-semibold text-[var(--text-muted)]">
+                      <button className="inline-flex items-center hover:text-[var(--text-heading)]" onClick={() => setFileSort((s) => toggleSort(s, "name"))} type="button">
+                        Name<SortArrow column="name" sort={fileSort} />
+                      </button>
+                    </th>
                     <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] sm:table-cell">Size</th>
-                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] md:table-cell">Uploaded</th>
+                    <th className="hidden px-3 py-2 text-left font-semibold text-[var(--text-muted)] md:table-cell">
+                      <button className="inline-flex items-center hover:text-[var(--text-heading)]" onClick={() => setFileSort((s) => toggleSort(s, "date"))} type="button">
+                        Uploaded<SortArrow column="date" sort={fileSort} />
+                      </button>
+                    </th>
                     <th className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">Actions</th>
                   </tr>
                 </thead>
