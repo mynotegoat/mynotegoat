@@ -5,7 +5,6 @@ import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import {
   caseTimelineMetrics,
   charges,
-  imagingEvents,
   patients,
 } from "@/lib/mock-data";
 
@@ -166,11 +165,6 @@ export default function StatisticsPage() {
     [filteredNames],
   );
 
-  const filteredImagingEvents = useMemo(
-    () => imagingEvents.filter((event) => filteredPatientIds.has(event.patientId)),
-    [filteredPatientIds],
-  );
-
   const filteredTimelineMetrics = useMemo(
     () => caseTimelineMetrics.filter((record) => filteredPatientIds.has(record.patientId)),
     [filteredPatientIds],
@@ -245,30 +239,46 @@ export default function StatisticsPage() {
   }, [filteredTimelineMetrics]);
 
   const imagingFacilityStats = useMemo(() => {
-    const grouped: Record<
-      string,
-      { facility: string; xray: number; mri: number; total: number; casePatientIds: Set<string> }
-    > = {};
+    type FacilityRow = { facility: string; xray: number; mri: number; total: number; casePatientIds: Set<string> };
+    const grouped: Record<string, FacilityRow> = {};
 
-    filteredImagingEvents.forEach((event) => {
-      if (!grouped[event.facility]) {
-        grouped[event.facility] = {
-          facility: event.facility,
-          xray: 0,
-          mri: 0,
-          total: 0,
-          casePatientIds: new Set<string>(),
-        };
+    const addReferral = (patientId: string, facility: string, type: "xray" | "mri", regions: string[]) => {
+      const key = facility.toLowerCase();
+      if (!grouped[key]) {
+        grouped[key] = { facility, xray: 0, mri: 0, total: 0, casePatientIds: new Set<string>() };
       }
-
-      grouped[event.facility].casePatientIds.add(event.patientId);
-      const referrals = Math.max(1, event.quantity ?? 1);
-      if (event.type === "X-Ray") {
-        grouped[event.facility].xray += referrals;
+      grouped[key].casePatientIds.add(patientId);
+      // Count each region as a referral (or 1 if no regions)
+      const count = Math.max(1, regions.length);
+      if (type === "xray") {
+        grouped[key].xray += count;
       } else {
-        grouped[event.facility].mri += referrals;
+        grouped[key].mri += count;
       }
-      grouped[event.facility].total += referrals;
+      grouped[key].total += count;
+    };
+
+    filteredPatients.forEach((patient) => {
+      // X-Ray referrals
+      if (Array.isArray(patient.xrayReferrals)) {
+        for (const raw of patient.xrayReferrals) {
+          const ref = raw as Record<string, unknown>;
+          const center = typeof ref.center === "string" ? ref.center.trim() : "";
+          if (!center) continue;
+          const regions = Array.isArray(ref.regions) ? (ref.regions as string[]) : [];
+          addReferral(patient.id, center, "xray", regions);
+        }
+      }
+      // MRI / CT referrals
+      if (Array.isArray(patient.mriReferrals)) {
+        for (const raw of patient.mriReferrals) {
+          const ref = raw as Record<string, unknown>;
+          const center = typeof ref.center === "string" ? ref.center.trim() : "";
+          if (!center) continue;
+          const regions = Array.isArray(ref.regions) ? (ref.regions as string[]) : [];
+          addReferral(patient.id, center, "mri", regions);
+        }
+      }
     });
 
     return Object.values(grouped)
@@ -280,25 +290,38 @@ export default function StatisticsPage() {
         total: row.total,
       }))
       .sort((a, b) => b.total - a.total);
-  }, [filteredImagingEvents]);
+  }, [filteredPatients]);
 
   const specialistReferralStats = useMemo(() => {
     const grouped: Record<string, { specialist: string; casePatientIds: Set<string> }> = {};
 
     filteredPatients.forEach((patient) => {
-      const specialist = extractSpecialistLabel(patient.matrix?.specialistSent ?? "");
-      if (!specialist) {
-        return;
+      // Read from specialistReferrals array (the actual saved data)
+      if (Array.isArray(patient.specialistReferrals)) {
+        for (const raw of patient.specialistReferrals) {
+          const ref = raw as Record<string, unknown>;
+          const name = typeof ref.specialist === "string" ? ref.specialist.trim() : "";
+          if (!name || name === "-") continue;
+
+          const key = name.toLowerCase();
+          if (!grouped[key]) {
+            grouped[key] = { specialist: name, casePatientIds: new Set<string>() };
+          }
+          grouped[key].casePatientIds.add(patient.id);
+        }
       }
 
-      const key = specialist.toLowerCase();
-      if (!grouped[key]) {
-        grouped[key] = {
-          specialist,
-          casePatientIds: new Set<string>(),
-        };
+      // Fallback: also check matrix.specialistSent for older data
+      if (!Array.isArray(patient.specialistReferrals) || patient.specialistReferrals.length === 0) {
+        const specialist = extractSpecialistLabel(patient.matrix?.specialistSent ?? "");
+        if (!specialist) return;
+
+        const key = specialist.toLowerCase();
+        if (!grouped[key]) {
+          grouped[key] = { specialist, casePatientIds: new Set<string>() };
+        }
+        grouped[key].casePatientIds.add(patient.id);
       }
-      grouped[key].casePatientIds.add(patient.id);
     });
 
     return Object.values(grouped)
