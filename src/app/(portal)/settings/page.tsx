@@ -16,6 +16,8 @@ import { useScheduleRooms } from "@/hooks/use-schedule-rooms";
 import { useScheduleSettings } from "@/hooks/use-schedule-settings";
 import { usePriorityCaseRules } from "@/hooks/use-priority-case-rules";
 import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
+import { useEmailSettings } from "@/hooks/use-email-settings";
+import { getDefaultEmailSettings } from "@/lib/email-settings";
 import { quickStatOptions } from "@/lib/quick-stats-settings";
 import { appointmentStatusOptions } from "@/lib/schedule-appointments";
 import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
@@ -36,6 +38,7 @@ type SettingsSectionKey =
   | "packageBuilder"
   | "documents"
   | "reports"
+  | "emailSettings"
   | "subscription"
   | "backup"
   | "recovery"
@@ -53,6 +56,7 @@ const defaultExpandedSections: Record<SettingsSectionKey, boolean> = {
   packageBuilder: false,
   documents: false,
   reports: false,
+  emailSettings: false,
   subscription: false,
   backup: false,
   recovery: false,
@@ -976,6 +980,7 @@ export default function SettingsPage() {
     setEnableRoomSelectionOnCheckIn,
     resetToDefaults: resetRoomSettingsToDefaults,
   } = useScheduleRooms();
+  const { emailSettings, updateEmailSettings, resetEmailSettings } = useEmailSettings();
 
   const [statusNameDraft, setStatusNameDraft] = useState("");
   const [statusColorDraft, setStatusColorDraft] = useState("#0d79bf");
@@ -2907,6 +2912,54 @@ export default function SettingsPage() {
         title="Narrative Report Builder"
       >
         <ReportTemplateSettingsPanel />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        actions={
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            onClick={() => {
+              if (window.confirm("Reset email settings to defaults?")) resetEmailSettings();
+            }}
+            type="button"
+          >
+            Reset Defaults
+          </button>
+        }
+        description="Customize the subject line and body message used when emailing files from My Files."
+        isOpen={expandedSections.emailSettings}
+        onToggle={() => toggleSection("emailSettings")}
+        title="Email Settings"
+      >
+        <div className="grid gap-4">
+          <p className="text-xs text-[var(--text-muted)]">
+            Use <code className="rounded bg-[var(--bg-soft)] px-1 py-0.5 font-mono text-xs">{"{{FILE_NAME}}"}</code> anywhere in the subject or body to insert the file name automatically.
+          </p>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Email Subject</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              onChange={(e) => updateEmailSettings({ subjectTemplate: e.target.value })}
+              placeholder={getDefaultEmailSettings().subjectTemplate}
+              value={emailSettings.subjectTemplate}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Email Body</span>
+            <textarea
+              className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              onChange={(e) => updateEmailSettings({ bodyTemplate: e.target.value })}
+              placeholder={getDefaultEmailSettings().bodyTemplate}
+              rows={4}
+              value={emailSettings.bodyTemplate}
+            />
+          </label>
+          <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+            <p className="text-xs font-semibold text-[var(--text-muted)]">Preview (example file: X-Ray Report.pdf)</p>
+            <p className="mt-1 text-sm"><span className="font-semibold">Subject:</span> {emailSettings.subjectTemplate.replace(/\{\{FILE_NAME\}\}/g, "X-Ray Report.pdf")}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm"><span className="font-semibold">Body:</span> {emailSettings.bodyTemplate.replace(/\{\{FILE_NAME\}\}/g, "X-Ray Report.pdf")}</p>
+          </div>
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection

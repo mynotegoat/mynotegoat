@@ -16,6 +16,7 @@ import {
   getSignedUrl,
   downloadFile,
 } from "@/lib/file-storage";
+import { loadEmailSettings, renderEmailTemplate } from "@/lib/email-settings";
 import { patients as patientRecords } from "@/lib/mock-data";
 
 // ---------------------------------------------------------------------------
@@ -201,21 +202,28 @@ export default function MyFilesPage() {
   // ---------------------------------------------------------------------------
 
   const [emailingFileId, setEmailingFileId] = useState<string | null>(null);
+  const [emailToast, setEmailToast] = useState("");
 
   const handleEmailFile = async (file: FileRecord) => {
     setEmailingFileId(file.id);
     try {
+      // Read customizable email settings
+      const settings = loadEmailSettings();
+      const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, file.name));
+      const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, file.name));
+
       // Start the download so the file is ready to attach
       downloadFile(file.storagePath, file.name);
 
-      // Open mailto with pre-filled subject & body hint
-      const subject = encodeURIComponent(file.name);
-      const body = encodeURIComponent(
-        `Please find the attached file: ${file.name}\n\n(The file has been downloaded to your device — please attach it to this email.)`
-      );
-      window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+      // Show toast pointing to downloads
+      setEmailToast(`"${file.name}" downloaded — check your Downloads folder to attach it.`);
+      setTimeout(() => setEmailToast(""), 6000);
+
+      // Small delay so browser registers the download before opening mailto
+      setTimeout(() => {
+        window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+      }, 300);
     } finally {
-      // Brief delay so the button shows loading state
       setTimeout(() => setEmailingFileId(null), 1000);
     }
   };
@@ -427,6 +435,15 @@ export default function MyFilesPage() {
           <span className="text-sm text-red-600">{uploadError}</span>
         )}
       </div>
+
+      {/* Email download toast */}
+      {emailToast && (
+        <div className="mt-2 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800 shadow-sm">
+          <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          {emailToast}
+          <button className="ml-auto text-blue-600 hover:text-blue-800" onClick={() => setEmailToast("")} type="button">&times;</button>
+        </div>
+      )}
 
       {/* New folder input */}
       {showNewFolderInput && (
@@ -709,55 +726,61 @@ export default function MyFilesPage() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {/* Preview — magnifying glass */}
                           {(isImageMime(file.mimeType) || isPdfMime(file.mimeType)) && (
                             <button
-                              className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                               onClick={() => handlePreview(file)}
+                              title="Preview"
                               type="button"
                             >
-                              Preview
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" /></svg>
                             </button>
                           )}
+                          {/* Download — arrow-down-tray */}
                           <button
-                            className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                            className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                             onClick={() => handleDownload(file)}
+                            title="Download"
                             type="button"
                           >
-                            Download
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                           </button>
-                          {/* Email button — downloads file + opens mailto */}
+                          {/* Email — envelope */}
                           <button
-                            className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                            className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
                             disabled={emailingFileId === file.id}
                             onClick={() => handleEmailFile(file)}
-                            title="Download file and open email to attach"
+                            title="Email (download + open email)"
                             type="button"
                           >
-                            {emailingFileId === file.id ? "..." : "Email"}
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect height="16" rx="2" width="20" x="2" y="4" /><path d="m22 7-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
                           </button>
-                          {/* Share button — native share sheet (mobile/tablet) */}
+                          {/* Share — share icon (mobile/tablet only) */}
                           {canShare && (
                             <button
-                              className="rounded-lg px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50"
+                              className="rounded-lg p-1.5 text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-40"
                               disabled={sharingFileId === file.id}
                               onClick={() => handleShareFile(file)}
-                              title="Share file via native share sheet"
+                              title="Share"
                               type="button"
                             >
-                              {sharingFileId === file.id ? "..." : "Share"}
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" strokeLinecap="round" /></svg>
                             </button>
                           )}
+                          {/* Delete — trash can */}
                           <button
-                            className="rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                            className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                             disabled={deletingFileId === file.id}
                             onClick={() => {
                               if (confirm(`Delete "${file.name}"?`)) {
                                 handleDeleteFile(file.id);
                               }
                             }}
+                            title="Delete"
                             type="button"
                           >
-                            {deletingFileId === file.id ? "..." : "Delete"}
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                           </button>
                         </div>
                       </td>
@@ -817,40 +840,46 @@ export default function MyFilesPage() {
                   {formatFileSize(previewFile.sizeBytes)}
                 </span>
               </div>
-              <div className="flex items-center gap-2 shrink-0 ml-2">
+              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                {/* Download */}
                 <button
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                  className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                   onClick={() => handleDownload(previewFile)}
+                  title="Download"
                   type="button"
                 >
-                  Download
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
+                {/* Email */}
                 <button
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                  className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
                   disabled={emailingFileId === previewFile.id}
                   onClick={() => handleEmailFile(previewFile)}
-                  title="Download file and open email to attach"
+                  title="Email (download + open email)"
                   type="button"
                 >
-                  {emailingFileId === previewFile.id ? "..." : "Email"}
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect height="16" rx="2" width="20" x="2" y="4" /><path d="m22 7-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
+                {/* Share */}
                 {canShare && (
                   <button
-                    className="rounded-lg px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50"
+                    className="rounded-lg p-1.5 text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-40"
                     disabled={sharingFileId === previewFile.id}
                     onClick={() => handleShareFile(previewFile)}
-                    title="Share file via native share sheet"
+                    title="Share"
                     type="button"
                   >
-                    {sharingFileId === previewFile.id ? "..." : "Share"}
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" strokeLinecap="round" /></svg>
                   </button>
                 )}
+                {/* Close */}
                 <button
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-soft)]"
+                  className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-soft)] transition-colors"
                   onClick={closePreview}
+                  title="Close"
                   type="button"
                 >
-                  Close
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
                 </button>
               </div>
             </div>
