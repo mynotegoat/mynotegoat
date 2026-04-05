@@ -23,7 +23,14 @@ import { encounterSections } from "@/lib/encounter-notes";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 import { type QuickStatOptionKey } from "@/lib/quick-stats-settings";
 import { buildNarrativeReportContext, renderNarrativeReportBody } from "@/lib/report-generator";
-import { type ScheduleAppointmentRecord } from "@/lib/schedule-appointments";
+import {
+  createAppointmentId,
+  defaultScheduleLocation,
+  defaultScheduleProvider,
+  type ScheduleAppointmentRecord,
+} from "@/lib/schedule-appointments";
+import { loadAppointmentTypes } from "@/lib/schedule-appointment-types";
+import { loadScheduleRooms } from "@/lib/schedule-rooms";
 import { type TaskPriority } from "@/lib/tasks";
 import {
   patients as allPatients,
@@ -692,7 +699,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { reportTemplates } = useReportTemplates();
   const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
-  const { scheduleAppointments } = useScheduleAppointments();
+  const { scheduleAppointments, addAppointments } = useScheduleAppointments();
   const { addTask } = useTasks();
   const { encountersByNewest, createEncounter, setSoapSection } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
@@ -908,6 +915,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [narrativePreview, setNarrativePreview] = useState<NarrativePreviewState | null>(null);
   const [showNarrativePreviewModal, setShowNarrativePreviewModal] = useState(false);
   const [encounterMessage, setEncounterMessage] = useState("");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState({
+    appointmentType: "",
+    date: "",
+    startTime: "09:00",
+    durationMin: 45,
+    provider: defaultScheduleProvider,
+    location: defaultScheduleLocation,
+    room: "",
+    note: "",
+  });
+  const [scheduleError, setScheduleError] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
 
   // Delete patient state
@@ -2063,6 +2082,55 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
   const openEncounterEditor = (encounterId: string) => {
     router.push(`/encounters?patientId=${patient.id}&encounterId=${encounterId}`);
+  };
+
+  const openScheduleModal = () => {
+    const types = loadAppointmentTypes();
+    const defaultType = types.find((t) => t.isDefault) ?? types[0];
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    setScheduleDraft({
+      appointmentType: defaultType?.name ?? "Personal Injury Office Visit",
+      date: todayIso,
+      startTime: "09:00",
+      durationMin: defaultType?.durationMin ?? 45,
+      provider: defaultScheduleProvider,
+      location: defaultScheduleLocation,
+      room: "",
+      note: "",
+    });
+    setScheduleError("");
+    setShowScheduleModal(true);
+  };
+
+  const handleSubmitSchedule = () => {
+    if (!scheduleDraft.date) {
+      setScheduleError("Date is required.");
+      return;
+    }
+    if (!scheduleDraft.appointmentType.trim()) {
+      setScheduleError("Appointment type is required.");
+      return;
+    }
+    const record: ScheduleAppointmentRecord = {
+      id: createAppointmentId(),
+      patientId: patient.id,
+      patientName: patient.fullName,
+      provider: scheduleDraft.provider.trim(),
+      location: scheduleDraft.location.trim(),
+      appointmentType: scheduleDraft.appointmentType.trim(),
+      caseLabel: "",
+      room: scheduleDraft.room.trim(),
+      date: scheduleDraft.date,
+      startTime: scheduleDraft.startTime,
+      durationMin: scheduleDraft.durationMin,
+      status: "Scheduled",
+      note: scheduleDraft.note.trim(),
+      overrideOfficeHours: false,
+    };
+    addAppointments([record]);
+    setShowScheduleModal(false);
+    setEncounterMessage(`Appointment scheduled for ${toUsDate(scheduleDraft.date)}.`);
   };
 
   const createEncounterFromAppointment = (appointment: ScheduleAppointmentRecord) => {
@@ -3431,9 +3499,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         </button>
         {sectionPanelsOpen.appointments && (
           <>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              View all scheduled appointments for this patient and launch encounters quickly.
-            </p>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-sm text-[var(--text-muted)]">
+                View all scheduled appointments for this patient and launch encounters quickly.
+              </p>
+              <button
+                className="shrink-0 rounded-xl bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                onClick={openScheduleModal}
+                type="button"
+              >
+                + Schedule Appointment
+              </button>
+            </div>
 
             {encounterMessage && <p className="mt-2 text-sm font-semibold text-[var(--brand-primary)]">{encounterMessage}</p>}
 
@@ -4701,6 +4778,142 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           <option key={name} value={name} />
         ))}
       </datalist>
+
+      {showScheduleModal && (() => {
+        const aptTypes = loadAppointmentTypes();
+        const rooms = loadScheduleRooms();
+        const roomList = rooms.rooms ?? [];
+        return (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
+            <div className="panel-card mx-auto w-full max-w-lg p-5">
+              <h3 className="text-xl font-semibold text-[var(--text-heading)]">Schedule Appointment</h3>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                For <span className="font-semibold text-[var(--text-main)]">{patient.fullName}</span>
+              </p>
+
+              <div className="mt-4 grid gap-3">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Type</span>
+                  <select
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                    onChange={(e) => {
+                      const selected = aptTypes.find((t) => t.name === e.target.value);
+                      setScheduleDraft((d) => ({
+                        ...d,
+                        appointmentType: e.target.value,
+                        durationMin: selected?.durationMin ?? d.durationMin,
+                      }));
+                    }}
+                    value={scheduleDraft.appointmentType}
+                  >
+                    {aptTypes.map((t) => (
+                      <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Date</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, date: e.target.value }))}
+                      type="date"
+                      value={scheduleDraft.date}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, startTime: e.target.value }))}
+                      type="time"
+                      value={scheduleDraft.startTime}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Duration (min)</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      min={5}
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, durationMin: Number(e.target.value) || 30 }))}
+                      type="number"
+                      value={scheduleDraft.durationMin}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Room</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, room: e.target.value }))}
+                      value={scheduleDraft.room}
+                    >
+                      <option value="">None</option>
+                      {roomList.map((r) => (
+                        <option key={r.id} value={r.name}>{r.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Provider</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, provider: e.target.value }))}
+                      value={scheduleDraft.provider}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Location</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(e) => setScheduleDraft((d) => ({ ...d, location: e.target.value }))}
+                      value={scheduleDraft.location}
+                    />
+                  </label>
+                </div>
+
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Note (optional)</span>
+                  <textarea
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                    maxLength={500}
+                    onChange={(e) => setScheduleDraft((d) => ({ ...d, note: e.target.value }))}
+                    rows={2}
+                    value={scheduleDraft.note}
+                  />
+                </label>
+              </div>
+
+              {scheduleError && (
+                <p className="mt-2 text-sm font-semibold text-red-600">{scheduleError}</p>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                <button
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  onClick={() => setShowScheduleModal(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+                  onClick={handleSubmitSchedule}
+                  type="button"
+                >
+                  Save Appointment
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
