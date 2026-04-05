@@ -1757,9 +1757,17 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                             setRunMacroAnswers((current) => {
                               const rawCurrentValues = current[question.id];
                               const currentValues = Array.isArray(rawCurrentValues) ? rawCurrentValues : [];
-                              const nextValues = currentValues.includes(option)
+                              const toggled = currentValues.includes(option)
                                 ? currentValues.filter((entry) => entry !== option)
                                 : [...currentValues, option];
+                              // Sort by the original option order, not click order
+                              const optionOrder = question.options;
+                              const nextValues = toggled.slice().sort((a, b) => {
+                                const ai = optionOrder.indexOf(a);
+                                const bi = optionOrder.indexOf(b);
+                                // Items not in the predefined list go to the end
+                                return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+                              });
                               return {
                                 ...current,
                                 [question.id]: nextValues,
