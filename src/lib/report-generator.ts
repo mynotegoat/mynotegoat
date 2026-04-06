@@ -206,7 +206,7 @@ function formatImagingSummary(entries: NarrativeImagingEntry[], fallbackLabel: s
   return entries
     .map((entry, index) => {
       const modality = entry.modalityLabel || fallbackLabel;
-      return `${index + 1}. ${modality} | Sent: ${entry.sentDate || "-"} | Done: ${entry.doneDate || "-"} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)} | Report Received: ${entry.reportReceivedDate || "-"} | Report Reviewed: ${entry.reportReviewedDate || "-"}`;
+      return `${index + 1}. ${modality} | Completed: ${entry.doneDate || "-"} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)}`;
     })
     .join("\n");
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
@@ -41,6 +41,24 @@ import {
   syncRelatedCasesGroup,
   removeFromRelatedCasesGroup,
 } from "@/lib/mock-data";
+import {
+  type FileManagerState,
+  type FileRecord,
+  getFilesInFolder,
+  getFoldersInParent,
+  loadFileManagerState,
+  saveFileManagerState,
+  addFileRecord,
+  removeFileRecord,
+  syncPatientFolders,
+} from "@/lib/file-manager";
+import {
+  formatFileSize,
+  getSignedUrl,
+  downloadFile,
+  uploadFileToStorage,
+  deleteFileFromStorage,
+} from "@/lib/file-storage";
 import { loadOfficeSettings } from "@/lib/office-settings";
 import { usePlanTier } from "@/lib/plan-context";
 
@@ -56,6 +74,7 @@ type SectionPanelKey =
   | "diagnosis"
   | "letters"
   | "narrative"
+  | "patientFiles"
   | "additionalDetails";
 type PopupAnchor = {
   x: number;
@@ -847,6 +866,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     diagnosis: false,
     letters: false,
     narrative: false,
+    patientFiles: false,
     additionalDetails: false,
   });
   const quickTaskButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -960,6 +980,83 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       [panel]: !current[panel],
     }));
   };
+  // ── Patient Files state ────────────────────────────────────────────────
+  const [fileManagerState, setFileManagerState] = useState<FileManagerState>(() => {
+    const loaded = loadFileManagerState();
+    return syncPatientFolders(loaded, allPatients);
+  });
+  const patientFolderId = `SYSTEM-PATIENT-${patient.id}`;
+
+  // Collect all files in the patient folder + any subfolders
+  const patientFiles = useMemo(() => {
+    const collectFiles = (folderId: string): FileRecord[] => {
+      const files = getFilesInFolder(fileManagerState, folderId);
+      const subFolders = getFoldersInParent(fileManagerState, folderId);
+      for (const sub of subFolders) {
+        files.push(...collectFiles(sub.id));
+      }
+      return files;
+    };
+    return collectFiles(patientFolderId).sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [fileManagerState, patientFolderId]);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [fileUploading, setFileUploading] = useState(false);
+
+  const handlePatientFileUpload = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      setFileUploading(true);
+      for (const file of Array.from(files)) {
+        const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
+        if (!error && storagePath) {
+          setFileManagerState((current) => {
+            const next = addFileRecord(current, {
+              folderId: patientFolderId,
+              name: file.name,
+              storagePath,
+              mimeType: file.type || "application/octet-stream",
+              sizeBytes: file.size,
+            });
+            saveFileManagerState(next);
+            return next;
+          });
+        }
+      }
+      setFileUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    [patientFolderId],
+  );
+
+  const handlePatientFileDelete = useCallback(
+    async (file: FileRecord) => {
+      if (
+        !window.confirm(
+          `Permanently delete "${file.name}"?\n\nThis file will be removed from the cloud forever and cannot be recovered.`,
+        )
+      ) {
+        return;
+      }
+      setFileManagerState((current) => {
+        const result = removeFileRecord(current, file.id);
+        saveFileManagerState(result.state);
+        return result.state;
+      });
+      await deleteFileFromStorage(file.storagePath);
+    },
+    [],
+  );
+
+  const handlePatientFilePreview = useCallback(async (file: FileRecord) => {
+    const { url, error } = await getSignedUrl(file.storagePath);
+    if (!error && url) {
+      window.open(url, "_blank");
+    }
+  }, []);
+
   const appendFindingRegionLabel = (type: "xray" | "mriCt", label: string) => {
     if (type === "xray") {
       setXrayFindings((current) => appendFindingDraftLine(current, `${label}: `));
@@ -3868,6 +3965,131 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             {narrativeMessage && (
               <p className="mt-2 text-sm font-semibold text-[var(--brand-primary)]">{narrativeMessage}</p>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* ── Patient Files ──────────────────────────────────────────────── */}
+      <section className="panel-card p-4">
+        <button
+          className="flex w-full items-center justify-between rounded-2xl bg-[#6db5c8] px-3 py-2 text-center text-3xl font-semibold tracking-[-0.01em] text-white"
+          onClick={() => toggleSectionPanel("patientFiles")}
+          type="button"
+        >
+          <span>
+            Patient Files
+            {patientFiles.length > 0 && (
+              <span className="ml-2 rounded-full bg-white/25 px-2.5 py-0.5 text-base">
+                {patientFiles.length}
+              </span>
+            )}
+          </span>
+          <span className="text-xl">{sectionPanelsOpen.patientFiles ? "−" : "+"}</span>
+        </button>
+        {sectionPanelsOpen.patientFiles && (
+          <>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  disabled={fileUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
+                  {fileUploading ? "Uploading..." : "Upload File"}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  accept="*/*"
+                  className="hidden"
+                  multiple
+                  onChange={(event) => handlePatientFileUpload(event.target.files)}
+                  type="file"
+                />
+              </div>
+              <Link
+                className="text-sm font-semibold text-[var(--brand-primary)] hover:underline"
+                href="/my-files"
+              >
+                View in My Files &rarr;
+              </Link>
+            </div>
+
+            {patientFiles.length === 0 ? (
+              <p className="mt-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                No files uploaded for this patient yet.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--line-soft)] text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                      <th className="pb-2 pr-3">Name</th>
+                      <th className="pb-2 pr-3">Size</th>
+                      <th className="pb-2 pr-3">Uploaded</th>
+                      <th className="pb-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patientFiles.map((file) => (
+                      <tr
+                        className="border-b border-[var(--line-soft)] last:border-0"
+                        key={file.id}
+                      >
+                        <td className="max-w-[260px] truncate py-2.5 pr-3 font-medium">
+                          {file.name}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 pr-3 text-[var(--text-muted)]">
+                          {formatFileSize(file.sizeBytes)}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 pr-3 text-[var(--text-muted)]">
+                          {new Date(file.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            {/* Preview */}
+                            <button
+                              className="rounded-lg border border-[var(--line-soft)] bg-white p-1.5 hover:bg-[var(--bg-soft)]"
+                              onClick={() => handlePatientFilePreview(file)}
+                              title="Preview"
+                              type="button"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                            {/* Download */}
+                            <button
+                              className="rounded-lg border border-[var(--line-soft)] bg-white p-1.5 hover:bg-[var(--bg-soft)]"
+                              onClick={() => downloadFile(file.storagePath, file.name)}
+                              title="Download"
+                              type="button"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path d="M12 5v10m0 0-3.5-3.5M12 15l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M5 19h14" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                            {/* Delete */}
+                            <button
+                              className="rounded-lg border border-red-200 bg-white p-1.5 text-red-500 hover:bg-red-50"
+                              onClick={() => handlePatientFileDelete(file)}
+                              title="Delete"
+                              type="button"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6h12Z" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
