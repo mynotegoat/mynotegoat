@@ -167,6 +167,19 @@ a {
 .rich-text-editor ul,
 .rich-text-editor ol {
   margin: 0.4em 0 0.8em 1.4em;
+  padding-left: 1.2em;
+}
+
+.rich-text-editor ul {
+  list-style-type: disc;
+}
+
+.rich-text-editor ol {
+  list-style-type: decimal;
+}
+
+.rich-text-editor li {
+  display: list-item;
 }
 
 .rich-text-editor h1,
