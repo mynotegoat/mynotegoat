@@ -21,6 +21,7 @@ import {
   type MacroAnswerMap,
   type MacroTemplate,
 } from "@/lib/macro-templates";
+import { loadContactDirectory } from "@/lib/contact-directory";
 import { patients } from "@/lib/mock-data";
 import { appointmentStatusOptions, type AppointmentStatus } from "@/lib/schedule-appointments";
 
@@ -512,6 +513,15 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     deleteEncounter,
   } = useEncounterNotes();
 
+  const specialistContactNames = useMemo(() => {
+    const contacts = loadContactDirectory();
+    const nonSpecialistCategories = new Set(["attorney", "imaging", "hospital/er"]);
+    return contacts
+      .filter((c) => !nonSpecialistCategories.has(c.category.toLowerCase()))
+      .map((c) => c.name)
+      .sort((a, b) => a.localeCompare(b));
+  }, []);
+
   const initialEncounterSearchValue = useMemo(() => {
     if (!initialPatientId) {
       return "";
@@ -848,7 +858,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         initialAnswers[question.id] = [];
         return;
       }
-      initialAnswers[question.id] = question.options[0] ?? "";
+      const firstOption = question.contactSource === "specialist" && specialistContactNames.length > 0
+        ? specialistContactNames[0]
+        : question.options[0] ?? "";
+      initialAnswers[question.id] = firstOption;
     });
     setEditingMacroRunId(null);
     setRunMacroAnswers(initialAnswers);
@@ -1754,7 +1767,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
             <div className="space-y-3">
               {runMacro.questions.map((question) => (
                 (() => {
-                  const normalizedOptions = question.options
+                  // Merge specialist contact names when contactSource is set
+                  const baseOptions = question.contactSource === "specialist"
+                    ? (() => {
+                        const manual = question.options.map((o) => o.trim()).filter(Boolean);
+                        const manualLower = new Set(manual.map((o) => o.toLowerCase()));
+                        const fromContacts = specialistContactNames.filter((n) => !manualLower.has(n.toLowerCase()));
+                        return [...fromContacts, ...manual];
+                      })()
+                    : question.options;
+                  const normalizedOptions = baseOptions
                     .map((option) => option.trim())
                     .filter((option): option is string => Boolean(option));
                   const answerValue = runMacroAnswers[question.id];
@@ -1846,7 +1868,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
                   return (
                     <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
-                      <p className="text-sm font-semibold">{question.label}</p>
+                      <p className="text-sm font-semibold">
+                        {question.label}
+                        {question.contactSource === "specialist" && (
+                          <span className="ml-2 rounded-full bg-[#0d79bf] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                            From Contacts
+                          </span>
+                        )}
+                      </p>
                       {question.options.length > 0 ? (
                         <>
                           {usePainScaleColumns ? (

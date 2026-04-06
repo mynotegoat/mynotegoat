@@ -12,6 +12,8 @@ export interface MacroQuestion {
   label: string;
   options: string[];
   multiSelect?: boolean;
+  /** When set, options are auto-populated from the contact directory at runtime */
+  contactSource?: "specialist";
 }
 
 export interface MacroTemplate {
