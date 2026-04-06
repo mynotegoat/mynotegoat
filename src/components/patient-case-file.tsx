@@ -1964,6 +1964,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           else if (sex === "female") prefix = marital === "married" ? "Mrs." : "Ms.";
           return lastName ? `${prefix} ${lastName}` : prefix;
         })(),
+        heShe: patientSex.toLowerCase() === "male" ? "He" : patientSex.toLowerCase() === "female" ? "She" : "They",
+        hisHer: patientSex.toLowerCase() === "male" ? "His" : patientSex.toLowerCase() === "female" ? "Her" : "Their",
       },
       additional: {
         dischargeDate,

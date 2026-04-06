@@ -27,7 +27,7 @@ const autoFieldCategories: FieldCategory[] = [
   },
   {
     label: "Patient",
-    tokens: ["PATIENT_FULL_NAME", "PATIENT_FIRST_NAME", "PATIENT_LAST_NAME", "MR_MRS_MS_LAST_NAME", "PATIENT_DOB", "PATIENT_PHONE", "PATIENT_EMAIL"],
+    tokens: ["PATIENT_FULL_NAME", "PATIENT_FIRST_NAME", "PATIENT_LAST_NAME", "MR_MRS_MS_LAST_NAME", "HE_SHE", "HIS_HER", "PATIENT_DOB", "PATIENT_PHONE", "PATIENT_EMAIL"],
   },
   {
     label: "Case Info",
@@ -102,6 +102,8 @@ const examplePreviewContext: Record<string, string> = {
   PATIENT_PHONE: "(818) 555-9876",
   PATIENT_EMAIL: "maria.garcia@email.com",
   MR_MRS_MS_LAST_NAME: "Ms. Garcia",
+  HE_SHE: "She",
+  HIS_HER: "Her",
   DATE_OF_INJURY: "01/12/2026",
   INITIAL_EXAM: "01/19/2026",
   CASE_NUMBER: "2026-PI-0042",
@@ -267,8 +269,10 @@ export function ReportTemplateSettingsPanel() {
   const [promptOptionsDrafts, setPromptOptionsDrafts] = useState<Record<string, string>>({});
   const [encounterPickerNumber, setEncounterPickerNumber] = useState("1");
   const [encounterPickerSection, setEncounterPickerSection] = useState("SUBJECTIVE");
-  const [encounterPickerMode, setEncounterPickerMode] = useState<"number" | "type">("number");
-  const [encounterPickerType, setEncounterPickerType] = useState("");
+  const [encounterPickerType, setEncounterPickerType] = useState(() => {
+    const types = loadAppointmentTypes();
+    return types.length ? types[0].name : "";
+  });
   const [showLivePreview, setShowLivePreview] = useState(true);
 
   const appointmentTypes = useMemo(() => loadAppointmentTypes(), []);
@@ -690,169 +694,77 @@ export function ReportTemplateSettingsPanel() {
             <div className="mb-2">
               <h5 className="text-lg font-semibold">Encounter Section Picker</h5>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Pick a specific encounter and choose which SOAP section to include.
+                Pick encounters by appointment type. #1 = first of that type, #2 = second, etc.
               </p>
             </div>
 
-            <div className="mb-3 flex gap-2">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Appointment Type</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) => setEncounterPickerType(event.target.value)}
+                  value={encounterPickerType}
+                >
+                  {appointmentTypes.map((type) => (
+                    <option key={type.id} value={type.name}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">#</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) => setEncounterPickerNumber(event.target.value)}
+                  value={encounterPickerNumber}
+                >
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <option key={i + 1} value={`${i + 1}`}>
+                      #{i + 1}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) => setEncounterPickerSection(event.target.value)}
+                  value={encounterPickerSection}
+                >
+                  {encounterPickerSections.map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                  encounterPickerMode === "number"
-                    ? "bg-[var(--brand-primary)] text-white"
-                    : "border border-[var(--line-soft)] bg-white text-[var(--text-main)]"
-                }`}
-                onClick={() => setEncounterPickerMode("number")}
-                type="button"
-              >
-                By Number
-              </button>
-              <button
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-                  encounterPickerMode === "type"
-                    ? "bg-[var(--brand-primary)] text-white"
-                    : "border border-[var(--line-soft)] bg-white text-[var(--text-main)]"
-                }`}
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => {
-                  setEncounterPickerMode("type");
-                  if (!encounterPickerType && appointmentTypes.length) {
-                    setEncounterPickerType(appointmentTypes[0].name);
-                  }
+                  const prefix = appointmentTypeToTokenPrefix(encounterPickerType);
+                  if (!prefix) return;
+                  const token = `${prefix}_${encounterPickerNumber}_${encounterPickerSection}`;
+                  insertTextAtCursor(insertionTokenForField(token));
                 }}
                 type="button"
               >
-                By Appointment Type
+                Insert
               </button>
             </div>
 
-            {encounterPickerMode === "number" ? (
-              <>
-                <p className="mb-2 text-xs text-[var(--text-muted)]">
-                  Encounters are ordered chronologically (#1 = first encounter, #2 = second, etc.).
-                </p>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="grid gap-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">Encounter #</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) => setEncounterPickerNumber(event.target.value)}
-                      value={encounterPickerNumber}
-                    >
-                      {Array.from({ length: 20 }, (_, i) => (
-                        <option key={i + 1} value={`${i + 1}`}>
-                          Encounter #{i + 1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid gap-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) => setEncounterPickerSection(event.target.value)}
-                      value={encounterPickerSection}
-                    >
-                      {encounterPickerSections.map((entry) => (
-                        <option key={entry.value} value={entry.value}>
-                          {entry.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button
-                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
-                    onClick={() => {
-                      const token = `ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}`;
-                      insertTextAtCursor(insertionTokenForField(token));
-                    }}
-                    type="button"
-                  >
-                    Insert
-                  </button>
-                </div>
-
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  Will insert:{" "}
-                  <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
-                    {`{{ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}}}`}
-                  </code>
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="mb-2 text-xs text-[var(--text-muted)]">
-                  Pick encounters filtered by appointment type. #1 = first of that type, #2 = second, etc.
-                </p>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="grid gap-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">Appointment Type</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) => setEncounterPickerType(event.target.value)}
-                      value={encounterPickerType}
-                    >
-                      {appointmentTypes.map((type) => (
-                        <option key={type.id} value={type.name}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid gap-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">#</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) => setEncounterPickerNumber(event.target.value)}
-                      value={encounterPickerNumber}
-                    >
-                      {Array.from({ length: 10 }, (_, i) => (
-                        <option key={i + 1} value={`${i + 1}`}>
-                          #{i + 1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid gap-1">
-                    <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(event) => setEncounterPickerSection(event.target.value)}
-                      value={encounterPickerSection}
-                    >
-                      {encounterPickerSections.map((entry) => (
-                        <option key={entry.value} value={entry.value}>
-                          {entry.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button
-                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
-                    onClick={() => {
-                      const prefix = appointmentTypeToTokenPrefix(encounterPickerType);
-                      if (!prefix) return;
-                      const token = `${prefix}_${encounterPickerNumber}_${encounterPickerSection}`;
-                      insertTextAtCursor(insertionTokenForField(token));
-                    }}
-                    type="button"
-                  >
-                    Insert
-                  </button>
-                </div>
-
-                {encounterPickerType && (
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    Will insert:{" "}
-                    <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
-                      {`{{${appointmentTypeToTokenPrefix(encounterPickerType)}_${encounterPickerNumber}_${encounterPickerSection}}}`}
-                    </code>
-                  </p>
-                )}
-              </>
+            {encounterPickerType && (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Will insert:{" "}
+                <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
+                  {`{{${appointmentTypeToTokenPrefix(encounterPickerType)}_${encounterPickerNumber}_${encounterPickerSection}}}`}
+                </code>
+              </p>
             )}
 
             {/* Show already-used encounter tokens */}
