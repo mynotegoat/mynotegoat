@@ -347,15 +347,20 @@ export function ReportTemplateSettingsPanel() {
     return renderDocumentTemplate(selectedTemplate.body, ctx);
   }, [selectedTemplate, showLivePreview]);
 
+  const [insertFlash, setInsertFlash] = useState<string | null>(null);
+
   const insertTextAtCursor = (text: string) => {
     if (!selectedTemplate) {
       return;
     }
     if (bodyEditorRef.current) {
       bodyEditorRef.current.insertText(text);
-      return;
+    } else {
+      updateTemplate(selectedTemplate.id, { body: `${selectedTemplate.body}${text}` });
     }
-    updateTemplate(selectedTemplate.id, { body: `${selectedTemplate.body}${text}` });
+    // Flash feedback
+    setInsertFlash(text);
+    setTimeout(() => setInsertFlash(null), 1200);
   };
 
   const getPromptDraftKey = (templateId: string, promptId: string) => `${templateId}::${promptId}`;
@@ -379,7 +384,13 @@ export function ReportTemplateSettingsPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
+      {insertFlash && (
+        <div className="pointer-events-none fixed left-1/2 top-16 z-50 -translate-x-1/2 animate-[fadeInOut_1.2s_ease-in-out] rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg">
+          Inserted: {insertFlash}
+        </div>
+      )}
+      <style>{`@keyframes fadeInOut { 0% { opacity: 0; transform: translateX(-50%) translateY(-8px); } 15% { opacity: 1; transform: translateX(-50%) translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }`}</style>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
           className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"

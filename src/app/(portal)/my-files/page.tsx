@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFileManager } from "@/hooks/use-file-manager";
 import {
   type FileFolder,
@@ -96,6 +97,7 @@ function isPdfMime(mime: string) {
 // ---------------------------------------------------------------------------
 
 export default function MyFilesPage() {
+  const searchParams = useSearchParams();
   const patients = patientRecords;
   const {
     state,
@@ -106,8 +108,11 @@ export default function MyFilesPage() {
     deleteFile,
   } = useFileManager(patients);
 
-  // Navigation state
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  // Navigation state — open to specific folder if ?folder= param is present
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(() => {
+    const folderParam = searchParams.get("folder");
+    return folderParam || null;
+  });
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
