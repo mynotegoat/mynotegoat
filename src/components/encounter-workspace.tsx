@@ -810,8 +810,13 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (typeof specialistAnswer === "string" && specialistAnswer.trim()) {
       context.SPECIALIST_REFERRED = specialistAnswer.trim();
     }
-    const generatedText = renderMacroTemplate(macro.body, answers, context);
-    if (!generatedText.trim()) {
+    const rawGeneratedText = renderMacroTemplate(macro.body, answers, context);
+    // Strip leading/trailing empty HTML paragraphs that cause blank spacing
+    const generatedText = rawGeneratedText
+      .replace(/^(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+/gi, "")
+      .replace(/(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+$/gi, "")
+      .trim();
+    if (!generatedText) {
       setMessage("Generated macro output was empty.");
       return;
     }

@@ -397,7 +397,14 @@ export function renderMacroTemplate(
     return formatAnswerValue(answers[key]);
   });
 
-  return withQuestions.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return withQuestions
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "")
+    .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, "")
+    .replace(/^(<p>\s*<\/p>\s*)+/gi, "")
+    .replace(/(<p>\s*<\/p>\s*)+$/gi, "")
+    .trim();
 }
 
 export function createEmptyMacro(section: MacroSection, folder?: string): MacroTemplate {
