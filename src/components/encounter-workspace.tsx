@@ -21,7 +21,7 @@ import {
   type MacroAnswerMap,
   type MacroTemplate,
 } from "@/lib/macro-templates";
-import { loadContactDirectory } from "@/lib/contact-directory";
+import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { patients } from "@/lib/mock-data";
 import { appointmentStatusOptions, type AppointmentStatus } from "@/lib/schedule-appointments";
 
@@ -513,14 +513,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     deleteEncounter,
   } = useEncounterNotes();
 
+  const { contacts: allContacts } = useContactDirectory();
   const specialistContactNames = useMemo(() => {
-    const contacts = loadContactDirectory();
     const nonSpecialistCategories = new Set(["attorney", "imaging", "hospital/er"]);
-    return contacts
+    return allContacts
       .filter((c) => !nonSpecialistCategories.has(c.category.toLowerCase()))
       .map((c) => c.name)
       .sort((a, b) => a.localeCompare(b));
-  }, []);
+  }, [allContacts]);
 
   const initialEncounterSearchValue = useMemo(() => {
     if (!initialPatientId) {
@@ -1796,26 +1796,33 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       From Contacts
                     </span>
                   </p>
-                  <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: specialistContactNames.length > 5 ? `repeat(${Math.ceil(specialistContactNames.length / 5)}, 1fr)` : "1fr" }}>
-                    {specialistContactNames.map((name) => (
-                      <label
-                        key={`spec-pick-${name}`}
-                        className="inline-flex w-full items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      >
-                        <input
-                          checked={runMacroAnswers.__specialist_referred__ === name}
-                          onChange={() =>
-                            setRunMacroAnswers((current) => ({
-                              ...current,
-                              __specialist_referred__: name,
-                            }))
-                          }
-                          type="radio"
-                        />
-                        {name}
-                      </label>
-                    ))}
-                  </div>
+                  {specialistContactNames.length > 0 ? (
+                    <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: specialistContactNames.length > 5 ? `repeat(${Math.ceil(specialistContactNames.length / 5)}, 1fr)` : "1fr" }}>
+                      {specialistContactNames.map((name) => (
+                        <label
+                          key={`spec-pick-${name}`}
+                          className="inline-flex w-full items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                        >
+                          <input
+                            checked={runMacroAnswers.__specialist_referred__ === name}
+                            onChange={() =>
+                              setRunMacroAnswers((current) => ({
+                                ...current,
+                                __specialist_referred__: name,
+                              }))
+                            }
+                            type="radio"
+                          />
+                          {name}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      No specialist contacts found. Add specialists in{" "}
+                      <span className="font-semibold">Contacts</span> (categories: Pain Management, Orthopedic, Neurologist, etc.).
+                    </p>
+                  )}
                   {/* Free text fallback */}
                   <div className="mt-2">
                     <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm">
