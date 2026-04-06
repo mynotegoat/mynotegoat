@@ -7,7 +7,9 @@ import {
 } from "@/components/rich-text-template-editor";
 import { useReportTemplates } from "@/hooks/use-report-templates";
 import { documentFontOptions, renderDocumentTemplate } from "@/lib/document-templates";
+import { appointmentTypeToTokenPrefix } from "@/lib/report-generator";
 import { narrativeReportAutoFields } from "@/lib/report-templates";
+import { loadAppointmentTypes } from "@/lib/schedule-appointment-types";
 
 function insertionTokenForField(fieldToken: string) {
   return `{{${fieldToken}}}`;
@@ -156,7 +158,15 @@ const examplePreviewContext: Record<string, string> = {
   MRI_COMPLETED_DATE: "02/12/2026",
   MRI_REVIEWED_DATE: "02/17/2026",
   IMAGING_SUMMARY: "X-Ray:\n1. X-Ray | Completed: 01/19/2026 | Center: Valley Imaging | Regions: Cervical, Thoracic\n\nMRI/CT:\n1. MRI | Completed: 02/12/2026 | Center: Advanced MRI Center | Regions: Cervical",
-  SPECIALIST_SUMMARY: "1. Dr. Robert Chen, Orthopedic | Sent: 02/20/2026 | Scheduled: 03/05/2026 | Report Received: 03/10/2026",
+  SPECIALIST_SUMMARY: "1. Dr. Robert Chen, Orthopedic | Sent: 02/20/2026 | Completed: 03/05/2026\n   Recommendations: Continue conservative care, consider epidural if symptoms persist.\n2. Dr. Sarah Kim, Neurologist | Sent: 03/01/2026 | Completed: 03/15/2026\n   Recommendations: EMG/NCV recommended for upper extremity radiculopathy evaluation.",
+  SPECIALIST_1_NAME: "Dr. Robert Chen, Orthopedic",
+  SPECIALIST_1_SENT: "02/20/2026",
+  SPECIALIST_1_COMPLETED: "03/05/2026",
+  SPECIALIST_1_RECOMMENDATIONS: "Continue conservative care, consider epidural if symptoms persist.",
+  SPECIALIST_2_NAME: "Dr. Sarah Kim, Neurologist",
+  SPECIALIST_2_SENT: "03/01/2026",
+  SPECIALIST_2_COMPLETED: "03/15/2026",
+  SPECIALIST_2_RECOMMENDATIONS: "EMG/NCV recommended for upper extremity radiculopathy evaluation.",
   // Numbered encounter examples
   ENCOUNTER_1_SUBJECTIVE: "Patient presents following MVA on 01/12/2026. Reports neck pain rated 7/10, mid-back pain 5/10, headaches 6/10.",
   ENCOUNTER_1_OBJECTIVE: "Cervical ROM: Flexion 35° (N:50), Extension 40° (N:60). Palpation reveals hypertonicity at C3-C6 paraspinals bilaterally.",
@@ -194,6 +204,27 @@ const examplePreviewContext: Record<string, string> = {
   ENCOUNTER_12_PLAN: "Reduce frequency to 1x/week. Continue exercises. Target discharge in 4 weeks.",
   ENCOUNTER_12_DATE: "03/28/2026",
   ENCOUNTER_12_TYPE: "Follow Up",
+  // Appointment-type encounter examples
+  PERSONAL_INJURY_NEW_PATIENT_1_SUBJECTIVE: "Patient presents following MVA on 01/12/2026. Reports neck pain rated 7/10, mid-back pain 5/10, headaches 6/10.",
+  PERSONAL_INJURY_NEW_PATIENT_1_OBJECTIVE: "Cervical ROM: Flexion 35° (N:50), Extension 40° (N:60). Palpation reveals hypertonicity at C3-C6 paraspinals bilaterally.",
+  PERSONAL_INJURY_NEW_PATIENT_1_ASSESSMENT: "1. Cervicalgia — M54.2\n2. Muscle spasm of back — M62.830",
+  PERSONAL_INJURY_NEW_PATIENT_1_PLAN: "Chiropractic adjustments 3x/week for 4 weeks, then reassess.",
+  PERSONAL_INJURY_NEW_PATIENT_1_DATE: "01/19/2026",
+  PERSONAL_INJURY_RE_EXAM_1_SUBJECTIVE: "30-day re-exam. Neck pain 4/10, headaches 2x/week, mid-back pain resolved.",
+  PERSONAL_INJURY_RE_EXAM_1_OBJECTIVE: "Cervical ROM: Flexion 42° (N:50), Extension 50° (N:60). Significant improvement from baseline.",
+  PERSONAL_INJURY_RE_EXAM_1_ASSESSMENT: "Good progress. Recommend reducing visit frequency.",
+  PERSONAL_INJURY_RE_EXAM_1_PLAN: "Reduce to 2x/week. Continue exercises. MRI recommended for persistent radiculopathy.",
+  PERSONAL_INJURY_RE_EXAM_1_DATE: "02/16/2026",
+  PERSONAL_INJURY_RE_EXAM_2_SUBJECTIVE: "60-day re-exam. Neck pain 3/10, headaches rare, overall much improved.",
+  PERSONAL_INJURY_RE_EXAM_2_OBJECTIVE: "Cervical ROM near normal. Flexion 45°, Extension 55°. Minimal hypertonicity.",
+  PERSONAL_INJURY_RE_EXAM_2_ASSESSMENT: "Excellent progress. Approaching MMI.",
+  PERSONAL_INJURY_RE_EXAM_2_PLAN: "Reduce to 1x/week for 4 weeks. Target discharge.",
+  PERSONAL_INJURY_RE_EXAM_2_DATE: "03/23/2026",
+  PERSONAL_INJURY_OFFICE_VISIT_1_SUBJECTIVE: "Neck pain 6/10, headaches 5/10. Slight improvement since initial visit.",
+  PERSONAL_INJURY_OFFICE_VISIT_1_OBJECTIVE: "Cervical ROM slightly improved. Flexion 38°, Extension 42°.",
+  PERSONAL_INJURY_OFFICE_VISIT_1_ASSESSMENT: "Responding to care. Continue current treatment plan.",
+  PERSONAL_INJURY_OFFICE_VISIT_1_PLAN: "Continue 3x/week adjustments and therapeutic exercises.",
+  PERSONAL_INJURY_OFFICE_VISIT_1_DATE: "01/22/2026",
 };
 // Fill in remaining numbered encounters with defaults
 for (let i = 1; i <= 20; i++) {
@@ -236,7 +267,11 @@ export function ReportTemplateSettingsPanel() {
   const [promptOptionsDrafts, setPromptOptionsDrafts] = useState<Record<string, string>>({});
   const [encounterPickerNumber, setEncounterPickerNumber] = useState("1");
   const [encounterPickerSection, setEncounterPickerSection] = useState("SUBJECTIVE");
+  const [encounterPickerMode, setEncounterPickerMode] = useState<"number" | "type">("number");
+  const [encounterPickerType, setEncounterPickerType] = useState("");
   const [showLivePreview, setShowLivePreview] = useState(true);
+
+  const appointmentTypes = useMemo(() => loadAppointmentTypes(), []);
 
   const selectedTemplate = useMemo(() => {
     if (selectedTemplateId) {
@@ -655,64 +690,176 @@ export function ReportTemplateSettingsPanel() {
             <div className="mb-2">
               <h5 className="text-lg font-semibold">Encounter Section Picker</h5>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Pick a specific encounter by number and choose which SOAP section to include.
-                Encounters are ordered chronologically (#1 = first encounter, #2 = second, etc.).
+                Pick a specific encounter and choose which SOAP section to include.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="grid gap-1">
-                <span className="text-xs font-semibold text-[var(--text-muted)]">Encounter #</span>
-                <select
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                  onChange={(event) => setEncounterPickerNumber(event.target.value)}
-                  value={encounterPickerNumber}
-                >
-                  {Array.from({ length: 20 }, (_, i) => (
-                    <option key={i + 1} value={`${i + 1}`}>
-                      Encounter #{i + 1}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-1">
-                <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
-                <select
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                  onChange={(event) => setEncounterPickerSection(event.target.value)}
-                  value={encounterPickerSection}
-                >
-                  {encounterPickerSections.map((entry) => (
-                    <option key={entry.value} value={entry.value}>
-                      {entry.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            <div className="mb-3 flex gap-2">
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                  encounterPickerMode === "number"
+                    ? "bg-[var(--brand-primary)] text-white"
+                    : "border border-[var(--line-soft)] bg-white text-[var(--text-main)]"
+                }`}
+                onClick={() => setEncounterPickerMode("number")}
+                type="button"
+              >
+                By Number
+              </button>
+              <button
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+                  encounterPickerMode === "type"
+                    ? "bg-[var(--brand-primary)] text-white"
+                    : "border border-[var(--line-soft)] bg-white text-[var(--text-main)]"
+                }`}
                 onClick={() => {
-                  const token = `ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}`;
-                  insertTextAtCursor(insertionTokenForField(token));
+                  setEncounterPickerMode("type");
+                  if (!encounterPickerType && appointmentTypes.length) {
+                    setEncounterPickerType(appointmentTypes[0].name);
+                  }
                 }}
                 type="button"
               >
-                Insert
+                By Appointment Type
               </button>
             </div>
 
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Will insert:{" "}
-              <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
-                {`{{ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}}}`}
-              </code>
-            </p>
+            {encounterPickerMode === "number" ? (
+              <>
+                <p className="mb-2 text-xs text-[var(--text-muted)]">
+                  Encounters are ordered chronologically (#1 = first encounter, #2 = second, etc.).
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">Encounter #</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => setEncounterPickerNumber(event.target.value)}
+                      value={encounterPickerNumber}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => (
+                        <option key={i + 1} value={`${i + 1}`}>
+                          Encounter #{i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => setEncounterPickerSection(event.target.value)}
+                      value={encounterPickerSection}
+                    >
+                      {encounterPickerSections.map((entry) => (
+                        <option key={entry.value} value={entry.value}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
+                    onClick={() => {
+                      const token = `ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}`;
+                      insertTextAtCursor(insertionTokenForField(token));
+                    }}
+                    type="button"
+                  >
+                    Insert
+                  </button>
+                </div>
+
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  Will insert:{" "}
+                  <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
+                    {`{{ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}}}`}
+                  </code>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-[var(--text-muted)]">
+                  Pick encounters filtered by appointment type. #1 = first of that type, #2 = second, etc.
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">Appointment Type</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => setEncounterPickerType(event.target.value)}
+                      value={encounterPickerType}
+                    >
+                      {appointmentTypes.map((type) => (
+                        <option key={type.id} value={type.name}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">#</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => setEncounterPickerNumber(event.target.value)}
+                      value={encounterPickerNumber}
+                    >
+                      {Array.from({ length: 10 }, (_, i) => (
+                        <option key={i + 1} value={`${i + 1}`}>
+                          #{i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
+                    <select
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      onChange={(event) => setEncounterPickerSection(event.target.value)}
+                      value={encounterPickerSection}
+                    >
+                      {encounterPickerSections.map((entry) => (
+                        <option key={entry.value} value={entry.value}>
+                          {entry.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
+                    onClick={() => {
+                      const prefix = appointmentTypeToTokenPrefix(encounterPickerType);
+                      if (!prefix) return;
+                      const token = `${prefix}_${encounterPickerNumber}_${encounterPickerSection}`;
+                      insertTextAtCursor(insertionTokenForField(token));
+                    }}
+                    type="button"
+                  >
+                    Insert
+                  </button>
+                </div>
+
+                {encounterPickerType && (
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    Will insert:{" "}
+                    <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
+                      {`{{${appointmentTypeToTokenPrefix(encounterPickerType)}_${encounterPickerNumber}_${encounterPickerSection}}}`}
+                    </code>
+                  </p>
+                )}
+              </>
+            )}
 
             {/* Show already-used encounter tokens */}
             {(() => {
-              const usedEncTokens = usedFieldTokens.filter((t) => t.startsWith("ENCOUNTER_") && /^ENCOUNTER_\d+_/.test(t));
+              const usedEncTokens = usedFieldTokens.filter((t) =>
+                /^(ENCOUNTER_\d+_|PERSONAL_|CASH_|SPINAL_)/.test(t) && /_(?:SUBJECTIVE|OBJECTIVE|ASSESSMENT|PLAN|DATE|TYPE)$/.test(t)
+              );
               if (!usedEncTokens.length) return null;
               return (
                 <div className="mt-3 border-t border-[var(--line-soft)] pt-2">
@@ -725,7 +872,7 @@ export function ReportTemplateSettingsPanel() {
                         className="rounded-full border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] px-3 py-1 text-xs font-semibold text-[var(--brand-primary)]"
                         key={token}
                       >
-                        ✓ {token}
+                        {token}
                       </span>
                     ))}
                   </div>

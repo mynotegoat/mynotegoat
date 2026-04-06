@@ -112,6 +112,7 @@ type SpecialistReferral = {
   completedDate: string;
   reportReceivedDate: string;
   reportReviewedDate: string;
+  recommendations: string;
 };
 
 type RelatedCaseEntry = {
@@ -847,6 +848,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       completedDate: typeof raw.completedDate === "string" ? raw.completedDate : "",
       reportReceivedDate: typeof raw.reportReceivedDate === "string" ? raw.reportReceivedDate : "",
       reportReviewedDate: typeof raw.reportReviewedDate === "string" ? raw.reportReviewedDate : "",
+      recommendations: typeof raw.recommendations === "string" ? raw.recommendations : "",
     }));
   });
   const [specialistMessage, setSpecialistMessage] = useState("");
@@ -1003,6 +1005,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   }, [fileManagerState, patientFolderId]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const narrativeEditableRef = useRef<HTMLDivElement | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
 
   const handlePatientFileUpload = useCallback(
@@ -1734,6 +1737,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       completedDate: "",
       reportReceivedDate: "",
       reportReviewedDate: "",
+      recommendations: "",
     };
     setSpecialistReferrals((current) => [...current, newItem]);
     setSpecialistDraft({
@@ -2003,6 +2007,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         completedDate: entry.completedDate,
         reportReceivedDate: entry.reportReceivedDate,
         reportReviewedDate: entry.reportReviewedDate,
+        recommendations: entry.recommendations,
       })),
       promptValues,
     });
@@ -2086,10 +2091,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
+    const liveHtml = narrativeEditableRef.current?.innerHTML ?? narrativePreview.bodyHtml;
+
     const printableHtml = buildPrintableDocumentHtml({
       title: narrativePreview.title,
-      headerHtml: narrativePreview.headerHtml,
-      bodyHtml: narrativePreview.bodyHtml,
+      headerHtml: "",
+      bodyHtml: liveHtml,
       headerFontFamily: documentTemplates.header.fontFamily,
       fontFamily: narrativePreview.fontFamily,
       includeLogo: documentTemplates.header.active
@@ -3265,11 +3272,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               {specialistReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
                   <p className="font-semibold">{entry.specialist}</p>
-                  <p>Sent: {entry.sentDate || "-"}</p>
-                  <p>Scheduled: {entry.scheduledDate || "-"}</p>
-                  <p>Completed: {entry.completedDate || "-"}</p>
-                  <p>Received: {entry.reportReceivedDate || "-"}</p>
-                  <p>Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  <p>Sent: {entry.sentDate || "-"} | Completed: {entry.completedDate || "-"}</p>
+                  {entry.recommendations.trim() && (
+                    <p className="mt-1 text-[var(--text-muted)]">{entry.recommendations}</p>
+                  )}
                   <div className="mt-2 flex gap-2">
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
@@ -4369,15 +4375,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
       {showNarrativePreviewModal && narrativePreview && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">
-            <div className="panel-card mx-auto w-full max-w-6xl overflow-auto p-4">
+            <div className="panel-card mx-auto w-full max-w-5xl overflow-auto p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xl font-semibold">Narrative Preview</h3>
-                  <p className="text-sm text-[var(--text-muted)]">{narrativePreview.title}</p>
+                  <p className="text-sm text-[var(--text-muted)]">{narrativePreview.title} — click anywhere to edit before printing</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
                     onClick={printNarrativePreview}
                     type="button"
                   >
@@ -4393,47 +4399,29 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                <article className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Header (optional)</span>
-                    <textarea
-                      className="min-h-[120px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-mono text-sm leading-6"
-                      onChange={(event) =>
-                        setNarrativePreview((current) =>
-                          current ? { ...current, headerHtml: event.target.value } : current,
-                        )
-                      }
-                      value={narrativePreview.headerHtml}
-                    />
-                  </label>
-                  <label className="mt-3 grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Body</span>
-                    <textarea
-                      className="min-h-[420px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-mono text-sm leading-6"
-                      onChange={(event) =>
-                        setNarrativePreview((current) =>
-                          current ? { ...current, bodyHtml: event.target.value } : current,
-                        )
-                      }
-                      value={narrativePreview.bodyHtml}
-                    />
-                  </label>
-                </article>
-
-                <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-                  <p className="mb-2 text-sm font-semibold text-[var(--text-muted)]">Live Render</p>
-                  <div
-                    className="space-y-4 whitespace-pre-wrap break-words"
-                    style={{ fontFamily: narrativePreview.fontFamily }}
-                  >
-                    {narrativePreview.headerHtml.trim() && (
-                      <div dangerouslySetInnerHTML={{ __html: narrativePreview.headerHtml }} />
-                    )}
-                    <div dangerouslySetInnerHTML={{ __html: narrativePreview.bodyHtml }} />
-                  </div>
-                </article>
-              </div>
+              <article className="rounded-xl border border-[var(--line-soft)] bg-white p-6">
+                <div
+                  ref={narrativeEditableRef}
+                  className="narrative-editable-preview space-y-4 whitespace-pre-wrap break-words leading-7 focus:outline-none"
+                  contentEditable
+                  suppressContentEditableWarning
+                  style={{ fontFamily: narrativePreview.fontFamily, minHeight: "500px" }}
+                  onBlur={(event) => {
+                    const html = (event.currentTarget as HTMLDivElement).innerHTML;
+                    setNarrativePreview((current) =>
+                      current ? { ...current, headerHtml: "", bodyHtml: html } : current,
+                    );
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: [
+                      narrativePreview.headerHtml.trim() ? narrativePreview.headerHtml : "",
+                      narrativePreview.bodyHtml,
+                    ]
+                      .filter(Boolean)
+                      .join("<br/>"),
+                  }}
+                />
+              </article>
             </div>
         </div>
       )}
@@ -4942,6 +4930,20 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   />
                 </label>
               </div>
+
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Recommendations</span>
+                <textarea
+                  className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) =>
+                    setEditingSpecialist((current) =>
+                      current ? { ...current, recommendations: event.target.value } : current,
+                    )
+                  }
+                  placeholder="Enter specialist recommendations..."
+                  value={editingSpecialist.recommendations}
+                />
+              </label>
             </div>
 
             <div className="mt-4 flex justify-end gap-2">

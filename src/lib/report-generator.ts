@@ -69,6 +69,7 @@ type NarrativeSpecialistEntry = {
   completedDate?: string;
   reportReceivedDate: string;
   reportReviewedDate?: string;
+  recommendations?: string;
 };
 
 export interface NarrativeReportBuildInput {
@@ -217,11 +218,20 @@ function formatSpecialistSummary(entries: NarrativeSpecialistEntry[]) {
     return "-";
   }
   return entries
-    .map(
-      (entry, index) =>
-        `${index + 1}. ${entry.specialist || "-"} | Sent: ${entry.sentDate || "-"} | Scheduled: ${entry.scheduledDate || "-"} | Report Received: ${entry.reportReceivedDate || "No"}`,
-    )
+    .map((entry, index) => {
+      const line = `${index + 1}. ${entry.specialist || "-"} | Sent: ${entry.sentDate || "-"} | Completed: ${entry.completedDate || "-"}`;
+      const recs = entry.recommendations?.trim();
+      return recs ? `${line}\n   Recommendations: ${recs}` : line;
+    })
     .join("\n");
+}
+
+export function appointmentTypeToTokenPrefix(typeName: string) {
+  return typeName
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function formatAmount(value: string) {
@@ -363,6 +373,16 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     SPECIALIST_SUMMARY: formatSpecialistSummary(input.specialistReferrals),
   };
 
+  // ── Numbered specialist tokens (SPECIALIST_1_NAME … SPECIALIST_10_RECOMMENDATIONS) ──
+  for (let i = 0; i < 10; i++) {
+    const n = i + 1;
+    const sp = input.specialistReferrals[i] ?? null;
+    context[`SPECIALIST_${n}_NAME`] = sp?.specialist || "-";
+    context[`SPECIALIST_${n}_SENT`] = sp?.sentDate || "-";
+    context[`SPECIALIST_${n}_COMPLETED`] = sp?.completedDate || "-";
+    context[`SPECIALIST_${n}_RECOMMENDATIONS`] = sp?.recommendations?.trim() || "-";
+  }
+
   // ── Numbered encounter tokens (ENCOUNTER_1_SUBJECTIVE … ENCOUNTER_20_PLAN) ──
   for (let i = 0; i < 20; i++) {
     const n = i + 1;
@@ -373,6 +393,28 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     context[`ENCOUNTER_${n}_PLAN`] = enc?.soap.plan.trim() || "-";
     context[`ENCOUNTER_${n}_DATE`] = enc?.encounterDate ?? "-";
     context[`ENCOUNTER_${n}_TYPE`] = enc?.appointmentType ?? "-";
+  }
+
+  // ── Appointment-type encounter tokens (e.g. PERSONAL_INJURY_RE_EXAM_1_SUBJECTIVE) ──
+  const encountersByType = new Map<string, typeof encountersAsc>();
+  for (const enc of encountersAsc) {
+    const key = appointmentTypeToTokenPrefix(enc.appointmentType);
+    if (!key) continue;
+    const group = encountersByType.get(key) ?? [];
+    group.push(enc);
+    encountersByType.set(key, group);
+  }
+  for (const [typeKey, group] of encountersByType) {
+    for (let i = 0; i < Math.min(group.length, 20); i++) {
+      const n = i + 1;
+      const enc = group[i];
+      context[`${typeKey}_${n}_SUBJECTIVE`] = enc.soap.subjective.trim() || "-";
+      context[`${typeKey}_${n}_OBJECTIVE`] = enc.soap.objective.trim() || "-";
+      context[`${typeKey}_${n}_ASSESSMENT`] = enc.soap.assessment.trim() || "-";
+      context[`${typeKey}_${n}_PLAN`] = enc.soap.plan.trim() || "-";
+      context[`${typeKey}_${n}_DATE`] = enc.encounterDate;
+      context[`${typeKey}_${n}_TYPE`] = enc.appointmentType;
+    }
   }
 
   encounterSections.forEach((section) => {

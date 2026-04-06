@@ -119,6 +119,16 @@ export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
   { token: "MRI_COMPLETED_DATE", label: "MRI Completed Date" },
   { token: "MRI_REVIEWED_DATE", label: "MRI Reviewed Date" },
   { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },
+  // ── Numbered specialist tokens (specialist #1 through #10) ──
+  ...Array.from({ length: 10 }, (_, i) => {
+    const n = i + 1;
+    return [
+      { token: `SPECIALIST_${n}_NAME`, label: `Specialist #${n} Name` },
+      { token: `SPECIALIST_${n}_SENT`, label: `Specialist #${n} Sent Date` },
+      { token: `SPECIALIST_${n}_COMPLETED`, label: `Specialist #${n} Completed Date` },
+      { token: `SPECIALIST_${n}_RECOMMENDATIONS`, label: `Specialist #${n} Recommendations` },
+    ];
+  }).flat(),
   // ── Numbered encounter tokens (encounter #1 through #20, each SOAP section) ──
   ...Array.from({ length: 20 }, (_, i) => {
     const n = i + 1;

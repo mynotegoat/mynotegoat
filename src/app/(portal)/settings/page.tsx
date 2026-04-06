@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { hasSafetyBackup, recoverFromRemote, restoreFromSafetyBackup } from "@/lib/cloud-state";
+import { forceSyncNow } from "@/lib/storage-sync-interceptor";
 import { BillingMacroSettingsPanel } from "@/components/billing-macro-settings-panel";
 import { DocumentTemplateSettingsPanel } from "@/components/document-template-settings-panel";
 import { MacroSettingsPanel } from "@/components/macro-settings-panel";
@@ -1004,6 +1005,9 @@ export default function SettingsPage() {
   const [deletePasswordSuccess, setDeletePasswordSuccess] = useState("");
   const [deletePasswordSaving, setDeletePasswordSaving] = useState(false);
 
+  // Force save state
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
   // Data recovery state
   const [recoveryMessage, setRecoveryMessage] = useState("");
   const [recoveryError, setRecoveryError] = useState("");
@@ -1426,21 +1430,55 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <button
-          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
-          onClick={() => setAllSections(true)}
+          className={`rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition ${
+            saveStatus === "saving"
+              ? "bg-gray-400 cursor-wait"
+              : saveStatus === "saved"
+                ? "bg-emerald-600"
+                : saveStatus === "error"
+                  ? "bg-red-600"
+                  : "bg-[var(--brand-primary)] hover:opacity-90"
+          }`}
+          disabled={saveStatus === "saving"}
+          onClick={async () => {
+            setSaveStatus("saving");
+            try {
+              await forceSyncNow();
+              setSaveStatus("saved");
+              setTimeout(() => setSaveStatus("idle"), 3000);
+            } catch {
+              setSaveStatus("error");
+              setTimeout(() => setSaveStatus("idle"), 4000);
+            }
+          }}
           type="button"
         >
-          Expand All
+          {saveStatus === "saving"
+            ? "Saving..."
+            : saveStatus === "saved"
+              ? "Saved to Cloud!"
+              : saveStatus === "error"
+                ? "Save Failed - Try Again"
+                : "Save to Cloud"}
         </button>
-        <button
-          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
-          onClick={() => setAllSections(false)}
-          type="button"
-        >
-          Collapse All
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+            onClick={() => setAllSections(true)}
+            type="button"
+          >
+            Expand All
+          </button>
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+            onClick={() => setAllSections(false)}
+            type="button"
+          >
+            Collapse All
+          </button>
+        </div>
       </div>
 
       <CollapsibleSection
