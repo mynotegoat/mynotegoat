@@ -361,6 +361,18 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     SPECIALIST_SUMMARY: formatSpecialistSummary(input.specialistReferrals),
   };
 
+  // ── Numbered encounter tokens (ENCOUNTER_1_SUBJECTIVE … ENCOUNTER_20_PLAN) ──
+  for (let i = 0; i < 20; i++) {
+    const n = i + 1;
+    const enc = encountersAsc[i] ?? null;
+    context[`ENCOUNTER_${n}_SUBJECTIVE`] = enc?.soap.subjective.trim() || "-";
+    context[`ENCOUNTER_${n}_OBJECTIVE`] = enc?.soap.objective.trim() || "-";
+    context[`ENCOUNTER_${n}_ASSESSMENT`] = enc?.soap.assessment.trim() || "-";
+    context[`ENCOUNTER_${n}_PLAN`] = enc?.soap.plan.trim() || "-";
+    context[`ENCOUNTER_${n}_DATE`] = enc?.encounterDate ?? "-";
+    context[`ENCOUNTER_${n}_TYPE`] = enc?.appointmentType ?? "-";
+  }
+
   encounterSections.forEach((section) => {
     context[`FIRST_${section.toUpperCase()}`] =
       firstEncounter?.soap[section].trim() || context[`FIRST_${section.toUpperCase()}`] || "-";

@@ -118,6 +118,18 @@ export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
   { token: "MRI_COMPLETED_DATE", label: "MRI Completed Date" },
   { token: "MRI_REVIEWED_DATE", label: "MRI Reviewed Date" },
   { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },
+  // ── Numbered encounter tokens (encounter #1 through #20, each SOAP section) ──
+  ...Array.from({ length: 20 }, (_, i) => {
+    const n = i + 1;
+    return [
+      { token: `ENCOUNTER_${n}_SUBJECTIVE`, label: `Encounter #${n} Subjective` },
+      { token: `ENCOUNTER_${n}_OBJECTIVE`, label: `Encounter #${n} Objective` },
+      { token: `ENCOUNTER_${n}_ASSESSMENT`, label: `Encounter #${n} Assessment` },
+      { token: `ENCOUNTER_${n}_PLAN`, label: `Encounter #${n} Plan` },
+      { token: `ENCOUNTER_${n}_DATE`, label: `Encounter #${n} Date` },
+      { token: `ENCOUNTER_${n}_TYPE`, label: `Encounter #${n} Appointment Type` },
+    ];
+  }).flat(),
 ];
 
 function normalizeString(value: unknown) {

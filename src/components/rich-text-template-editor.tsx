@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 export interface RichTextTemplateEditorHandle {
   focus: () => void;
@@ -86,18 +86,10 @@ export const RichTextTemplateEditor = forwardRef<
 ) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
-  const isFocusedRef = useRef(false);
-  const [formatBlockValue, setFormatBlockValue] = useState("");
-  const [fontSizeValue, setFontSizeValue] = useState("");
 
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
     if (!editor) {
-      return;
-    }
-    // Skip syncing when the user is actively typing — the editor already has the
-    // latest content and resetting innerHTML would destroy the cursor position.
-    if (isFocusedRef.current) {
       return;
     }
     const nextHtml = normalizeIncomingValue(value);
@@ -141,7 +133,6 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
-    isFocusedRef.current = true;
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -154,7 +145,6 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
-    isFocusedRef.current = true;
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -178,14 +168,14 @@ export const RichTextTemplateEditor = forwardRef<
         </span>
         <select
           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
-          value={formatBlockValue}
+          defaultValue=""
           onChange={(event) => {
-            const val = event.target.value;
-            setFormatBlockValue(val);
-            if (!val) return;
-            runCommand("formatBlock", val);
-            // Reset after applying so dropdown returns to label
-            setTimeout(() => setFormatBlockValue(""), 0);
+            const value = event.target.value;
+            if (!value) {
+              return;
+            }
+            runCommand("formatBlock", value);
+            event.currentTarget.value = "";
           }}
         >
           <option value="">Format</option>
@@ -197,11 +187,12 @@ export const RichTextTemplateEditor = forwardRef<
         </select>
         <select
           className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
-          value={fontSizeValue}
+          defaultValue=""
           onChange={(event) => {
             const size = event.target.value;
-            setFontSizeValue(size);
-            if (!size) return;
+            if (!size) {
+              return;
+            }
             runCommand("fontSize", "7");
             const editor = editorRef.current;
             if (editor) {
@@ -214,7 +205,7 @@ export const RichTextTemplateEditor = forwardRef<
               });
               emitChange();
             }
-            setTimeout(() => setFontSizeValue(""), 0);
+            event.currentTarget.value = "";
           }}
         >
           <option value="">Size</option>
@@ -346,8 +337,7 @@ export const RichTextTemplateEditor = forwardRef<
         className={`rich-text-editor ${minHeightClassName} w-full overflow-auto bg-white px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere] focus:outline-none`}
         contentEditable
         data-placeholder={placeholder}
-        onFocus={() => { isFocusedRef.current = true; }}
-        onBlur={() => { isFocusedRef.current = false; emitChange(); }}
+        onBlur={emitChange}
         onInput={emitChange}
         spellCheck
         style={{ fontFamily }}

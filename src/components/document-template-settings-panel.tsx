@@ -385,7 +385,7 @@ export function DocumentTemplateSettingsPanel({
                     Include Office Logo
                   </label>
                 </div>
-                <label className="mt-3 grid gap-1">
+                <div className="mt-3 grid gap-1">
                   <span className="text-sm font-semibold text-[var(--text-muted)]">Header Body</span>
                   <RichTextTemplateEditor
                     ref={headerEditorRef}
@@ -395,7 +395,7 @@ export function DocumentTemplateSettingsPanel({
                     placeholder="Office name, address, phone, fax, email..."
                     value={documentTemplates.header.body}
                   />
-                </label>
+                </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
@@ -435,7 +435,7 @@ export function DocumentTemplateSettingsPanel({
                 {getTemplateTypeLabel(selectedTemplate.scope)}
               </p>
 
-              <label className="grid gap-1">
+              <div className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Template Body</span>
                 <RichTextTemplateEditor
                   ref={bodyEditorRef}
@@ -445,7 +445,7 @@ export function DocumentTemplateSettingsPanel({
                   placeholder="Build your reusable template..."
                   value={selectedTemplate.body}
                 />
-              </label>
+              </div>
 
               <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">

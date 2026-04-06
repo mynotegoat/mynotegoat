@@ -6,7 +6,7 @@ import {
   type RichTextTemplateEditorHandle,
 } from "@/components/rich-text-template-editor";
 import { useReportTemplates } from "@/hooks/use-report-templates";
-import { documentFontOptions } from "@/lib/document-templates";
+import { documentFontOptions, renderDocumentTemplate } from "@/lib/document-templates";
 import { narrativeReportAutoFields } from "@/lib/report-templates";
 
 function insertionTokenForField(fieldToken: string) {
@@ -75,6 +75,135 @@ const autoFieldCategories: FieldCategory[] = [
   },
 ];
 
+const encounterPickerSections = [
+  { value: "SUBJECTIVE", label: "Subjective" },
+  { value: "OBJECTIVE", label: "Objective" },
+  { value: "ASSESSMENT", label: "Assessment" },
+  { value: "PLAN", label: "Plan" },
+  { value: "DATE", label: "Date" },
+  { value: "TYPE", label: "Appointment Type" },
+] as const;
+
+// ── Example data for live preview ──────────────────────────────────────────
+const examplePreviewContext: Record<string, string> = {
+  TODAY_DATE: "04/05/2026",
+  OFFICE_NAME: "Valley Chiropractic Center",
+  OFFICE_ADDRESS: "1234 Main St, Suite 100, Los Angeles, CA 90001",
+  OFFICE_PHONE: "(310) 555-1234",
+  OFFICE_FAX: "(310) 555-1235",
+  OFFICE_EMAIL: "info@valleychiro.com",
+  DOCTOR_NAME: "Dr. Michael Johnson, D.C.",
+  PATIENT_FULL_NAME: "Maria Garcia",
+  PATIENT_FIRST_NAME: "Maria",
+  PATIENT_LAST_NAME: "Garcia",
+  PATIENT_DOB: "05/15/1988",
+  PATIENT_PHONE: "(818) 555-9876",
+  PATIENT_EMAIL: "maria.garcia@email.com",
+  DATE_OF_INJURY: "01/12/2026",
+  INITIAL_EXAM: "01/19/2026",
+  CASE_NUMBER: "2026-PI-0042",
+  ATTORNEY_NAME: "James Mitchell, Esq.",
+  ATTORNEY_PHONE: "(213) 555-4567",
+  ATTORNEY_FAX: "(213) 555-4568",
+  ATTORNEY_EMAIL: "jmitchell@lawfirm.com",
+  ATTORNEY_ADDRESS: "567 Legal Ave, Suite 300, Los Angeles, CA 90010",
+  CASE_STATUS: "Active",
+  LIEN_STATUS: "LOP Signed",
+  PRIOR_CARE: "None reported",
+  PATIENT_NOTES: "Patient reports no prior chiropractic care. MVA on 01/12/2026, rear-ended at traffic light.",
+  XRAY_FINDINGS: "Loss of cervical lordosis. Mild degenerative changes at C5-C6.",
+  MRI_CT_FINDINGS: "Small disc protrusion at C5-C6 with mild foraminal narrowing.",
+  SPECIALIST_RECOMMENDATIONS: "Orthopedic consult recommended for continued radiculopathy.",
+  BILLED_AMOUNT: "8450.00",
+  PAID_AMOUNT: "0.00",
+  PERCENTAGE_PAID: "0.0%",
+  DISCHARGE_DATE: "-",
+  RB_SENT_DATE: "-",
+  PAID_DATE: "-",
+  REVIEW_STATUS: "In Treatment",
+  FIRST_ENCOUNTER_DATE: "01/19/2026",
+  LATEST_ENCOUNTER_DATE: "03/28/2026",
+  ENCOUNTER_COUNT: "12",
+  FIRST_SUBJECTIVE: "Patient presents following MVA on 01/12/2026. Reports neck pain rated 7/10, mid-back pain 5/10, headaches 6/10. Pain worsens with sitting, turning head, and lifting. Sleep is disrupted. Denies prior neck or back injuries.",
+  FIRST_OBJECTIVE: "Cervical ROM: Flexion 35° (N:50), Extension 40° (N:60), R Lat Flex 30° (N:45), L Lat Flex 28° (N:45). Palpation reveals hypertonicity at C3-C6 paraspinals bilaterally, trigger points trapezius. Orthopedic tests: Cervical compression (+) right, Jackson's (+) right.",
+  FIRST_ASSESSMENT: "1. Cervicalgia — M54.2\n2. Muscle spasm of back — M62.830\n3. Sprain of ligaments of cervical spine — S13.4XXA\nPrognosis: Good with continued care.",
+  FIRST_PLAN: "Chiropractic adjustments 3x/week for 4 weeks, then reassess. Cervical traction, myofascial release, therapeutic exercises. Re-exam at 30 days.",
+  LATEST_SUBJECTIVE: "Patient reports improvement. Neck pain now 3/10 (was 7/10). Headaches have resolved. Mid-back pain occasional 2/10.",
+  LATEST_OBJECTIVE: "Cervical ROM: Flexion 45° (N:50), Extension 55° (N:60). Improved from initial. Reduced hypertonicity. Cervical compression (-) bilaterally.",
+  LATEST_ASSESSMENT: "Patient responding well to care. Functional improvement noted across all metrics.",
+  LATEST_PLAN: "Reduce frequency to 1x/week. Continue therapeutic exercises. Target discharge in 4 weeks.",
+  ALL_SUBJECTIVE: "01/19/2026 (Initial Exam)\nPatient presents following MVA on 01/12/2026. Reports neck pain 7/10, mid-back pain 5/10, headaches 6/10.\n\n03/28/2026 (Follow Up)\nPatient reports improvement. Neck pain now 3/10. Headaches have resolved.",
+  ALL_OBJECTIVE: "01/19/2026 (Initial Exam)\nCervical ROM: Flexion 35° (N:50), Extension 40° (N:60). Palpation reveals hypertonicity C3-C6.\n\n03/28/2026 (Follow Up)\nCervical ROM: Flexion 45° (N:50), Extension 55° (N:60). Improved from initial.",
+  ALL_ASSESSMENT: "01/19/2026 (Initial Exam)\n1. Cervicalgia — M54.2\n2. Muscle spasm of back — M62.830\n\n03/28/2026 (Follow Up)\nPatient responding well to care. Functional improvement noted.",
+  ALL_PLAN: "01/19/2026 (Initial Exam)\nChiropractic adjustments 3x/week for 4 weeks.\n\n03/28/2026 (Follow Up)\nReduce frequency to 1x/week. Target discharge in 4 weeks.",
+  MACRO_SUBJECTIVE: "01/19/2026 • Initial History Intake\nPatient presents following MVA on 01/12/2026. Reports neck pain rated 7/10.",
+  MACRO_OBJECTIVE: "01/19/2026 • ROM Assessment\nCervical ROM: Flexion 35° (N:50), Extension 40° (N:60).",
+  MACRO_ASSESSMENT: "-",
+  MACRO_PLAN: "-",
+  ENCOUNTER_TIMELINE: "1. 01/19/2026 | Initial Exam | Dr. Michael Johnson | Closed\n2. 01/22/2026 | Follow Up | Dr. Michael Johnson | Closed\n3. 01/26/2026 | Follow Up | Dr. Michael Johnson | Closed\n4. 02/02/2026 | Follow Up | Dr. Michael Johnson | Closed\n5. 02/09/2026 | Follow Up | Dr. Michael Johnson | Closed\n6. 02/16/2026 | Re-Exam | Dr. Michael Johnson | Closed\n7. 02/23/2026 | Follow Up | Dr. Michael Johnson | Closed\n8. 03/02/2026 | Follow Up | Dr. Michael Johnson | Closed\n9. 03/09/2026 | Follow Up | Dr. Michael Johnson | Closed\n10. 03/16/2026 | Follow Up | Dr. Michael Johnson | Closed\n11. 03/23/2026 | Re-Exam | Dr. Michael Johnson | Closed\n12. 03/28/2026 | Follow Up | Dr. Michael Johnson | Open",
+  DIAGNOSIS_LIST: "1. M54.2 - Cervicalgia\n2. M62.830 - Muscle spasm of back\n3. S13.4XXA - Sprain of ligaments of cervical spine\n4. M54.12 - Radiculopathy, cervical region",
+  DIAGNOSIS_CODES: "M54.2, M62.830, S13.4XXA, M54.12",
+  CHARGE_LEDGER: "1. 01/19/2026 | 99204 | New Patient E/M | $250.00 x 1 = $250.00\n2. 01/19/2026 | 98941 | CMT 3-4 Regions | $75.00 x 1 = $75.00\n3. 01/22/2026 | 98941 | CMT 3-4 Regions | $75.00 x 1 = $75.00",
+  TOTAL_CHARGE_AMOUNT: "$8,450.00",
+  XRAY_SUMMARY: "1. X-Ray | Sent: 01/19/2026 | Done: 01/19/2026 | Center: Valley Imaging | Regions: Cervical, Thoracic | Report Received: 01/22/2026 | Report Reviewed: 01/23/2026",
+  XRAY_SENT_DATE: "01/19/2026",
+  XRAY_COMPLETED_DATE: "01/19/2026",
+  XRAY_REVIEWED_DATE: "01/23/2026",
+  MRI_CT_SUMMARY: "1. MRI | Sent: 02/05/2026 | Done: 02/12/2026 | Center: Advanced MRI Center | Regions: Cervical | Report Received: 02/16/2026 | Report Reviewed: 02/17/2026",
+  MRI_SENT_DATE: "02/05/2026",
+  MRI_SCHEDULED_DATE: "02/12/2026",
+  MRI_COMPLETED_DATE: "02/12/2026",
+  MRI_REVIEWED_DATE: "02/17/2026",
+  IMAGING_SUMMARY: "X-Ray:\n1. X-Ray | Sent: 01/19/2026 | Done: 01/19/2026 | Center: Valley Imaging\n\nMRI/CT:\n1. MRI | Sent: 02/05/2026 | Done: 02/12/2026 | Center: Advanced MRI Center",
+  SPECIALIST_SUMMARY: "1. Dr. Robert Chen, Orthopedic | Sent: 02/20/2026 | Scheduled: 03/05/2026 | Report Received: 03/10/2026",
+  // Numbered encounter examples
+  ENCOUNTER_1_SUBJECTIVE: "Patient presents following MVA on 01/12/2026. Reports neck pain rated 7/10, mid-back pain 5/10, headaches 6/10.",
+  ENCOUNTER_1_OBJECTIVE: "Cervical ROM: Flexion 35° (N:50), Extension 40° (N:60). Palpation reveals hypertonicity at C3-C6 paraspinals bilaterally.",
+  ENCOUNTER_1_ASSESSMENT: "1. Cervicalgia — M54.2\n2. Muscle spasm of back — M62.830\n3. Sprain of ligaments of cervical spine — S13.4XXA",
+  ENCOUNTER_1_PLAN: "Chiropractic adjustments 3x/week for 4 weeks, then reassess.",
+  ENCOUNTER_1_DATE: "01/19/2026",
+  ENCOUNTER_1_TYPE: "Initial Exam",
+  ENCOUNTER_2_SUBJECTIVE: "Neck pain 6/10, headaches 5/10. Slight improvement since initial visit.",
+  ENCOUNTER_2_OBJECTIVE: "Cervical ROM slightly improved. Flexion 38°, Extension 42°.",
+  ENCOUNTER_2_ASSESSMENT: "Responding to care. Continue current treatment plan.",
+  ENCOUNTER_2_PLAN: "Continue 3x/week adjustments and therapeutic exercises.",
+  ENCOUNTER_2_DATE: "01/22/2026",
+  ENCOUNTER_2_TYPE: "Follow Up",
+  ENCOUNTER_3_SUBJECTIVE: "Neck pain 5/10. Headaches less frequent, 3-4 days/week down from daily.",
+  ENCOUNTER_3_OBJECTIVE: "Cervical ROM: Flexion 40°, Extension 45°. Reduced muscle guarding.",
+  ENCOUNTER_3_ASSESSMENT: "Continued improvement. Symptoms decreasing.",
+  ENCOUNTER_3_PLAN: "Continue current plan. Re-evaluate at 30 days.",
+  ENCOUNTER_3_DATE: "01/26/2026",
+  ENCOUNTER_3_TYPE: "Follow Up",
+  ENCOUNTER_6_SUBJECTIVE: "30-day re-exam. Neck pain 4/10, headaches 2x/week, mid-back pain resolved.",
+  ENCOUNTER_6_OBJECTIVE: "Cervical ROM: Flexion 42° (N:50), Extension 50° (N:60). Significant improvement from baseline.",
+  ENCOUNTER_6_ASSESSMENT: "Good progress. Recommend reducing visit frequency.",
+  ENCOUNTER_6_PLAN: "Reduce to 2x/week. Continue exercises. MRI recommended for persistent radiculopathy.",
+  ENCOUNTER_6_DATE: "02/16/2026",
+  ENCOUNTER_6_TYPE: "Re-Exam",
+  ENCOUNTER_11_SUBJECTIVE: "60-day re-exam. Neck pain 3/10, headaches rare, overall much improved.",
+  ENCOUNTER_11_OBJECTIVE: "Cervical ROM near normal. Flexion 45°, Extension 55°. Minimal hypertonicity.",
+  ENCOUNTER_11_ASSESSMENT: "Excellent progress. Approaching MMI.",
+  ENCOUNTER_11_PLAN: "Reduce to 1x/week for 4 weeks. Target discharge.",
+  ENCOUNTER_11_DATE: "03/23/2026",
+  ENCOUNTER_11_TYPE: "Re-Exam",
+  ENCOUNTER_12_SUBJECTIVE: "Patient reports improvement. Neck pain now 3/10. Headaches have resolved.",
+  ENCOUNTER_12_OBJECTIVE: "Cervical ROM: Flexion 45° (N:50), Extension 55° (N:60). Improved from initial.",
+  ENCOUNTER_12_ASSESSMENT: "Patient responding well to care. Functional improvement noted.",
+  ENCOUNTER_12_PLAN: "Reduce frequency to 1x/week. Continue exercises. Target discharge in 4 weeks.",
+  ENCOUNTER_12_DATE: "03/28/2026",
+  ENCOUNTER_12_TYPE: "Follow Up",
+};
+// Fill in remaining numbered encounters with defaults
+for (let i = 1; i <= 20; i++) {
+  for (const suffix of ["SUBJECTIVE", "OBJECTIVE", "ASSESSMENT", "PLAN", "DATE", "TYPE"]) {
+    const key = `ENCOUNTER_${i}_${suffix}`;
+    if (!examplePreviewContext[key]) {
+      examplePreviewContext[key] = "-";
+    }
+  }
+}
+
 const tokenLabelMap = Object.fromEntries(
   narrativeReportAutoFields.map((f) => [f.token, f.label]),
 );
@@ -104,6 +233,9 @@ export function ReportTemplateSettingsPanel() {
   const [promptOptionsDraft, setPromptOptionsDraft] = useState("");
   const [promptRequiredDraft, setPromptRequiredDraft] = useState(false);
   const [promptOptionsDrafts, setPromptOptionsDrafts] = useState<Record<string, string>>({});
+  const [encounterPickerNumber, setEncounterPickerNumber] = useState("1");
+  const [encounterPickerSection, setEncounterPickerSection] = useState("SUBJECTIVE");
+  const [showLivePreview, setShowLivePreview] = useState(true);
 
   const selectedTemplate = useMemo(() => {
     if (selectedTemplateId) {
@@ -161,6 +293,19 @@ export function ReportTemplateSettingsPanel() {
     setPromptOptionsDraft("");
     setPromptRequiredDraft(false);
   };
+
+  // ── Live preview: render template body with example data ───────────────
+  const livePreviewHtml = useMemo(() => {
+    if (!selectedTemplate || !showLivePreview) return "";
+    // Build context that includes prompt example values
+    const ctx: Record<string, string> = { ...examplePreviewContext };
+    for (const prompt of selectedTemplate.prompts) {
+      ctx[prompt.token] = prompt.options.length
+        ? prompt.options[0]
+        : `[${prompt.label}]`;
+    }
+    return renderDocumentTemplate(selectedTemplate.body, ctx);
+  }, [selectedTemplate, showLivePreview]);
 
   const insertTextAtCursor = (text: string) => {
     if (!selectedTemplate) {
@@ -310,7 +455,7 @@ export function ReportTemplateSettingsPanel() {
             </label>
           </div>
 
-          <label className="mt-3 grid gap-1">
+          <div className="mt-3 grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Template Body</span>
             <RichTextTemplateEditor
               ref={bodyEditorRef}
@@ -320,7 +465,79 @@ export function ReportTemplateSettingsPanel() {
               placeholder="Build your narrative template..."
               value={selectedTemplate.body}
             />
-          </label>
+          </div>
+
+          {/* ── Live Preview ─────────────────────────────────────────── */}
+          <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+            <button
+              className="flex w-full items-center justify-between gap-2 text-left"
+              onClick={() => setShowLivePreview((prev) => !prev)}
+              type="button"
+            >
+              <div>
+                <h5 className="text-lg font-semibold">Live Preview</h5>
+                <p className="text-sm text-[var(--text-muted)]">
+                  See how your template looks with example patient data
+                </p>
+              </div>
+              <span
+                aria-hidden
+                className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--line-soft)] text-sm transition-transform ${
+                  showLivePreview ? "rotate-180" : ""
+                }`}
+              >
+                ⌄
+              </span>
+            </button>
+
+            {showLivePreview && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-2 rounded-lg bg-[rgba(13,121,191,0.08)] px-3 py-2 text-xs text-[var(--brand-primary)]">
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                  </svg>
+                  <span>
+                    This preview uses example data (Maria Garcia, MVA case). In a real report, your actual patient data fills these fields.
+                  </span>
+                </div>
+
+                <div
+                  className="max-h-[600px] overflow-auto rounded-xl border border-[var(--line-soft)] bg-white p-6 text-sm leading-7"
+                  style={{ fontFamily: selectedTemplate.fontFamily }}
+                >
+                  {livePreviewHtml ? (
+                    <div
+                      className="whitespace-pre-wrap break-words"
+                      dangerouslySetInnerHTML={{ __html: livePreviewHtml }}
+                    />
+                  ) : (
+                    <p className="text-center text-[var(--text-muted)]">
+                      Your template is empty. Start building it above and the preview will update in real time.
+                    </p>
+                  )}
+                </div>
+
+                {/* Token legend — show which tokens are in the template */}
+                {usedFieldTokens.length > 0 && (
+                  <details className="rounded-lg border border-[var(--line-soft)] bg-white">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                      {usedFieldTokens.length} token{usedFieldTokens.length !== 1 ? "s" : ""} used in this template
+                    </summary>
+                    <div className="flex flex-wrap gap-1.5 border-t border-[var(--line-soft)] px-3 py-2">
+                      {usedFieldTokens.map((token) => (
+                        <span
+                          className="rounded-full border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand-primary)]"
+                          key={token}
+                        >
+                          {token}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </article>
 
           <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -427,6 +644,90 @@ export function ReportTemplateSettingsPanel() {
                       </div>
                     </div>
                   )}
+                </div>
+              );
+            })()}
+          </article>
+
+          {/* ── Encounter Section Picker ──────────────────────────────── */}
+          <article className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+            <div className="mb-2">
+              <h5 className="text-lg font-semibold">Encounter Section Picker</h5>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Pick a specific encounter by number and choose which SOAP section to include.
+                Encounters are ordered chronologically (#1 = first encounter, #2 = second, etc.).
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Encounter #</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) => setEncounterPickerNumber(event.target.value)}
+                  value={encounterPickerNumber}
+                >
+                  {Array.from({ length: 20 }, (_, i) => (
+                    <option key={i + 1} value={`${i + 1}`}>
+                      Encounter #{i + 1}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-1">
+                <span className="text-xs font-semibold text-[var(--text-muted)]">Section</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) => setEncounterPickerSection(event.target.value)}
+                  value={encounterPickerSection}
+                >
+                  {encounterPickerSections.map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  const token = `ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}`;
+                  insertTextAtCursor(insertionTokenForField(token));
+                }}
+                type="button"
+              >
+                Insert
+              </button>
+            </div>
+
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              Will insert:{" "}
+              <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[var(--brand-primary)]">
+                {`{{ENCOUNTER_${encounterPickerNumber}_${encounterPickerSection}}}`}
+              </code>
+            </p>
+
+            {/* Show already-used encounter tokens */}
+            {(() => {
+              const usedEncTokens = usedFieldTokens.filter((t) => t.startsWith("ENCOUNTER_") && /^ENCOUNTER_\d+_/.test(t));
+              if (!usedEncTokens.length) return null;
+              return (
+                <div className="mt-3 border-t border-[var(--line-soft)] pt-2">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+                    Encounter Tokens In Template
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {usedEncTokens.map((token) => (
+                      <span
+                        className="rounded-full border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.12)] px-3 py-1 text-xs font-semibold text-[var(--brand-primary)]"
+                        key={token}
+                      >
+                        ✓ {token}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               );
             })()}
