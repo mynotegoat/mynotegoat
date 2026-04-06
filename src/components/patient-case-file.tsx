@@ -1149,6 +1149,25 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     () => new Map(billingMacros.diagnosisFolders.map((entry) => [entry.id, entry] as const)),
     [billingMacros.diagnosisFolders],
   );
+  const diagnosisMacrosByFolder = useMemo(() => {
+    type Group = { id: string; name: string; macros: typeof activeDiagnosisMacros };
+    const groups: Group[] = billingMacros.diagnosisFolders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      macros: activeDiagnosisMacros
+        .filter((m) => m.folderId === folder.id)
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    }));
+    const knownFolderIds = new Set(billingMacros.diagnosisFolders.map((f) => f.id));
+    const orphans = activeDiagnosisMacros
+      .filter((m) => !knownFolderIds.has(m.folderId))
+      .sort((a, b) => a.code.localeCompare(b.code));
+    if (orphans.length) {
+      groups.push({ id: "__uncategorized__", name: "Uncategorized", macros: orphans });
+    }
+    return groups.filter((g) => g.macros.length > 0);
+  }, [activeDiagnosisMacros, billingMacros.diagnosisFolders]);
+
   const filteredDiagnosisMacros = useMemo(() => {
     const query = diagnosisSearchDraft.trim().toLowerCase();
     return activeDiagnosisMacros
@@ -3692,26 +3711,39 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   />
                   {diagnosisListSearch.trim() && (() => {
                     const q = diagnosisListSearch.trim().toLowerCase();
-                    const results = activeDiagnosisMacros.filter(
-                      (entry) =>
-                        entry.code.toLowerCase().includes(q) ||
-                        entry.description.toLowerCase().includes(q),
-                    );
-                    return results.length > 0 ? (
-                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
-                        {results.map((entry) => (
-                          <button
-                            key={`dx-search-${entry.id}`}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)] ${diagnosisMacroIdDraft === entry.id ? "bg-[var(--bg-soft)] font-semibold" : ""}`}
-                            onClick={() => {
-                              setDiagnosisMacroIdDraft(entry.id);
-                              setDiagnosisListSearch("");
-                            }}
-                            type="button"
-                          >
-                            <span className="font-semibold">{entry.code}</span>{" "}
-                            <span className="text-[var(--text-muted)]">- {entry.description}</span>
-                          </button>
+                    const groupsWithMatches = diagnosisMacrosByFolder
+                      .map((group) => ({
+                        ...group,
+                        macros: group.macros.filter(
+                          (entry) =>
+                            entry.code.toLowerCase().includes(q) ||
+                            entry.description.toLowerCase().includes(q),
+                        ),
+                      }))
+                      .filter((group) => group.macros.length > 0);
+                    const totalResults = groupsWithMatches.reduce((sum, g) => sum + g.macros.length, 0);
+                    return totalResults > 0 ? (
+                      <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
+                        {groupsWithMatches.map((group) => (
+                          <div key={`dx-search-group-${group.id}`}>
+                            <div className="sticky top-0 bg-[var(--bg-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                              {group.name}
+                            </div>
+                            {group.macros.map((entry) => (
+                              <button
+                                key={`dx-search-${entry.id}`}
+                                className={`w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)] ${diagnosisMacroIdDraft === entry.id ? "bg-[var(--bg-soft)] font-semibold" : ""}`}
+                                onClick={() => {
+                                  setDiagnosisMacroIdDraft(entry.id);
+                                  setDiagnosisListSearch("");
+                                }}
+                                type="button"
+                              >
+                                <span className="font-semibold">{entry.code}</span>{" "}
+                                <span className="text-[var(--text-muted)]">- {entry.description}</span>
+                              </button>
+                            ))}
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -3727,10 +3759,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   value={diagnosisMacroIdDraft}
                 >
                   <option value="">Select diagnosis code</option>
-                  {activeDiagnosisMacros.map((entry) => (
-                    <option key={`dx-macro-${entry.id}`} value={entry.id}>
-                      {entry.code} - {entry.description}
-                    </option>
+                  {diagnosisMacrosByFolder.map((group) => (
+                    <optgroup key={`dx-folder-${group.id}`} label={group.name}>
+                      {group.macros.map((entry) => (
+                        <option key={`dx-macro-${entry.id}`} value={entry.id}>
+                          {entry.code} - {entry.description}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 <button
