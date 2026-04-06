@@ -75,6 +75,10 @@ const autoFieldCategories: FieldCategory[] = [
     label: "Imaging & Referrals",
     tokens: ["XRAY_SUMMARY", "XRAY_SENT_DATE", "XRAY_COMPLETED_DATE", "XRAY_REVIEWED_DATE", "MRI_CT_SUMMARY", "MRI_SENT_DATE", "MRI_SCHEDULED_DATE", "MRI_COMPLETED_DATE", "MRI_REVIEWED_DATE", "SPECIALIST_SUMMARY"],
   },
+  {
+    label: "Treatment Summaries",
+    tokens: ["DECOMPRESSION_SUMMARY"],
+  },
 ];
 
 const encounterPickerSections = [
@@ -264,9 +268,10 @@ export function ReportTemplateSettingsPanel() {
   const [error, setError] = useState("");
 
   const [promptLabelDraft, setPromptLabelDraft] = useState("");
-  const [promptOptionsDraft, setPromptOptionsDraft] = useState("");
+  const [promptNewOptions, setPromptNewOptions] = useState<string[]>([]);
+  const [promptNewChoiceDraft, setPromptNewChoiceDraft] = useState("");
   const [promptRequiredDraft, setPromptRequiredDraft] = useState(false);
-  const [promptOptionsDrafts, setPromptOptionsDrafts] = useState<Record<string, string>>({});
+  const [promptChoiceDrafts, setPromptChoiceDrafts] = useState<Record<string, string>>({});
   const [encounterPickerNumber, setEncounterPickerNumber] = useState("1");
   const [encounterPickerSection, setEncounterPickerSection] = useState("SUBJECTIVE");
   const [encounterPickerType, setEncounterPickerType] = useState(() => {
@@ -323,14 +328,15 @@ export function ReportTemplateSettingsPanel() {
     if (!selectedTemplate) {
       return;
     }
-    const wasAdded = addPrompt(selectedTemplate.id, promptLabelDraft, promptOptionsDraft, promptRequiredDraft);
+    const wasAdded = addPrompt(selectedTemplate.id, promptLabelDraft, promptNewOptions, promptRequiredDraft);
     if (!wasAdded) {
       setError("Prompt label is required.");
       return;
     }
     setError("");
     setPromptLabelDraft("");
-    setPromptOptionsDraft("");
+    setPromptNewOptions([]);
+    setPromptNewChoiceDraft("");
     setPromptRequiredDraft(false);
   };
 
@@ -364,20 +370,6 @@ export function ReportTemplateSettingsPanel() {
   };
 
   const getPromptDraftKey = (templateId: string, promptId: string) => `${templateId}::${promptId}`;
-
-  const commitPromptOptionsDraft = (templateId: string, promptId: string) => {
-    const key = getPromptDraftKey(templateId, promptId);
-    const draft = promptOptionsDrafts[key];
-    if (draft === undefined) {
-      return;
-    }
-    updatePrompt(templateId, promptId, { optionsDraft: draft });
-    setPromptOptionsDrafts((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-  };
 
   if (!selectedTemplate) {
     return null;
@@ -817,12 +809,56 @@ export function ReportTemplateSettingsPanel() {
                 placeholder="Prompt label (e.g. Current symptoms)"
                 value={promptLabelDraft}
               />
-              <input
-                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
-                onChange={(event) => setPromptOptionsDraft(event.target.value)}
-                placeholder="Options comma-separated (optional)"
-                value={promptOptionsDraft}
-              />
+              <div className="space-y-1">
+                <div className="flex flex-wrap gap-1">
+                  {promptNewOptions.map((opt, i) => (
+                    <span
+                      key={`new-opt-${i}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-0.5 text-xs"
+                    >
+                      {opt}
+                      <button
+                        className="ml-0.5 text-[var(--text-muted)] hover:text-[#b43b34]"
+                        onClick={() => setPromptNewOptions((c) => c.filter((_, idx) => idx !== i))}
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2"
+                    onChange={(event) => setPromptNewChoiceDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const v = promptNewChoiceDraft.trim();
+                        if (v) {
+                          setPromptNewOptions((c) => [...c, v]);
+                          setPromptNewChoiceDraft("");
+                        }
+                      }
+                    }}
+                    placeholder="Add choice (optional)"
+                    value={promptNewChoiceDraft}
+                  />
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-xs font-semibold"
+                    onClick={() => {
+                      const v = promptNewChoiceDraft.trim();
+                      if (v) {
+                        setPromptNewOptions((c) => [...c, v]);
+                        setPromptNewChoiceDraft("");
+                      }
+                    }}
+                    type="button"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
               <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm font-semibold">
                 <input
                   checked={promptRequiredDraft}
@@ -846,34 +882,13 @@ export function ReportTemplateSettingsPanel() {
                   className="rounded-xl border border-[var(--line-soft)] bg-white p-2"
                   key={prompt.id}
                 >
-                  <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5"
+                      className="flex-1 min-w-[140px] rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5"
                       onChange={(event) =>
                         updatePrompt(selectedTemplate.id, prompt.id, { label: event.target.value })
                       }
                       value={prompt.label}
-                    />
-                    <input
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5"
-                      onBlur={() => commitPromptOptionsDraft(selectedTemplate.id, prompt.id)}
-                      onChange={(event) =>
-                        setPromptOptionsDrafts((current) => ({
-                          ...current,
-                          [getPromptDraftKey(selectedTemplate.id, prompt.id)]: event.target.value,
-                        }))
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitPromptOptionsDraft(selectedTemplate.id, prompt.id);
-                        }
-                      }}
-                      placeholder="options..."
-                      value={
-                        promptOptionsDrafts[getPromptDraftKey(selectedTemplate.id, prompt.id)] ??
-                        prompt.options.join(", ")
-                      }
                     />
                     <label className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-1.5 text-sm font-semibold">
                       <input
@@ -900,6 +915,72 @@ export function ReportTemplateSettingsPanel() {
                       Remove
                     </button>
                   </div>
+
+                  {/* Chip-based options */}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {prompt.options.map((opt, optIdx) => (
+                      <span
+                        key={`${prompt.id}-opt-${optIdx}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-0.5 text-xs"
+                      >
+                        {opt}
+                        <button
+                          className="ml-0.5 text-[var(--text-muted)] hover:text-[#b43b34]"
+                          onClick={() =>
+                            updatePrompt(selectedTemplate.id, prompt.id, {
+                              options: prompt.options.filter((_, i) => i !== optIdx),
+                            })
+                          }
+                          type="button"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1">
+                    <input
+                      className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs"
+                      onChange={(event) =>
+                        setPromptChoiceDrafts((c) => ({
+                          ...c,
+                          [getPromptDraftKey(selectedTemplate.id, prompt.id)]: event.target.value,
+                        }))
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          const key = getPromptDraftKey(selectedTemplate.id, prompt.id);
+                          const v = (promptChoiceDrafts[key] ?? "").trim();
+                          if (v) {
+                            updatePrompt(selectedTemplate.id, prompt.id, {
+                              options: [...prompt.options, v],
+                            });
+                            setPromptChoiceDrafts((c) => ({ ...c, [key]: "" }));
+                          }
+                        }
+                      }}
+                      placeholder="Add choice..."
+                      value={promptChoiceDrafts[getPromptDraftKey(selectedTemplate.id, prompt.id)] ?? ""}
+                    />
+                    <button
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                      onClick={() => {
+                        const key = getPromptDraftKey(selectedTemplate.id, prompt.id);
+                        const v = (promptChoiceDrafts[key] ?? "").trim();
+                        if (v) {
+                          updatePrompt(selectedTemplate.id, prompt.id, {
+                            options: [...prompt.options, v],
+                          });
+                          setPromptChoiceDrafts((c) => ({ ...c, [key]: "" }));
+                        }
+                      }}
+                      type="button"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
                   <p className="mt-1 text-xs text-[var(--text-muted)]">Token: {insertionTokenForField(prompt.token)}</p>
                 </div>
               ))}

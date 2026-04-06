@@ -6,7 +6,6 @@ import {
   getDefaultNarrativeReportLibrary,
   loadNarrativeReportLibrary,
   saveNarrativeReportLibrary,
-  toPromptOptions,
   type NarrativeReportLibrary,
   type NarrativeReportPrompt,
   type NarrativeReportTemplate,
@@ -108,12 +107,11 @@ export function useReportTemplates() {
   );
 
   const addPrompt = useCallback(
-    (templateId: string, labelDraft: string, optionDraft: string, required: boolean) => {
+    (templateId: string, labelDraft: string, options: string[], required: boolean) => {
       const label = labelDraft.trim();
       if (!label) {
         return false;
       }
-      const options = toPromptOptions(optionDraft);
       updateLibrary((current) => ({
         ...current,
         templates: current.templates.map((template) => {
@@ -153,9 +151,7 @@ export function useReportTemplates() {
     (
       templateId: string,
       promptId: string,
-      patch: Partial<Pick<NarrativeReportPrompt, "label" | "required">> & {
-        optionsDraft?: string;
-      },
+      patch: Partial<Pick<NarrativeReportPrompt, "label" | "required" | "options">>,
     ) => {
       updateLibrary((current) => ({
         ...current,
@@ -173,8 +169,7 @@ export function useReportTemplates() {
                 ...prompt,
                 label: patch.label === undefined ? prompt.label : patch.label,
                 required: patch.required === undefined ? prompt.required : patch.required,
-                options:
-                  patch.optionsDraft === undefined ? prompt.options : toPromptOptions(patch.optionsDraft),
+                options: patch.options === undefined ? prompt.options : patch.options,
               };
             }),
           };

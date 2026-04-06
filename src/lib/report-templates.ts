@@ -121,6 +121,7 @@ export const narrativeReportAutoFields: NarrativeReportAutoField[] = [
   { token: "MRI_COMPLETED_DATE", label: "MRI Completed Date" },
   { token: "MRI_REVIEWED_DATE", label: "MRI Reviewed Date" },
   { token: "SPECIALIST_SUMMARY", label: "Specialist Summary" },
+  { token: "DECOMPRESSION_SUMMARY", label: "Decompression Treatment Summary" },
   // ── Numbered specialist tokens (specialist #1 through #10) ──
   ...Array.from({ length: 10 }, (_, i) => {
     const n = i + 1;

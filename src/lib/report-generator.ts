@@ -247,6 +247,145 @@ function formatAmount(value: string) {
   return numeric.toFixed(2);
 }
 
+// ---------------------------------------------------------------------------
+// Decompression Treatment Summary builder
+// ---------------------------------------------------------------------------
+
+interface DecompressionGroup {
+  typeName: string;          // e.g. "cervical spinal decompression"
+  count: number;
+  segments: string[];        // deduplicated, ordered
+  weights: number[];         // chronological (first encounter → last)
+}
+
+function toSentenceCase(text: string) {
+  const lower = text.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/**
+ * Extracts unique segment values from all macro runs in a single encounter.
+ * Handles both single-string and string-array answer values for the
+ * `targeted_segment` key (case-insensitive key match).
+ */
+function extractSegments(encounter: EncounterNoteRecord): string[] {
+  const segments: string[] = [];
+  for (const run of encounter.macroRuns) {
+    for (const [key, value] of Object.entries(run.answers)) {
+      if (key.toLowerCase().replace(/[\s_-]+/g, "") !== "targetedsegment") continue;
+      if (typeof value === "string" && value.trim()) {
+        segments.push(value.trim());
+      } else if (Array.isArray(value)) {
+        for (const v of value) {
+          if (typeof v === "string" && v.trim()) segments.push(v.trim());
+        }
+      }
+    }
+  }
+  return segments;
+}
+
+/**
+ * Extracts the weight value from a single encounter's macro runs.
+ * Returns the numeric weight or null if not found.
+ */
+function extractWeight(encounter: EncounterNoteRecord): number | null {
+  for (const run of encounter.macroRuns) {
+    for (const [key, value] of Object.entries(run.answers)) {
+      if (key.toLowerCase().replace(/[\s_-]+/g, "") !== "weight") continue;
+      const str = typeof value === "string" ? value : Array.isArray(value) ? value[0] : null;
+      if (!str) continue;
+      const num = parseFloat(str);
+      if (Number.isFinite(num) && num > 0) return num;
+    }
+  }
+  return null;
+}
+
+function buildDecompressionSummary(
+  encountersAsc: EncounterNoteRecord[],
+  patientFullName: string,
+): string {
+  // Only closed encounters with "decompression" in appointment type
+  const decomp = encountersAsc.filter(
+    (e) => e.signed && /decompression/i.test(e.appointmentType),
+  );
+
+  if (!decomp.length) return "-";
+
+  // Group by appointment type (case-insensitive normalized key)
+  const groupMap = new Map<string, EncounterNoteRecord[]>();
+  for (const enc of decomp) {
+    const key = enc.appointmentType.trim().toLowerCase();
+    const list = groupMap.get(key) ?? [];
+    list.push(enc);
+    groupMap.set(key, list);
+  }
+
+  const groups: DecompressionGroup[] = [];
+  for (const [, encounters] of groupMap) {
+    // Use the first encounter's appointmentType for display (preserves original casing)
+    const typeName = encounters[0].appointmentType;
+
+    // Deduplicate segments across all encounters in this group
+    const allSegments: string[] = [];
+    for (const enc of encounters) {
+      allSegments.push(...extractSegments(enc));
+    }
+    const uniqueSegments = [...new Set(allSegments)];
+
+    // Collect weights chronologically (encounters are already sorted asc)
+    const weights: number[] = [];
+    for (const enc of encounters) {
+      const w = extractWeight(enc);
+      if (w !== null) weights.push(w);
+    }
+
+    groups.push({
+      typeName,
+      count: encounters.length,
+      segments: uniqueSegments,
+      weights,
+    });
+  }
+
+  // Build the patient's last name for "Mr./Mrs." — fall back to full name
+  const nameParts = patientFullName.trim().split(/\s+/);
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : patientFullName;
+
+  const sentences: string[] = [];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const prefix = i === 0
+      ? `${patientFullName} completed`
+      : `${patientFullName} also completed`;
+
+    const typeLabel = toSentenceCase(g.typeName);
+
+    // Segments clause
+    const segmentClause = g.segments.length
+      ? `, targeting the ${g.segments.join(", ")} segment${g.segments.length > 1 ? "s" : ""}`
+      : "";
+
+    // Weight clause
+    let weightClause = "";
+    if (g.weights.length > 0) {
+      const firstWeight = g.weights[0];
+      const lastWeight = g.weights[g.weights.length - 1];
+      if (firstWeight === lastWeight || g.weights.length === 1) {
+        weightClause = ` at ${firstWeight} pounds`;
+      } else {
+        weightClause = `. Treatment began with ${firstWeight} pounds and ended with ${lastWeight} pounds`;
+      }
+    }
+
+    const sentence = `${prefix} ${g.count} treatment${g.count !== 1 ? "s" : ""} of ${typeLabel}${segmentClause}${weightClause}.`;
+    sentences.push(sentence);
+  }
+
+  return sentences.join(" ");
+}
+
 export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
   const encountersAsc = [...input.encounters].sort(
     (left, right) => toSortStamp(left.encounterDate) - toSortStamp(right.encounterDate),
@@ -423,6 +562,9 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
       context[`${typeKey}_${n}_TYPE`] = enc.appointmentType;
     }
   }
+
+  // ── Decompression Treatment Summary ──
+  context.DECOMPRESSION_SUMMARY = buildDecompressionSummary(encountersAsc, input.patient.fullName);
 
   encounterSections.forEach((section) => {
     context[`FIRST_${section.toUpperCase()}`] =
