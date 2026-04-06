@@ -66,7 +66,6 @@ import { usePlanTier } from "@/lib/plan-context";
 type ImagingMode = "xray" | "mri";
 type ImagingPanelKey = "xray" | "mri" | "specialist";
 type SectionPanelKey =
-  | "findings"
   | "notes"
   | "reExam"
   | "relatedCases"
@@ -98,6 +97,7 @@ type ImagingFormState = {
   doneDate: string;
   reportReceivedDate: string;
   reportReviewedDate: string;
+  findings: string;
 };
 
 type ImagingReferral = ImagingFormState & {
@@ -226,6 +226,7 @@ function cloneImagingFormState(value: ImagingFormState): ImagingFormState {
     regions: [...value.regions],
     flexExtRegions: [...value.flexExtRegions],
     lateralityByRegion: { ...value.lateralityByRegion },
+    findings: value.findings ?? "",
   };
 }
 
@@ -241,6 +242,7 @@ function emptyImagingFormState(mode: ImagingMode): ImagingFormState {
     doneDate: "",
     reportReceivedDate: "",
     reportReviewedDate: "",
+    findings: "",
   };
 }
 
@@ -257,48 +259,8 @@ function formatImagingRegionsSummary(entry: ImagingReferral, mode: ImagingMode) 
     .join(", ");
 }
 
-function getUniqueImagingRegionLabels(referrals: ImagingReferral[], mode: ImagingMode) {
-  const labels: string[] = [];
-  const seen = new Set<string>();
 
-  referrals.forEach((entry) => {
-    entry.regions.forEach((region) => {
-      const baseLabel = formatRegionLabel(region, entry.lateralityByRegion);
-      const hasFlexExt = mode === "xray" && entry.flexExtRegions.includes(region);
-      const label = hasFlexExt ? `${baseLabel} (Flex/Ext)` : baseLabel;
-      const key = normalizeLookupValue(label);
-      if (!seen.has(key)) {
-        seen.add(key);
-        labels.push(label);
-      }
-    });
-  });
 
-  return labels;
-}
-
-function appendFindingDraftLine(currentValue: string, line: string) {
-  const trimmedLine = line.trim();
-  if (!trimmedLine) {
-    return currentValue;
-  }
-  const current = currentValue.trimEnd();
-  if (!current) {
-    return trimmedLine;
-  }
-  return `${current}\n${trimmedLine}`;
-}
-
-function formatFindingsForTemplate(rawValue: string, regionLabels: string[]) {
-  const trimmed = rawValue.trim();
-  if (trimmed) {
-    return trimmed;
-  }
-  if (!regionLabels.length) {
-    return "-";
-  }
-  return regionLabels.map((region) => `${region}: -`).join("\n");
-}
 
 function formatUsDateInput(rawValue: string) {
   const digits = rawValue.replace(/\D/g, "").slice(0, 8);
@@ -810,9 +772,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     doneDate: "",
     reportReceivedDate: toUsDate(patient.matrix?.xrayReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.xrayReviewed ?? ""),
+    findings: "",
   });
   const [xrayReferrals, setXrayReferrals] = useState<ImagingReferral[]>(() =>
-    Array.isArray(patient.xrayReferrals) ? (patient.xrayReferrals as ImagingReferral[]) : [],
+    Array.isArray(patient.xrayReferrals)
+      ? (patient.xrayReferrals as ImagingReferral[]).map((r) => ({ ...r, findings: r.findings ?? "" }))
+      : [],
   );
   const [xrayMessage, setXrayMessage] = useState("");
   const [editingXrayReferralId, setEditingXrayReferralId] = useState<string | null>(null);
@@ -828,9 +793,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     doneDate: "",
     reportReceivedDate: toUsDate(patient.matrix?.mriReceived ?? ""),
     reportReviewedDate: toUsDate(patient.matrix?.mriReviewed ?? ""),
+    findings: "",
   });
   const [mriReferrals, setMriReferrals] = useState<ImagingReferral[]>(() =>
-    Array.isArray(patient.mriReferrals) ? (patient.mriReferrals as ImagingReferral[]) : [],
+    Array.isArray(patient.mriReferrals)
+      ? (patient.mriReferrals as ImagingReferral[]).map((r) => ({ ...r, findings: r.findings ?? "" }))
+      : [],
   );
   const [mriMessage, setMriMessage] = useState("");
   const [editingMriReferralId, setEditingMriReferralId] = useState<string | null>(null);
@@ -860,7 +828,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     specialist: false,
   });
   const [sectionPanelsOpen, setSectionPanelsOpen] = useState<Record<SectionPanelKey, boolean>>({
-    findings: false,
     notes: false,
     reExam: false,
     relatedCases: false,
@@ -1094,39 +1061,48 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     [patientFolderId],
   );
 
-  const appendFindingRegionLabel = (type: "xray" | "mriCt", label: string) => {
-    if (type === "xray") {
-      setXrayFindings((current) => appendFindingDraftLine(current, `${label}: `));
-      return;
-    }
-    setMriCtFindings((current) => appendFindingDraftLine(current, `${label}: `));
-  };
   const availableImagingRegions = useMemo(() => {
     if (!activeRegionModal) {
       return [];
     }
     return imagingRegions.filter((entry) => entry.modalities.includes(activeRegionModal));
   }, [activeRegionModal]);
-  const xrayFindingRegionLabels = useMemo(
-    () => getUniqueImagingRegionLabels(xrayReferrals, "xray"),
-    [xrayReferrals],
-  );
-  const mriFindingRegionLabels = useMemo(
-    () => getUniqueImagingRegionLabels(mriReferrals, "mri"),
-    [mriReferrals],
-  );
-  const xrayFindingsForTemplates = useMemo(
-    () => formatFindingsForTemplate(xrayFindings, xrayFindingRegionLabels),
-    [xrayFindings, xrayFindingRegionLabels],
-  );
-  const mriCtFindingsForTemplates = useMemo(
-    () => formatFindingsForTemplate(mriCtFindings, mriFindingRegionLabels),
-    [mriCtFindings, mriFindingRegionLabels],
-  );
+  const xrayFindingsForTemplates = useMemo(() => {
+    const perReferral = xrayReferrals
+      .filter((r) => r.findings?.trim())
+      .map((r) => {
+        const regionLabel = formatImagingRegionsSummary(r, "xray");
+        return `${r.modalityLabel} (${r.sentDate}) — ${regionLabel}\n${r.findings!.trim()}`;
+      })
+      .join("\n\n");
+    if (perReferral) return perReferral;
+    // Fallback to old global field if it has content
+    const legacy = xrayFindings.trim();
+    if (legacy) return legacy;
+    return "-";
+  }, [xrayReferrals, xrayFindings]);
+  const mriCtFindingsForTemplates = useMemo(() => {
+    const perReferral = mriReferrals
+      .filter((r) => r.findings?.trim())
+      .map((r) => {
+        const regionLabel = formatImagingRegionsSummary(r, "mri");
+        return `${r.modalityLabel} (${r.sentDate}) — ${regionLabel}\n${r.findings!.trim()}`;
+      })
+      .join("\n\n");
+    if (perReferral) return perReferral;
+    const legacy = mriCtFindings.trim();
+    if (legacy) return legacy;
+    return "-";
+  }, [mriReferrals, mriCtFindings]);
   const specialistRecommendationsForTemplates = useMemo(() => {
-    const trimmed = specialistRecommendations.trim();
-    return trimmed || "-";
-  }, [specialistRecommendations]);
+    const perSpec = specialistReferrals
+      .filter((s) => s.recommendations?.trim())
+      .map((s) => `${s.specialist}: ${s.recommendations!.trim()}`)
+      .join("\n\n");
+    if (perSpec) return perSpec;
+    const legacy = specialistRecommendations.trim();
+    return legacy || "-";
+  }, [specialistReferrals, specialistRecommendations]);
 
   const statusConfig = caseStatuses.find(
     (statusConfigEntry) => statusConfigEntry.name.toLowerCase() === caseStatus.toLowerCase(),
@@ -2040,6 +2016,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         doneDate: entry.doneDate,
         reportReceivedDate: entry.reportReceivedDate,
         reportReviewedDate: entry.reportReviewedDate,
+        findings: entry.findings,
       })),
       mriReferrals: mriReferrals.map((entry) => ({
         modalityLabel: entry.modalityLabel,
@@ -2052,6 +2029,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         doneDate: entry.doneDate,
         reportReceivedDate: entry.reportReceivedDate,
         reportReviewedDate: entry.reportReviewedDate,
+        findings: entry.findings,
       })),
       specialistReferrals: specialistReferrals.map((entry) => ({
         specialist: entry.specialist,
@@ -2900,6 +2878,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </div>
                 </div>
 
+                {/* Findings */}
+                <label className="grid gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Findings</span>
+                  <textarea
+                    className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                    onChange={(event) =>
+                      setXray((current) => ({
+                        ...current,
+                        findings: event.target.value,
+                      }))
+                    }
+                    placeholder="Enter X-Ray findings (e.g. Cervical: Loss of lordosis...)"
+                    value={xray.findings}
+                  />
+                </label>
+
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
@@ -2970,6 +2964,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <p>Done: {entry.doneDate || "-"}</p>
                   <p>Report Received: {entry.reportReceivedDate || "-"}</p>
                   <p>Report Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  {entry.findings?.trim() && (
+                    <p className="mt-1 whitespace-pre-wrap text-[var(--text-muted)]">
+                      <span className="font-semibold text-[var(--text-strong)]">Findings:</span> {entry.findings.trim()}
+                    </p>
+                  )}
                   <div className="mt-2 flex gap-2">
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
@@ -3142,6 +3141,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </div>
                 </div>
 
+                {/* Findings */}
+                <label className="grid gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Findings</span>
+                  <textarea
+                    className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                    onChange={(event) =>
+                      setMri((current) => ({
+                        ...current,
+                        findings: event.target.value,
+                      }))
+                    }
+                    placeholder="Enter MRI/CT findings (e.g. Lumbar: L4-L5 disc bulge...)"
+                    value={mri.findings}
+                  />
+                </label>
+
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
@@ -3213,6 +3228,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <p>Completed: {entry.doneDate || "-"}</p>
                   <p>Received: {entry.reportReceivedDate || "-"}</p>
                   <p>Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  {entry.findings?.trim() && (
+                    <p className="mt-1 whitespace-pre-wrap text-[var(--text-muted)]">
+                      <span className="font-semibold text-[var(--text-strong)]">Findings:</span> {entry.findings.trim()}
+                    </p>
+                  )}
                   <div className="mt-2 flex gap-2">
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
@@ -3367,96 +3387,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </div>
           </article>
         </div>
-      </section>
-
-      <section className="panel-card p-4">
-        <button
-          className="flex w-full items-center justify-between rounded-xl bg-[#72bdcf] px-3 py-2 text-center text-lg font-semibold text-white"
-          onClick={() => toggleSectionPanel("findings")}
-          type="button"
-        >
-          <span>Findings / Recommendations</span>
-          <span className="text-xl">{sectionPanelsOpen.findings ? "−" : "+"}</span>
-        </button>
-        {sectionPanelsOpen.findings && (
-          <div className="mt-3 grid gap-3 xl:grid-cols-3">
-            <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3">
-              <h3 className="text-base font-semibold text-[var(--text-strong)]">X-Ray Findings</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Insert field:{" "}
-                <code className="rounded bg-white px-1 py-0.5 text-[11px] font-semibold text-[var(--text-strong)]">
-                  {`{{XRAY_FINDINGS}}`}
-                </code>
-              </p>
-              {xrayFindingRegionLabels.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {xrayFindingRegionLabels.map((regionLabel) => (
-                    <button
-                      key={`xray-finding-region-${regionLabel}`}
-                      className="rounded-full border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                      onClick={() => appendFindingRegionLabel("xray", regionLabel)}
-                      type="button"
-                    >
-                      + {regionLabel}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <textarea
-                className="mt-2 min-h-[150px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                onChange={(event) => setXrayFindings(event.target.value)}
-                placeholder="Enter X-Ray findings (for example: Cervical: Loss of lordosis...)"
-                value={xrayFindings}
-              />
-            </article>
-
-            <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3">
-              <h3 className="text-base font-semibold text-[var(--text-strong)]">MRI / CT Findings</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Insert field:{" "}
-                <code className="rounded bg-white px-1 py-0.5 text-[11px] font-semibold text-[var(--text-strong)]">
-                  {`{{MRI_CT_FINDINGS}}`}
-                </code>
-              </p>
-              {mriFindingRegionLabels.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {mriFindingRegionLabels.map((regionLabel) => (
-                    <button
-                      key={`mri-finding-region-${regionLabel}`}
-                      className="rounded-full border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                      onClick={() => appendFindingRegionLabel("mriCt", regionLabel)}
-                      type="button"
-                    >
-                      + {regionLabel}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <textarea
-                className="mt-2 min-h-[150px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                onChange={(event) => setMriCtFindings(event.target.value)}
-                placeholder="Enter MRI/CT findings (for example: Lumbar: L4-L5 disc bulge...)"
-                value={mriCtFindings}
-              />
-            </article>
-
-            <article className="rounded-2xl border border-[#bfd2e0] bg-gradient-to-b from-[#d8e7f2] to-[#cfe0ec] p-3">
-              <h3 className="text-base font-semibold text-[var(--text-strong)]">Specialist Recommendations</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Insert field:{" "}
-                <code className="rounded bg-white px-1 py-0.5 text-[11px] font-semibold text-[var(--text-strong)]">
-                  {`{{SPECIALIST_RECOMMENDATIONS}}`}
-                </code>
-              </p>
-              <textarea
-                className="mt-2 min-h-[150px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                onChange={(event) => setSpecialistRecommendations(event.target.value)}
-                placeholder="Paste specialist recommendations here..."
-                value={specialistRecommendations}
-              />
-            </article>
-          </div>
-        )}
       </section>
 
       <section className="panel-card p-4">

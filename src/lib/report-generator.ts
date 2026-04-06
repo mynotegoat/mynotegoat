@@ -62,6 +62,7 @@ type NarrativeImagingEntry = {
   doneDate: string;
   reportReceivedDate: string;
   reportReviewedDate: string;
+  findings?: string;
 };
 
 type NarrativeSpecialistEntry = {
@@ -210,7 +211,9 @@ function formatImagingSummary(entries: NarrativeImagingEntry[], fallbackLabel: s
   return entries
     .map((entry, index) => {
       const modality = entry.modalityLabel || fallbackLabel;
-      return `${index + 1}. ${modality} | Completed: ${entry.doneDate || "-"} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)}`;
+      const line = `${index + 1}. ${modality} | Completed: ${entry.doneDate || "-"} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)}`;
+      const findings = entry.findings?.trim();
+      return findings ? `${line}\n   Findings: ${findings}` : line;
     })
     .join("\n");
 }
