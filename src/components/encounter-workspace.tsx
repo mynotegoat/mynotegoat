@@ -1298,6 +1298,18 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   <div>
                     <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Current Encounter</p>
                     <h3 className="text-xl font-semibold">{selectedEncounter.patientName}</h3>
+                    {selectedPatient?.alerts && selectedPatient.alerts.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {selectedPatient.alerts.map((alert, i) => (
+                          <span
+                            key={`enc-alert-${i}`}
+                            className="inline-flex items-center rounded-md border border-[#e8b931] bg-[#fef9e7] px-2 py-0.5 text-xs font-bold text-[#92400e]"
+                          >
+                            ⚠ {alert}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-sm text-[var(--text-muted)]">
                       {selectedEncounter.encounterDate}
                     </p>

@@ -726,6 +726,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
   const [firstName, setFirstName] = useState(names.firstName);
   const [lastName, setLastName] = useState(names.lastName);
+  const [patientAlerts, setPatientAlerts] = useState<string[]>(patient.alerts ?? []);
+  const [alertDraft, setAlertDraft] = useState("");
   const [attorney, setAttorney] = useState(patient.attorney);
   const [showAddAttorneyPrompt, setShowAddAttorneyPrompt] = useState(false);
   const [showAddAttorneyForm, setShowAddAttorneyForm] = useState(false);
@@ -2413,6 +2415,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       xrayReferrals,
       mriReferrals,
       specialistReferrals,
+      alerts: patientAlerts.length > 0 ? patientAlerts : undefined,
       matrix: {
         initialExam: toIsoDateFromUsDate(initialExam),
         lien: resolvedLienStatus,
@@ -2598,6 +2601,55 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           >
             {caseStatus}
           </span>
+        </div>
+
+        {/* Patient Alerts */}
+        {patientAlerts.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {patientAlerts.map((alert, index) => (
+              <span
+                key={`alert-${index}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e8b931] bg-[#fef9e7] px-3 py-1.5 text-sm font-bold text-[#92400e] shadow-sm"
+              >
+                ⚠ {alert}
+                <button
+                  className="ml-1 rounded-full text-[#92400e]/60 transition hover:text-[#b43b34]"
+                  onClick={() => setPatientAlerts((current) => current.filter((_, i) => i !== index))}
+                  title="Remove alert"
+                  type="button"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm"
+            onChange={(event) => setAlertDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && alertDraft.trim()) {
+                event.preventDefault();
+                setPatientAlerts((current) => [...current, alertDraft.trim().toUpperCase()]);
+                setAlertDraft("");
+              }
+            }}
+            placeholder="Add patient alert (e.g. PREGNANT, HX OF CANCER, BROKEN RIB...)"
+            value={alertDraft}
+          />
+          <button
+            className="rounded-lg border border-[#e8b931] bg-[#fef9e7] px-3 py-1.5 text-sm font-bold text-[#92400e] transition hover:bg-[#fdf2c5]"
+            onClick={() => {
+              if (alertDraft.trim()) {
+                setPatientAlerts((current) => [...current, alertDraft.trim().toUpperCase()]);
+                setAlertDraft("");
+              }
+            }}
+            type="button"
+          >
+            + Alert
+          </button>
         </div>
       </section>
 

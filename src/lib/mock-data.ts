@@ -62,6 +62,7 @@ export interface PatientRecord {
   xrayReferrals?: unknown[];
   mriReferrals?: unknown[];
   specialistReferrals?: unknown[];
+  alerts?: string[];
 }
 
 export interface AppointmentRecord {
@@ -478,7 +479,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
 export type UpdatePatientRecordPatch = Partial<
   Pick<
     PatientRecord,
-    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "relatedCases" | "xrayReferrals" | "mriReferrals" | "specialistReferrals"
+    "fullName" | "dob" | "sex" | "maritalStatus" | "phone" | "email" | "address" | "attorney" | "caseStatus" | "dateOfLoss" | "lastUpdate" | "priority" | "relatedCases" | "xrayReferrals" | "mriReferrals" | "specialistReferrals" | "alerts"
   > & {
     matrix: Partial<Record<PatientMatrixField, string>>;
   }
