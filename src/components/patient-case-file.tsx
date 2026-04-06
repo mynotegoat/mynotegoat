@@ -1951,6 +1951,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         xrayFindings: xrayFindingsForTemplates,
         mriCtFindings: mriCtFindingsForTemplates,
         specialistRecommendations: specialistRecommendationsForTemplates,
+        mrMrsMsLastName: (() => {
+          const sex = patientSex.toLowerCase();
+          const marital = maritalStatus.toLowerCase();
+          let prefix = "Mx.";
+          if (sex === "male") prefix = "Mr.";
+          else if (sex === "female") prefix = marital === "married" ? "Mrs." : "Ms.";
+          return lastName ? `${prefix} ${lastName}` : prefix;
+        })(),
       },
       additional: {
         dischargeDate,

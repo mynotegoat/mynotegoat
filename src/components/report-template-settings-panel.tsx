@@ -25,7 +25,7 @@ const autoFieldCategories: FieldCategory[] = [
   },
   {
     label: "Patient",
-    tokens: ["PATIENT_FULL_NAME", "PATIENT_FIRST_NAME", "PATIENT_LAST_NAME", "PATIENT_DOB", "PATIENT_PHONE", "PATIENT_EMAIL"],
+    tokens: ["PATIENT_FULL_NAME", "PATIENT_FIRST_NAME", "PATIENT_LAST_NAME", "MR_MRS_MS_LAST_NAME", "PATIENT_DOB", "PATIENT_PHONE", "PATIENT_EMAIL"],
   },
   {
     label: "Case Info",
@@ -99,6 +99,7 @@ const examplePreviewContext: Record<string, string> = {
   PATIENT_DOB: "05/15/1988",
   PATIENT_PHONE: "(818) 555-9876",
   PATIENT_EMAIL: "maria.garcia@email.com",
+  MR_MRS_MS_LAST_NAME: "Ms. Garcia",
   DATE_OF_INJURY: "01/12/2026",
   INITIAL_EXAM: "01/19/2026",
   CASE_NUMBER: "2026-PI-0042",
