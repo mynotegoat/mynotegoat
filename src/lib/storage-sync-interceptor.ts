@@ -87,7 +87,7 @@ function scheduleSyncNow() {
   }
   debounceTimer = setTimeout(() => {
     void doSync();
-  }, 1_500);
+  }, 300);
 }
 
 export function installStorageSyncInterceptor() {

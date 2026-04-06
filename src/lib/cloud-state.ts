@@ -314,8 +314,25 @@ export async function prepareCloudStateBeforeMount() {
       );
 
     if (remoteHasData) {
+      // ── TIMESTAMP COMPARISON: never overwrite newer local data with older remote ──
+      const lastLocalPushIso = window.localStorage.getItem(getSyncAtKey(authed.workspaceId));
+      const lastLocalPushMs = parseTimestamp(lastLocalPushIso);
+      const remoteUpdatedMs = parseTimestamp(remote!.updated_at ?? null);
+
+      // If we have local data AND our last push is same or newer than remote, keep local.
+      // This means local already has the latest — no need to overwrite.
+      if (localHasData && !Number.isNaN(lastLocalPushMs) && !Number.isNaN(remoteUpdatedMs)) {
+        if (lastLocalPushMs >= remoteUpdatedMs) {
+          console.info("[Cloud Sync] Local data is same age or newer than remote — keeping local.");
+          return;
+        }
+      }
+
+      // If local has NO sync timestamp (fresh browser / cleared cache), always accept remote.
+      // If remote is genuinely newer, accept it but always backup first.
       if (localHasData) {
         backupLocalWorkspaceData();
+        console.info("[Cloud Sync] Remote data is newer — pulling from cloud (local backed up).");
       }
       writeLocalSnapshot(remote!.snapshot as Record<string, unknown>);
       if (remote!.updated_at) {

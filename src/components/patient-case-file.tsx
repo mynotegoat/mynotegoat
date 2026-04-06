@@ -31,6 +31,7 @@ import {
 } from "@/lib/schedule-appointments";
 import { loadAppointmentTypes } from "@/lib/schedule-appointment-types";
 import { loadScheduleRooms } from "@/lib/schedule-rooms";
+import { forceSyncNow } from "@/lib/storage-sync-interceptor";
 import { type TaskPriority } from "@/lib/tasks";
 import {
   patients as allPatients,
@@ -2354,11 +2355,21 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       },
     });
 
-    setSaveMessage(savedPatient ? "Updated." : "Could not save patient record.");
+    if (savedPatient) {
+      setSaveMessage("Updated — syncing to cloud...");
+      void forceSyncNow().then(() => setSaveMessage("Saved & synced to cloud.")).catch(() => setSaveMessage("Saved locally — cloud sync failed, will retry."));
+    } else {
+      setSaveMessage("Could not save patient record.");
+    }
   };
 
-  const saveAndClosePatientFile = () => {
+  const saveAndClosePatientFile = async () => {
     savePatientFile();
+    try {
+      await forceSyncNow();
+    } catch {
+      // best-effort — local is saved regardless
+    }
     router.push("/patients");
   };
 
