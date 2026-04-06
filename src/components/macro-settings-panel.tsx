@@ -92,7 +92,6 @@ export function MacroSettingsPanel() {
   const [questionLabelDraft, setQuestionLabelDraft] = useState("");
   const [questionOptionsDraft, setQuestionOptionsDraft] = useState("");
   const [questionMultiSelectDraft, setQuestionMultiSelectDraft] = useState(false);
-  const [questionContactSourceDraft, setQuestionContactSourceDraft] = useState(false);
   const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
   const [newChoiceDrafts, setNewChoiceDrafts] = useState<Record<string, string>>({});
 
@@ -252,13 +251,11 @@ export function MacroSettingsPanel() {
       label,
       options,
       multiSelect: questionMultiSelectDraft,
-      contactSource: questionContactSourceDraft ? "specialist" : undefined,
     });
     appendToBody(insertQuestionToken(id));
     setQuestionLabelDraft("");
     setQuestionOptionsDraft("");
     setQuestionMultiSelectDraft(false);
-    setQuestionContactSourceDraft(false);
   };
 
   const openRunModal = () => {
@@ -633,14 +630,6 @@ export function MacroSettingsPanel() {
                     />
                     Multi-select
                   </label>
-                  <label className="inline-flex items-center gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold text-[#0d79bf]">
-                    <input
-                      checked={questionContactSourceDraft}
-                      onChange={(event) => setQuestionContactSourceDraft(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Specialist Picker
-                  </label>
                   <button
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
                     onClick={handleAddQuestion}
@@ -714,19 +703,6 @@ export function MacroSettingsPanel() {
                             type="checkbox"
                           />
                           Multi
-                        </label>
-                        <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0d79bf]">
-                          <input
-                            checked={question.contactSource === "specialist"}
-                            onChange={(event) =>
-                              updateQuestion(selectedMacro.id, question.id, (current) => ({
-                                ...current,
-                                contactSource: event.target.checked ? "specialist" as const : undefined,
-                              }))
-                            }
-                            type="checkbox"
-                          />
-                          Specialists
                         </label>
                         <button
                           className="rounded-lg border border-[var(--line-soft)] px-2 py-0.5 text-xs"

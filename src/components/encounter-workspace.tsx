@@ -771,7 +771,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     return sectionMacroRuns.find((entry) => entry.id === editingMacroRunId) ?? null;
   }, [editingMacroRunId, sectionMacroRuns]);
 
-  const buildMacroContext = (patientId: string) => {
+  const buildMacroContext = (patientId: string): Record<string, string> => {
     const patient = patients.find((entry) => entry.id === patientId);
     const names = getNames(patient?.fullName ?? "");
     const pronouns = getPronouns(patient?.sex);
@@ -805,6 +805,11 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       return;
     }
     const context = buildMacroContext(selectedEncounter.patientId);
+    // Inject specialist picker selection into context if present
+    const specialistAnswer = answers.__specialist_referred__;
+    if (typeof specialistAnswer === "string" && specialistAnswer.trim()) {
+      context.SPECIALIST_REFERRED = specialistAnswer.trim();
+    }
     const generatedText = renderMacroTemplate(macro.body, answers, context);
     if (!generatedText.trim()) {
       setMessage("Generated macro output was empty.");
@@ -848,7 +853,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       setMessage("Select an encounter first.");
       return;
     }
-    if (!macro.questions.length) {
+    const needsSpecialistPicker = /\{\{\s*SPECIALIST_REFERRED\s*\}\}/.test(macro.body);
+    if (!macro.questions.length && !needsSpecialistPicker) {
       applyMacroTemplate(macro, {});
       return;
     }
@@ -858,11 +864,11 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         initialAnswers[question.id] = [];
         return;
       }
-      const firstOption = question.contactSource === "specialist" && specialistContactNames.length > 0
-        ? specialistContactNames[0]
-        : question.options[0] ?? "";
-      initialAnswers[question.id] = firstOption;
+      initialAnswers[question.id] = question.options[0] ?? "";
     });
+    if (needsSpecialistPicker) {
+      initialAnswers.__specialist_referred__ = specialistContactNames[0] ?? "";
+    }
     setEditingMacroRunId(null);
     setRunMacroAnswers(initialAnswers);
     setRunMacroId(macro.id);
@@ -900,6 +906,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       }
       initialAnswers[question.id] = savedValue ?? question.options[0] ?? "";
     });
+    if (/\{\{\s*SPECIALIST_REFERRED\s*\}\}/.test(macro.body)) {
+      const saved = run.answers.__specialist_referred__;
+      initialAnswers.__specialist_referred__ = (typeof saved === "string" ? saved : "") || specialistContactNames[0] || "";
+    }
     setEditingMacroRunId(run.id);
     setRunMacroAnswers(initialAnswers);
     setRunMacroId(macro.id);
@@ -1777,18 +1787,80 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
             </div>
 
             <div className="space-y-3">
+              {/* Specialist Picker — shown when template uses {{SPECIALIST_REFERRED}} */}
+              {runMacroAnswers.__specialist_referred__ !== undefined && (
+                <div className="rounded-xl border-2 border-[#0d79bf] bg-[#e9f4fb] p-3">
+                  <p className="text-sm font-semibold">
+                    Referring Specialist
+                    <span className="ml-2 rounded-full bg-[#0d79bf] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                      From Contacts
+                    </span>
+                  </p>
+                  <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: specialistContactNames.length > 5 ? `repeat(${Math.ceil(specialistContactNames.length / 5)}, 1fr)` : "1fr" }}>
+                    {specialistContactNames.map((name) => (
+                      <label
+                        key={`spec-pick-${name}`}
+                        className="inline-flex w-full items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      >
+                        <input
+                          checked={runMacroAnswers.__specialist_referred__ === name}
+                          onChange={() =>
+                            setRunMacroAnswers((current) => ({
+                              ...current,
+                              __specialist_referred__: name,
+                            }))
+                          }
+                          type="radio"
+                        />
+                        {name}
+                      </label>
+                    ))}
+                  </div>
+                  {/* Free text fallback */}
+                  <div className="mt-2">
+                    <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm">
+                      <input
+                        checked={typeof runMacroAnswers.__specialist_referred__ === "string" && runMacroAnswers.__specialist_referred__ !== "" && !specialistContactNames.includes(runMacroAnswers.__specialist_referred__ as string)}
+                        onChange={() =>
+                          setRunMacroAnswers((current) => ({
+                            ...current,
+                            __specialist_referred__: "",
+                          }))
+                        }
+                        type="radio"
+                      />
+                      <input
+                        className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                        onChange={(event) =>
+                          setRunMacroAnswers((current) => ({
+                            ...current,
+                            __specialist_referred__: event.target.value,
+                          }))
+                        }
+                        onClick={() => {
+                          const val = runMacroAnswers.__specialist_referred__;
+                          if (typeof val === "string" && specialistContactNames.includes(val)) {
+                            setRunMacroAnswers((current) => ({
+                              ...current,
+                              __specialist_referred__: "",
+                            }));
+                          }
+                        }}
+                        placeholder="Other (type specialist name)"
+                        value={
+                          typeof runMacroAnswers.__specialist_referred__ === "string" && !specialistContactNames.includes(runMacroAnswers.__specialist_referred__)
+                            ? runMacroAnswers.__specialist_referred__
+                            : ""
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {runMacro.questions.map((question) => (
                 (() => {
-                  // Merge specialist contact names when contactSource is set
-                  const baseOptions = question.contactSource === "specialist"
-                    ? (() => {
-                        const manual = question.options.map((o) => o.trim()).filter(Boolean);
-                        const manualLower = new Set(manual.map((o) => o.toLowerCase()));
-                        const fromContacts = specialistContactNames.filter((n) => !manualLower.has(n.toLowerCase()));
-                        return [...fromContacts, ...manual];
-                      })()
-                    : question.options;
-                  const normalizedOptions = baseOptions
+                  const normalizedOptions = question.options
                     .map((option) => option.trim())
                     .filter((option): option is string => Boolean(option));
                   const answerValue = runMacroAnswers[question.id];
@@ -1880,14 +1952,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
                   return (
                     <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
-                      <p className="text-sm font-semibold">
-                        {question.label}
-                        {question.contactSource === "specialist" && (
-                          <span className="ml-2 rounded-full bg-[#0d79bf] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                            From Contacts
-                          </span>
-                        )}
-                      </p>
+                      <p className="text-sm font-semibold">{question.label}</p>
                       {question.options.length > 0 ? (
                         <>
                           {usePainScaleColumns ? (
