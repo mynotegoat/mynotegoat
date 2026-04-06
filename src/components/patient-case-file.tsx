@@ -802,6 +802,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   );
   const [mriMessage, setMriMessage] = useState("");
   const [editingMriReferralId, setEditingMriReferralId] = useState<string | null>(null);
+  const [editingImagingReferral, setEditingImagingReferral] = useState<(ImagingReferral & { mode: ImagingMode }) | null>(null);
+  const [imagingEditorAnchor, setImagingEditorAnchor] = useState<PopupAnchor | null>(null);
 
   const [specialistDraft, setSpecialistDraft] = useState({
     specialist: "",
@@ -1679,7 +1681,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       matrix: matrixFields,
     } as UpdatePatientRecordPatch);
 
-    setMessage(editingId ? `${label} sent entry updated.` : `${label} sent entry added.`);
+    setMessage(editingId ? `${label} sent entry updated.` : `${label} sent entry added. Use Edit to update dates & findings.`);
     setEditingId(null);
     clearImagingDraft(mode);
   };
@@ -1705,6 +1707,45 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     clearImagingDraft(mode);
     setEditingId(null);
     setMessage("");
+  };
+
+  const openImagingEditor = (mode: ImagingMode, entry: ImagingReferral, event?: MouseEvent<HTMLElement>) => {
+    setEditingImagingReferral({ ...entry, mode });
+    setImagingEditorAnchor(event ? getPopupAnchorFromEvent(event) : null);
+  };
+
+  const saveImagingEditor = () => {
+    if (!editingImagingReferral) return;
+    const { mode, ...referral } = editingImagingReferral;
+    const setReferrals = mode === "xray" ? setXrayReferrals : setMriReferrals;
+    const setMessage = mode === "xray" ? setXrayMessage : setMriMessage;
+
+    setReferrals((current) =>
+      current.map((entry) => (entry.id === referral.id ? referral : entry)),
+    );
+
+    // Persist immediately
+    const currentReferrals = mode === "xray" ? xrayReferrals : mriReferrals;
+    const nextReferrals = currentReferrals.map((entry) => (entry.id === referral.id ? referral : entry));
+    const referralKey = mode === "xray" ? "xrayReferrals" : "mriReferrals";
+    const sentDateIso = toIsoDateFromUsDate(referral.sentDate);
+    const scheduledDateIso = toIsoDateFromUsDate(referral.scheduledDate ?? "");
+    const doneDateIso = toIsoDateFromUsDate(referral.doneDate ?? "");
+    const receivedDateIso = toIsoDateFromUsDate(referral.reportReceivedDate ?? "");
+    const reviewedDateIso = toIsoDateFromUsDate(referral.reportReviewedDate ?? "");
+    const matrixFields =
+      mode === "xray"
+        ? { xraySent: sentDateIso, xrayDone: doneDateIso, xrayReceived: receivedDateIso, xrayReviewed: reviewedDateIso }
+        : { mriSent: sentDateIso, mriScheduled: scheduledDateIso, mriDone: doneDateIso, mriReceived: receivedDateIso, mriReviewed: reviewedDateIso };
+    updatePatientRecordById(patient.id, {
+      lastUpdate: new Date().toISOString().slice(0, 10),
+      [referralKey]: nextReferrals,
+      matrix: matrixFields,
+    } as UpdatePatientRecordPatch);
+
+    setMessage(`${referral.modalityLabel} entry updated.`);
+    setEditingImagingReferral(null);
+    setImagingEditorAnchor(null);
   };
 
   const removeImagingReferral = (mode: ImagingMode, referralId: string) => {
@@ -2827,73 +2868,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </div>
                 </div>
 
-                {/* Row 3: Completed + Report Received + Report Reviewed */}
-                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-3">
-                  <div className="grid grid-cols-3 gap-3">
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          setXray((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))
-                        }
-                        placeholder="MM/DD/YYYY"
-                        value={xray.doneDate}
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          setXray((current) => ({
-                            ...current,
-                            reportReceivedDate: formatUsDateInput(event.target.value),
-                          }))
-                        }
-                        placeholder="MM/DD/YYYY"
-                        value={xray.reportReceivedDate}
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          setXray((current) => ({
-                            ...current,
-                            reportReviewedDate: formatUsDateInput(event.target.value),
-                          }))
-                        }
-                        placeholder="MM/DD/YYYY"
-                        value={xray.reportReviewedDate}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Findings */}
-                <label className="grid gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Findings</span>
-                  <textarea
-                    className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                    onChange={(event) =>
-                      setXray((current) => ({
-                        ...current,
-                        findings: event.target.value,
-                      }))
-                    }
-                    placeholder="Enter X-Ray findings (e.g. Cervical: Loss of lordosis...)"
-                    value={xray.findings}
-                  />
-                </label>
-
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
@@ -2957,13 +2931,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               {xrayReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
                   <p className="font-semibold">
-                    {entry.modalityLabel} Sent: {entry.sentDate}
+                    {entry.modalityLabel} — {entry.center || "No Center"}
                   </p>
-                  <p>Center: {entry.center}</p>
                   <p>Regions: {formatImagingRegionsSummary(entry, "xray")}</p>
-                  <p>Done: {entry.doneDate || "-"}</p>
-                  <p>Report Received: {entry.reportReceivedDate || "-"}</p>
-                  <p>Report Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  <p>Sent: {entry.sentDate || "-"} | Completed: {entry.doneDate || "-"}</p>
                   {entry.findings?.trim() && (
                     <p className="mt-1 whitespace-pre-wrap text-[var(--text-muted)]">
                       <span className="font-semibold text-[var(--text-strong)]">Findings:</span> {entry.findings.trim()}
@@ -2979,7 +2950,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
-                      onClick={() => editImagingReferral("xray", entry.id)}
+                      onClick={(event) => openImagingEditor("xray", entry, event)}
                       type="button"
                     >
                       Edit
@@ -3081,82 +3052,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </div>
                 </div>
 
-                {/* Row 3: Scheduled + Completed + Received + Reviewed */}
-                <div className="rounded-lg border border-[var(--line-soft)] bg-white/60 p-3">
-                  <div className="grid grid-cols-4 gap-3">
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Scheduled</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) => setMri((current) => ({ ...current, scheduledDate: formatUsDateInput(event.target.value) }))}
-                        placeholder="MM/DD/YYYY"
-                        value={mri.scheduledDate}
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Completed</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) => setMri((current) => ({ ...current, doneDate: formatUsDateInput(event.target.value) }))}
-                        placeholder="MM/DD/YYYY"
-                        value={mri.doneDate}
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Received</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          setMri((current) => ({
-                            ...current,
-                            reportReceivedDate: formatUsDateInput(event.target.value),
-                          }))
-                        }
-                        placeholder="MM/DD/YYYY"
-                        value={mri.reportReceivedDate}
-                      />
-                    </label>
-                    <label className="grid gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Reviewed</span>
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-sm"
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          setMri((current) => ({
-                            ...current,
-                            reportReviewedDate: formatUsDateInput(event.target.value),
-                          }))
-                        }
-                        placeholder="MM/DD/YYYY"
-                        value={mri.reportReviewedDate}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Findings */}
-                <label className="grid gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Findings</span>
-                  <textarea
-                    className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                    onChange={(event) =>
-                      setMri((current) => ({
-                        ...current,
-                        findings: event.target.value,
-                      }))
-                    }
-                    placeholder="Enter MRI/CT findings (e.g. Lumbar: L4-L5 disc bulge...)"
-                    value={mri.findings}
-                  />
-                </label>
-
                 {/* Actions */}
                 <div className="flex gap-2">
                   <button
@@ -3220,14 +3115,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               {mriReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
                   <p className="font-semibold">
-                    {entry.modalityLabel} Sent: {entry.sentDate}
+                    {entry.modalityLabel} — {entry.center || "No Center"}
                   </p>
-                  <p>Center: {entry.center}</p>
                   <p>Regions: {formatImagingRegionsSummary(entry, "mri")}</p>
-                  <p>Scheduled: {entry.scheduledDate || "-"}</p>
-                  <p>Completed: {entry.doneDate || "-"}</p>
-                  <p>Received: {entry.reportReceivedDate || "-"}</p>
-                  <p>Reviewed: {entry.reportReviewedDate || "-"}</p>
+                  <p>Sent: {entry.sentDate || "-"} | Completed: {entry.doneDate || "-"}</p>
                   {entry.findings?.trim() && (
                     <p className="mt-1 whitespace-pre-wrap text-[var(--text-muted)]">
                       <span className="font-semibold text-[var(--text-strong)]">Findings:</span> {entry.findings.trim()}
@@ -3243,7 +3134,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 font-semibold"
-                      onClick={() => editImagingReferral("mri", entry.id)}
+                      onClick={(event) => openImagingEditor("mri", entry, event)}
                       type="button"
                     >
                       Edit
@@ -4983,6 +4874,162 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 type="submit"
               >
                 Save Specialist
+              </button>
+            </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingImagingReferral && (
+        <div className="fixed inset-0 z-50 bg-black/45 p-4">
+          <div className="relative h-full w-full">
+            <form className="panel-card p-4" style={getAnchoredModalStyle(imagingEditorAnchor, 760, 75)} onSubmit={(e) => { e.preventDefault(); saveImagingEditor(); }}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xl font-semibold">
+                Edit {editingImagingReferral.modalityLabel} Referral
+              </h3>
+              <button
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm"
+                onClick={() => {
+                  setEditingImagingReferral(null);
+                  setImagingEditorAnchor(null);
+                }}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Sent Date</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, sentDate: formatUsDateInput(event.target.value) } : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingImagingReferral.sentDate}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Imaging Center</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    list="imaging-centers"
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, center: event.target.value } : current,
+                      )
+                    }
+                    value={editingImagingReferral.center}
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Scheduled Date</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, scheduledDate: formatUsDateInput(event.target.value) } : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingImagingReferral.scheduledDate ?? ""}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Completed</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, doneDate: formatUsDateInput(event.target.value) } : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingImagingReferral.doneDate}
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Report Received</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, reportReceivedDate: formatUsDateInput(event.target.value) } : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingImagingReferral.reportReceivedDate}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Report Reviewed</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    inputMode="numeric"
+                    maxLength={10}
+                    onChange={(event) =>
+                      setEditingImagingReferral((current) =>
+                        current ? { ...current, reportReviewedDate: formatUsDateInput(event.target.value) } : current,
+                      )
+                    }
+                    placeholder="MM/DD/YYYY"
+                    value={editingImagingReferral.reportReviewedDate}
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Findings</span>
+                <textarea
+                  className="min-h-[120px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  onChange={(event) =>
+                    setEditingImagingReferral((current) =>
+                      current ? { ...current, findings: event.target.value } : current,
+                    )
+                  }
+                  placeholder={`Enter ${editingImagingReferral.modalityLabel} findings...`}
+                  value={editingImagingReferral.findings}
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={() => {
+                  setEditingImagingReferral(null);
+                  setImagingEditorAnchor(null);
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                type="submit"
+              >
+                Save {editingImagingReferral.modalityLabel}
               </button>
             </div>
             </form>
