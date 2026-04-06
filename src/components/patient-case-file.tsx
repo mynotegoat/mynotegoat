@@ -24,13 +24,15 @@ import { formatUsPhoneInput } from "@/lib/phone-format";
 import { type QuickStatOptionKey } from "@/lib/quick-stats-settings";
 import { buildNarrativeReportContext, renderNarrativeReportBody } from "@/lib/report-generator";
 import {
-  createAppointmentId,
-  defaultScheduleLocation,
-  defaultScheduleProvider,
+  appointmentStatusOptions,
+  formatTimeLabel,
+  getStatusBadgeClass,
+  type AppointmentStatus,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
-import { loadAppointmentTypes } from "@/lib/schedule-appointment-types";
-import { loadScheduleRooms } from "@/lib/schedule-rooms";
+import { NewAppointmentModal } from "@/components/new-appointment-modal";
+import { RescheduleAppointmentModal } from "@/components/reschedule-appointment-modal";
+import { EditAppointmentModal } from "@/components/edit-appointment-modal";
 import { forceSyncNow } from "@/lib/storage-sync-interceptor";
 import { type TaskPriority } from "@/lib/tasks";
 import {
@@ -685,7 +687,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { reportTemplates } = useReportTemplates();
   const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
-  const { scheduleAppointments, addAppointments } = useScheduleAppointments();
+  const { scheduleAppointments, updateAppointment } = useScheduleAppointments();
   const { addTask } = useTasks();
   const { encountersByNewest, createEncounter, setSoapSection } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
@@ -913,17 +915,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [showNarrativePreviewModal, setShowNarrativePreviewModal] = useState(false);
   const [encounterMessage, setEncounterMessage] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleDraft, setScheduleDraft] = useState({
-    appointmentType: "",
-    date: "",
-    startTime: "09:00",
-    durationMin: 45,
-    provider: defaultScheduleProvider,
-    location: defaultScheduleLocation,
-    room: "",
-    note: "",
-  });
-  const [scheduleError, setScheduleError] = useState("");
+  const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
+  const [quickTimeEditId, setQuickTimeEditId] = useState<string | null>(null);
+  const [quickTimeDraft, setQuickTimeDraft] = useState("");
+  const [editAppointmentId, setEditAppointmentId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
 
   // Delete patient state
@@ -2296,53 +2291,74 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   };
 
   const openScheduleModal = () => {
-    const types = loadAppointmentTypes();
-    const defaultType = types.find((t) => t.isDefault) ?? types[0];
-    const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    setScheduleDraft({
-      appointmentType: defaultType?.name ?? "Personal Injury Office Visit",
-      date: todayIso,
-      startTime: "09:00",
-      durationMin: defaultType?.durationMin ?? 45,
-      provider: defaultScheduleProvider,
-      location: defaultScheduleLocation,
-      room: "",
-      note: "",
-    });
-    setScheduleError("");
     setShowScheduleModal(true);
   };
 
-  const handleSubmitSchedule = () => {
-    if (!scheduleDraft.date) {
-      setScheduleError("Date is required.");
-      return;
+  const handleNewAppointmentSaved = (records: ScheduleAppointmentRecord[]) => {
+    const first = records[0];
+    if (first) {
+      const count = records.length;
+      setEncounterMessage(
+        count > 1
+          ? `Scheduled ${count} appointments starting ${toUsDate(first.date)}.`
+          : `Appointment scheduled for ${toUsDate(first.date)}.`,
+      );
     }
-    if (!scheduleDraft.appointmentType.trim()) {
-      setScheduleError("Appointment type is required.");
-      return;
-    }
-    const record: ScheduleAppointmentRecord = {
-      id: createAppointmentId(),
-      patientId: patient.id,
-      patientName: patient.fullName,
-      provider: scheduleDraft.provider.trim(),
-      location: scheduleDraft.location.trim(),
-      appointmentType: scheduleDraft.appointmentType.trim(),
-      caseLabel: "",
-      room: scheduleDraft.room.trim(),
-      date: scheduleDraft.date,
-      startTime: scheduleDraft.startTime,
-      durationMin: scheduleDraft.durationMin,
-      status: "Scheduled",
-      note: scheduleDraft.note.trim(),
-      overrideOfficeHours: false,
-    };
-    addAppointments([record]);
-    setShowScheduleModal(false);
-    setEncounterMessage(`Appointment scheduled for ${toUsDate(scheduleDraft.date)}.`);
   };
+
+  const handleAppointmentStatusChange = (appointmentId: string, nextStatus: AppointmentStatus) => {
+    if (nextStatus === "Reschedule") {
+      setRescheduleAppointmentId(appointmentId);
+      return;
+    }
+    updateAppointment(appointmentId, (current) => ({
+      ...current,
+      status: nextStatus,
+    }));
+    setEncounterMessage(`Appointment status updated to ${nextStatus}.`);
+  };
+
+  const beginQuickTimeEdit = (appointment: ScheduleAppointmentRecord) => {
+    setQuickTimeEditId(appointment.id);
+    setQuickTimeDraft(appointment.startTime);
+  };
+
+  const cancelQuickTimeEdit = () => {
+    setQuickTimeEditId(null);
+    setQuickTimeDraft("");
+  };
+
+  const commitQuickTimeEdit = (appointment: ScheduleAppointmentRecord) => {
+    const nextTime = quickTimeDraft.trim();
+    if (!nextTime || nextTime === appointment.startTime) {
+      cancelQuickTimeEdit();
+      return;
+    }
+    updateAppointment(appointment.id, (current) => ({
+      ...current,
+      startTime: nextTime,
+    }));
+    setEncounterMessage(
+      `Time updated to ${formatTimeLabel(nextTime)} on ${toUsDate(appointment.date)}.`,
+    );
+    cancelQuickTimeEdit();
+  };
+
+  const rescheduleTargetAppointment = useMemo(
+    () =>
+      rescheduleAppointmentId
+        ? scheduleAppointments.find((entry) => entry.id === rescheduleAppointmentId) ?? null
+        : null,
+    [rescheduleAppointmentId, scheduleAppointments],
+  );
+
+  const editTargetAppointment = useMemo(
+    () =>
+      editAppointmentId
+        ? scheduleAppointments.find((entry) => entry.id === editAppointmentId) ?? null
+        : null,
+    [editAppointmentId, scheduleAppointments],
+  );
 
   const createEncounterFromAppointment = (appointment: ScheduleAppointmentRecord) => {
     const appointmentDate = toUsDate(appointment.date);
@@ -2352,6 +2368,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     if (existingEncounter) {
       setEncounterMessage(`Opened existing encounter on ${existingEncounter.encounterDate}.`);
       openEncounterEditor(existingEncounter.id);
+      return;
+    }
+
+    if (appointment.status !== "Check In" && appointment.status !== "Check Out") {
+      setEncounterMessage(
+        "Patient must be Checked In before starting an encounter. Update the appointment status first.",
+      );
       return;
     }
 
@@ -3594,6 +3617,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     <thead>
                       <tr className="bg-[var(--bg-soft)] text-left">
                         <th className="px-2 py-2">Date</th>
+                        <th className="px-2 py-2">Time</th>
                         <th className="px-2 py-2">Type</th>
                         <th className="px-2 py-2">Status</th>
                         <th className="px-2 py-2">Encounter</th>
@@ -3605,9 +3629,106 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         const appointment = row.appointment;
                         return (
                           <tr key={row.rowId} className="border-t border-[var(--line-soft)]">
-                            <td className="px-2 py-2 tabular-nums">{row.dateLabel}</td>
-                            <td className="px-2 py-2">{row.typeLabel}</td>
-                            <td className="px-2 py-2">{row.statusLabel}</td>
+                            <td className="px-2 py-2 tabular-nums">
+                              {appointment ? (
+                                <button
+                                  className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
+                                  onClick={() => setEditAppointmentId(appointment.id)}
+                                  title="Click to edit appointment"
+                                  type="button"
+                                >
+                                  {row.dateLabel}
+                                </button>
+                              ) : (
+                                <span>{row.dateLabel}</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 tabular-nums">
+                              {appointment ? (
+                                quickTimeEditId === appointment.id ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <input
+                                      autoFocus
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs"
+                                      onChange={(event) => setQuickTimeDraft(event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          commitQuickTimeEdit(appointment);
+                                        } else if (event.key === "Escape") {
+                                          cancelQuickTimeEdit();
+                                        }
+                                      }}
+                                      type="time"
+                                      value={quickTimeDraft}
+                                    />
+                                    <button
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs font-semibold text-[var(--brand-primary)]"
+                                      onClick={() => commitQuickTimeEdit(appointment)}
+                                      title="Save new time"
+                                      type="button"
+                                    >
+                                      ✓
+                                    </button>
+                                    <button
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]"
+                                      onClick={cancelQuickTimeEdit}
+                                      title="Cancel"
+                                      type="button"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button
+                                    className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
+                                    onClick={() => beginQuickTimeEdit(appointment)}
+                                    title="Click to change time"
+                                    type="button"
+                                  >
+                                    {formatTimeLabel(appointment.startTime)}
+                                  </button>
+                                )
+                              ) : (
+                                <span className="text-xs text-[var(--text-muted)]">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              {appointment ? (
+                                <button
+                                  className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
+                                  onClick={() => setEditAppointmentId(appointment.id)}
+                                  title="Click to edit appointment"
+                                  type="button"
+                                >
+                                  {row.typeLabel}
+                                </button>
+                              ) : (
+                                <span>{row.typeLabel}</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              {appointment ? (
+                                <select
+                                  className={`rounded-full border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold ${getStatusBadgeClass(appointment.status)}`}
+                                  onChange={(event) =>
+                                    handleAppointmentStatusChange(
+                                      appointment.id,
+                                      event.target.value as AppointmentStatus,
+                                    )
+                                  }
+                                  title="Click to change status"
+                                  value={appointment.status}
+                                >
+                                  {appointmentStatusOptions.map((status) => (
+                                    <option key={`pcf-status-${appointment.id}-${status}`} value={status}>
+                                      {status}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-xs text-[var(--text-muted)]">{row.statusLabel}</span>
+                              )}
+                            </td>
                             <td className="px-2 py-2">
                               {linkedEncounter ? (
                                 <button
@@ -3618,13 +3739,30 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                   Open Encounter
                                 </button>
                               ) : appointment ? (
-                                <button
-                                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                                  onClick={() => createEncounterFromAppointment(appointment)}
-                                  type="button"
-                                >
-                                  + Encounter
-                                </button>
+                                (() => {
+                                  const canStart =
+                                    appointment.status === "Check In" ||
+                                    appointment.status === "Check Out";
+                                  return (
+                                    <button
+                                      className={`rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold ${
+                                        canStart
+                                          ? "bg-white"
+                                          : "cursor-not-allowed bg-[var(--bg-soft)] text-[var(--text-muted)]"
+                                      }`}
+                                      disabled={!canStart}
+                                      onClick={() => createEncounterFromAppointment(appointment)}
+                                      title={
+                                        canStart
+                                          ? "Start encounter"
+                                          : "Patient must be Checked In before starting an encounter"
+                                      }
+                                      type="button"
+                                    >
+                                      + Encounter
+                                    </button>
+                                  );
+                                })()
                               ) : (
                                 <span className="text-xs text-[var(--text-muted)]">-</span>
                               )}
@@ -3634,7 +3772,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       })}
                       {appointmentRows.length === 0 && (
                         <tr>
-                          <td className="px-2 py-3 text-[var(--text-muted)]" colSpan={4}>
+                          <td className="px-2 py-3 text-[var(--text-muted)]" colSpan={5}>
                             No appointments scheduled for this patient yet.
                           </td>
                         </tr>
@@ -5250,141 +5388,34 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         ))}
       </datalist>
 
-      {showScheduleModal && (() => {
-        const aptTypes = loadAppointmentTypes();
-        const rooms = loadScheduleRooms();
-        const roomList = rooms.rooms ?? [];
-        return (
-          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
-            <div className="panel-card mx-auto w-full max-w-lg p-5">
-              <h3 className="text-xl font-semibold text-[var(--text-heading)]">Schedule Appointment</h3>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                For <span className="font-semibold text-[var(--text-main)]">{patient.fullName}</span>
-              </p>
+      <NewAppointmentModal
+        lockedPatientId={patient.id}
+        onClose={() => setShowScheduleModal(false)}
+        onSaved={handleNewAppointmentSaved}
+        open={showScheduleModal}
+      />
 
-              <div className="mt-4 grid gap-3">
-                <label className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Type</span>
-                  <select
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                    onChange={(e) => {
-                      const selected = aptTypes.find((t) => t.name === e.target.value);
-                      setScheduleDraft((d) => ({
-                        ...d,
-                        appointmentType: e.target.value,
-                        durationMin: selected?.durationMin ?? d.durationMin,
-                      }));
-                    }}
-                    value={scheduleDraft.appointmentType}
-                  >
-                    {aptTypes.map((t) => (
-                      <option key={t.id} value={t.name}>{t.name}</option>
-                    ))}
-                  </select>
-                </label>
+      <RescheduleAppointmentModal
+        appointment={rescheduleTargetAppointment}
+        onClose={() => setRescheduleAppointmentId(null)}
+        onRescheduled={(_oldAppointment, newAppointment) => {
+          setEncounterMessage(
+            `Rescheduled to ${toUsDate(newAppointment.date)}.`,
+          );
+        }}
+        open={Boolean(rescheduleTargetAppointment)}
+      />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Date</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, date: e.target.value }))}
-                      type="date"
-                      value={scheduleDraft.date}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, startTime: e.target.value }))}
-                      type="time"
-                      value={scheduleDraft.startTime}
-                    />
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Duration (min)</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      min={5}
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, durationMin: Number(e.target.value) || 30 }))}
-                      type="number"
-                      value={scheduleDraft.durationMin}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Room</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, room: e.target.value }))}
-                      value={scheduleDraft.room}
-                    >
-                      <option value="">None</option>
-                      {roomList.map((r) => (
-                        <option key={r.id} value={r.name}>{r.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Provider</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, provider: e.target.value }))}
-                      value={scheduleDraft.provider}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Location</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                      onChange={(e) => setScheduleDraft((d) => ({ ...d, location: e.target.value }))}
-                      value={scheduleDraft.location}
-                    />
-                  </label>
-                </div>
-
-                <label className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">Note (optional)</span>
-                  <textarea
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                    maxLength={500}
-                    onChange={(e) => setScheduleDraft((d) => ({ ...d, note: e.target.value }))}
-                    rows={2}
-                    value={scheduleDraft.note}
-                  />
-                </label>
-              </div>
-
-              {scheduleError && (
-                <p className="mt-2 text-sm font-semibold text-red-600">{scheduleError}</p>
-              )}
-
-              <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-                <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                  onClick={() => setShowScheduleModal(false)}
-                  type="button"
-                >
-                  Cancel
-                </button>
-                <button
-                  className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
-                  onClick={handleSubmitSchedule}
-                  type="button"
-                >
-                  Save Appointment
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <EditAppointmentModal
+        appointment={editTargetAppointment}
+        onClose={() => setEditAppointmentId(null)}
+        onSaved={(updated) => {
+          setEncounterMessage(
+            `Appointment updated for ${toUsDate(updated.date)} at ${formatTimeLabel(updated.startTime)}.`,
+          );
+        }}
+        open={Boolean(editTargetAppointment)}
+      />
 
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">

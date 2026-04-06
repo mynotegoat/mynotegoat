@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { RescheduleAppointmentModal } from "@/components/reschedule-appointment-modal";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
 import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
@@ -418,9 +419,11 @@ export default function AppointmentsPage() {
   const [editRoomDraft, setEditRoomDraft] = useState("");
   const [editOverrideDraft, setEditOverrideDraft] = useState(false);
   const [editNoteDraft, setEditNoteDraft] = useState("");
+  const [editTypeDraft, setEditTypeDraft] = useState("");
   const [editError, setEditError] = useState("");
   const [checkInRoomPrompt, setCheckInRoomPrompt] = useState<CheckInRoomPromptState | null>(null);
   const [checkInRoomDraft, setCheckInRoomDraft] = useState("");
+  const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
 
   const patientById = useMemo(() => {
     const map = new Map<string, (typeof patients)[number]>();
@@ -596,6 +599,7 @@ export default function AppointmentsPage() {
     setEditRoomDraft(appointment.room);
     setEditOverrideDraft(appointment.overrideOfficeHours);
     setEditNoteDraft(appointment.note);
+    setEditTypeDraft(appointment.appointmentType);
     setEditError("");
   };
 
@@ -637,11 +641,27 @@ export default function AppointmentsPage() {
   };
 
   const handleQuickStatusUpdate = (appointmentId: string, nextStatus: AppointmentStatus) => {
+    if (nextStatus === "Reschedule") {
+      openRescheduleModal(appointmentId);
+      return;
+    }
     updateAppointment(appointmentId, (current) => ({
       ...current,
       status: nextStatus,
     }));
   };
+
+  const openRescheduleModal = (appointmentId: string) => {
+    setRescheduleAppointmentId(appointmentId);
+  };
+
+  const rescheduleAppointment = useMemo(
+    () =>
+      rescheduleAppointmentId
+        ? scheduleAppointments.find((entry) => entry.id === rescheduleAppointmentId) ?? null
+        : null,
+    [rescheduleAppointmentId, scheduleAppointments],
+  );
 
   const openCheckInRoomPrompt = (appointmentId: string, withEncounter: boolean) => {
     const appointment = scheduleAppointments.find((entry) => entry.id === appointmentId);
@@ -721,6 +741,13 @@ export default function AppointmentsPage() {
       setScheduleAlert(`Opened existing encounter for ${appointment.patientName} on ${encounterDate}.`);
       router.push(
         `/encounters?patientId=${encodeURIComponent(resolvedPatient.id)}&encounterId=${encodeURIComponent(existingEncounter.id)}`,
+      );
+      return;
+    }
+
+    if (appointment.status !== "Check In" && appointment.status !== "Check Out") {
+      setScheduleAlert(
+        `Cannot start an encounter for ${appointment.patientName} — patient must be Checked In first.`,
       );
       return;
     }
@@ -942,6 +969,7 @@ export default function AppointmentsPage() {
       room: editRoomDraft.trim(),
       overrideOfficeHours: editOverrideDraft,
       note: editNoteDraft.trim(),
+      appointmentType: editTypeDraft.trim() || current.appointmentType,
     }));
 
     const coveredOnEdit = findKeyDatesForDate(keyDates, editDateDraft).some(
@@ -1808,6 +1836,18 @@ export default function AppointmentsPage() {
         </div>
       )}
 
+      <RescheduleAppointmentModal
+        appointment={rescheduleAppointment}
+        onClose={() => setRescheduleAppointmentId(null)}
+        onRescheduled={(oldAppointment, newAppointment) => {
+          setScheduleAlert(
+            `Rescheduled ${oldAppointment.patientName} to ${formatUsDateFromIso(newAppointment.date)} at ${formatTimeLabel(newAppointment.startTime)}.`,
+          );
+          setSelectedAppointmentId(null);
+        }}
+        open={Boolean(rescheduleAppointment)}
+      />
+
       {checkInRoomPrompt && checkInPromptAppointment && (
         <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(15,46,70,0.45)] px-4 py-8">
           <section className="w-full max-w-2xl rounded-2xl border border-[var(--line-soft)] bg-white p-5 shadow-[0_18px_46px_rgba(14,41,62,0.25)]">
@@ -1916,7 +1956,14 @@ export default function AppointmentsPage() {
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Status</span>
                 <select
                   className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => setStatusDraft(event.target.value as AppointmentStatus)}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value as AppointmentStatus;
+                    if (nextStatus === "Reschedule" && selectedAppointment) {
+                      openRescheduleModal(selectedAppointment.id);
+                      return;
+                    }
+                    setStatusDraft(nextStatus);
+                  }}
                   value={statusDraft}
                 >
                   {appointmentStatusOptions.map((status) => (
@@ -1972,6 +2019,24 @@ export default function AppointmentsPage() {
                   value={`${selectedAppointment.durationMin} minutes`}
                 />
               </label>
+
+              <label className="grid gap-1 md:col-span-2">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Type</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(event) => setEditTypeDraft(event.target.value)}
+                  value={editTypeDraft}
+                >
+                  {!appointmentTypeByName.has(editTypeDraft.toLowerCase()) && editTypeDraft && (
+                    <option value={editTypeDraft}>{editTypeDraft}</option>
+                  )}
+                  {appointmentTypes.map((type) => (
+                    <option key={`edit-appointment-type-${type.id}`} value={type.name}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1983,24 +2048,43 @@ export default function AppointmentsPage() {
                       ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.1)]"
                       : "border-[var(--line-soft)] bg-white"
                   }`}
-                  onClick={() => setStatusDraft(status)}
+                  onClick={() => {
+                    if (status === "Reschedule" && selectedAppointment) {
+                      openRescheduleModal(selectedAppointment.id);
+                      return;
+                    }
+                    setStatusDraft(status);
+                  }}
                   type="button"
                 >
                   {status}
                 </button>
               ))}
-              <button
-                className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-sm font-semibold"
-                onClick={() =>
-                  openOrCreateEncounterForAppointment({
-                    ...selectedAppointment,
-                    status: statusDraft,
-                  })
-                }
-                type="button"
-              >
-                + Add Encounter
-              </button>
+              {(() => {
+                const canStart = statusDraft === "Check In" || statusDraft === "Check Out";
+                return (
+                  <button
+                    className={`rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold ${
+                      canStart ? "bg-white" : "cursor-not-allowed bg-[var(--bg-soft)] text-[var(--text-muted)]"
+                    }`}
+                    disabled={!canStart}
+                    onClick={() =>
+                      openOrCreateEncounterForAppointment({
+                        ...selectedAppointment,
+                        status: statusDraft,
+                      })
+                    }
+                    title={
+                      canStart
+                        ? "Start encounter"
+                        : "Patient must be Checked In before starting an encounter"
+                    }
+                    type="button"
+                  >
+                    + Add Encounter
+                  </button>
+                );
+              })()}
             </div>
 
             {scheduleSettings.allowOverride && (

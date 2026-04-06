@@ -206,6 +206,24 @@ a {
   font-size: 1.1rem;
 }
 
+.rich-text-editor .macro-snippet {
+  display: inline;
+  background-color: rgba(56, 132, 197, 0.08);
+  border-bottom: 1px dashed rgba(56, 132, 197, 0.5);
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.rich-text-editor .macro-snippet:hover {
+  background-color: rgba(56, 132, 197, 0.18);
+}
+
+.rich-text-editor .macro-snippet * {
+  cursor: pointer;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

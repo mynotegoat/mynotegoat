@@ -119,12 +119,13 @@ export default function KeyDatesPage() {
   const startEditing = (row: KeyDateRecord) => {
     setEditingId(row.id);
     setFormError("");
+    const isRange = row.startDate !== row.endDate;
     setDraft({
       startDate: formatUsDateFromIso(row.startDate),
-      endDate: formatUsDateFromIso(row.endDate),
+      endDate: isRange ? formatUsDateFromIso(row.endDate) : "",
       officeStatus: row.officeStatus,
       reason: row.reason,
-      isRange: row.startDate !== row.endDate,
+      isRange,
     });
   };
 
@@ -213,18 +214,18 @@ export default function KeyDatesPage() {
           </label>
 
           <label className="grid gap-1">
-            <span className="text-sm font-semibold text-[var(--text-muted)]">Date Range</span>
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Date Range End</span>
             <input
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
               disabled={!draft.isRange}
               inputMode="numeric"
               maxLength={10}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, endDate: formatUsDateInput(event.target.value) }))
               }
-              placeholder="MM/DD/YYYY"
+              placeholder={draft.isRange ? "MM/DD/YYYY" : "Enable range below"}
               type="text"
-              value={draft.isRange ? draft.endDate : draft.startDate}
+              value={draft.isRange ? draft.endDate : ""}
             />
           </label>
 
@@ -260,7 +261,7 @@ export default function KeyDatesPage() {
               setDraft((current) => ({
                 ...current,
                 isRange: event.target.checked,
-                endDate: event.target.checked ? current.endDate || current.startDate : current.startDate,
+                // Preserve whatever the user previously typed; never mirror startDate
               }))
             }
             type="checkbox"

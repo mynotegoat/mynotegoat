@@ -139,12 +139,12 @@ export function useEncounterNotes() {
   const addMacroRun = useCallback(
     (
       encounterId: string,
-      input: Omit<EncounterMacroRunRecord, "id" | "createdAt" | "updatedAt">,
+      input: Omit<EncounterMacroRunRecord, "id" | "createdAt" | "updatedAt"> & { id?: string },
     ) => {
       let createdId: string | null = null;
       upsertEncounter(encounterId, (current) => {
         const timestamp = nowIso();
-        createdId = createEncounterMacroRunId();
+        createdId = input.id ?? createEncounterMacroRunId();
         return {
           ...current,
           macroRuns: [

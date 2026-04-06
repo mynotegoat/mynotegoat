@@ -10,6 +10,7 @@ import { useOfficeSettings } from "@/hooks/use-office-settings";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
 import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
 import {
+  createEncounterMacroRunId,
   encounterSections,
   normalizeEncounterDateInput,
   type EncounterMacroRunRecord,
@@ -812,26 +813,39 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     }
     const rawGeneratedText = renderMacroTemplate(macro.body, answers, context);
     // Strip leading/trailing empty HTML paragraphs that cause blank spacing
-    const generatedText = rawGeneratedText
+    const cleanedText = rawGeneratedText
       .replace(/^(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+/gi, "")
       .replace(/(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+$/gi, "")
       .trim();
-    if (!generatedText) {
+    if (!cleanedText) {
       setMessage("Generated macro output was empty.");
       return;
     }
+    const snippetId = existingRun?.id ?? createEncounterMacroRunId();
+    const generatedText = `<span class="macro-snippet" data-macro-run-id="${snippetId}">${cleanedText}</span>`;
     if (existingRun) {
       const currentSectionText = selectedEncounter.soap[activeSection];
-      const existingSnippet = existingRun.generatedText;
-      const existingIndex = existingSnippet ? currentSectionText.indexOf(existingSnippet) : -1;
-      const nextSectionText =
-        existingIndex >= 0
-          ? `${currentSectionText.slice(0, existingIndex)}${generatedText}${currentSectionText.slice(
-              existingIndex + existingSnippet.length,
-            )}`
-          : currentSectionText.trim()
-            ? `${currentSectionText.trim()}\n\n${generatedText}`
-            : generatedText;
+      // Try to locate the existing wrapped snippet by its id and replace it in place
+      const wrapperPattern = new RegExp(
+        `<span[^>]*data-macro-run-id=["']${snippetId}["'][^>]*>[\\s\\S]*?</span>`,
+        "i",
+      );
+      let nextSectionText: string;
+      if (wrapperPattern.test(currentSectionText)) {
+        nextSectionText = currentSectionText.replace(wrapperPattern, generatedText);
+      } else {
+        // Fallback: try matching the previously stored generatedText literally
+        const existingSnippet = existingRun.generatedText;
+        const existingIndex = existingSnippet ? currentSectionText.indexOf(existingSnippet) : -1;
+        nextSectionText =
+          existingIndex >= 0
+            ? `${currentSectionText.slice(0, existingIndex)}${generatedText}${currentSectionText.slice(
+                existingIndex + existingSnippet.length,
+              )}`
+            : currentSectionText.trim()
+              ? `${currentSectionText.trim()}\n\n${generatedText}`
+              : generatedText;
+      }
       setSoapSection(selectedEncounter.id, activeSection, nextSectionText);
       updateMacroRun(selectedEncounter.id, existingRun.id, {
         answers: { ...answers },
@@ -843,6 +857,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
     appendSoapSection(selectedEncounter.id, activeSection, generatedText);
     addMacroRun(selectedEncounter.id, {
+      id: snippetId,
       section: activeSection,
       macroId: macro.id,
       macroName: macro.buttonName,
@@ -918,6 +933,25 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setEditingMacroRunId(run.id);
     setRunMacroAnswers(initialAnswers);
     setRunMacroId(macro.id);
+  };
+
+  const handleSoapEditorElementClick = (target: HTMLElement) => {
+    if (!selectedEncounter) {
+      return;
+    }
+    const wrapper = target.closest("[data-macro-run-id]") as HTMLElement | null;
+    if (!wrapper) {
+      return;
+    }
+    const runId = wrapper.getAttribute("data-macro-run-id");
+    if (!runId) {
+      return;
+    }
+    const matchingRun = selectedEncounter.macroRuns.find((entry) => entry.id === runId);
+    if (!matchingRun) {
+      return;
+    }
+    handleEditExistingMacroRun(matchingRun);
   };
 
   const handleConfirmMacroRun = () => {
@@ -1607,6 +1641,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         }
                         minHeightClassName="min-h-44"
                         placeholder="Type directly here, use macros, or mix both."
+                        onElementClick={handleSoapEditorElementClick}
                       />
                     </div>
                     <div className="grid gap-1">
@@ -1631,6 +1666,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       }
                       minHeightClassName="min-h-44"
                       placeholder="Type directly here, use macros, or mix both."
+                      onElementClick={handleSoapEditorElementClick}
                     />
                   </div>
                 )}

@@ -1,0 +1,1056 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
+import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
+import { useScheduleRooms } from "@/hooks/use-schedule-rooms";
+import { useScheduleSettings } from "@/hooks/use-schedule-settings";
+import { useKeyDates } from "@/hooks/use-key-dates";
+import { patients } from "@/lib/mock-data";
+import {
+  findClosedKeyDateForDate,
+  findKeyDatesForDate,
+  formatUsDateFromIso,
+} from "@/lib/key-dates";
+import {
+  createAppointmentId,
+  defaultScheduleLocation,
+  defaultScheduleProvider,
+  formatTimeLabel,
+  type ScheduleAppointmentRecord,
+} from "@/lib/schedule-appointments";
+import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
+import {
+  isAppointmentWithinOfficeHours,
+  isStartTimeAlignedToInterval,
+  weekdayLabels,
+} from "@/lib/schedule-settings";
+
+type RecurrenceUnit = "days" | "weeks";
+type RecurrenceEndMode = "date" | "visits";
+
+interface NewAppointmentDraft {
+  patientId: string;
+  provider: string;
+  location: string;
+  appointmentType: string;
+  caseLabel: string;
+  room: string;
+  startDate: string;
+  startTime: string;
+  durationHours: number;
+  durationMinutes: number;
+  note: string;
+  walkIn: boolean;
+  isRecurring: boolean;
+  recurInterval: number;
+  recurUnit: RecurrenceUnit;
+  recurrenceEndMode: RecurrenceEndMode;
+  recurDays: number[];
+  recurEndDate: string;
+  recurVisitCount: number;
+  overrideOfficeHours: boolean;
+}
+
+const dayToggleOptions = [
+  { day: 0, short: "S" },
+  { day: 1, short: "M" },
+  { day: 2, short: "T" },
+  { day: 3, short: "W" },
+  { day: 4, short: "Th" },
+  { day: 5, short: "F" },
+  { day: 6, short: "S" },
+];
+
+function getTodayIsoDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseIsoDate(dateIso: string) {
+  const [yearRaw, monthRaw, dayRaw] = dateIso.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+  const value = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(value.getTime())) {
+    return null;
+  }
+  return value;
+}
+
+function toIsoDate(date: Date) {
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(dateIso: string, amount: number) {
+  const source = parseIsoDate(dateIso);
+  if (!source) {
+    return dateIso;
+  }
+  source.setUTCDate(source.getUTCDate() + amount);
+  return toIsoDate(source);
+}
+
+function getDayOfWeek(dateIso: string) {
+  const parsed = parseIsoDate(dateIso);
+  if (!parsed) {
+    return 0;
+  }
+  return parsed.getUTCDay();
+}
+
+function getDurationMinutes(hours: number, minutes: number) {
+  return Math.max(5, Math.round(hours) * 60 + Math.round(minutes));
+}
+
+function toDurationParts(durationMin: number) {
+  const safe = Math.max(5, Math.round(durationMin));
+  return {
+    durationHours: Math.floor(safe / 60),
+    durationMinutes: safe % 60,
+  };
+}
+
+function getPatientNameParts(fullName: string) {
+  const trimmed = fullName.trim();
+  if (!trimmed) {
+    return { firstName: "", lastName: "" };
+  }
+  if (trimmed.includes(",")) {
+    const [lastNameRaw, firstNameRaw] = trimmed.split(",");
+    return {
+      firstName: (firstNameRaw ?? "").trim().split(/\s+/)[0] ?? "",
+      lastName: (lastNameRaw ?? "").trim(),
+    };
+  }
+  const parts = trimmed.split(/\s+/);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts[parts.length - 1] ?? "",
+  };
+}
+
+function buildCaseLabelFromPatient(patient: (typeof patients)[number]) {
+  const doiUs = formatUsDateFromIso(patient.dateOfLoss);
+  const dateMatch = doiUs.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!dateMatch) {
+    return "";
+  }
+  const { firstName, lastName } = getPatientNameParts(patient.fullName);
+  const month = dateMatch[1];
+  const day = dateMatch[2];
+  const year = dateMatch[3].slice(-2);
+  const cleanLast = lastName.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2);
+  const cleanFirst = firstName.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2);
+  return `${month}${day}${year}${cleanLast}${cleanFirst}`;
+}
+
+function createInitialDraft(
+  selectedDate: string,
+  defaultType?: { name: string; durationMin: number } | null,
+): NewAppointmentDraft {
+  const baseDuration = toDurationParts(defaultType?.durationMin ?? 30);
+  return {
+    patientId: "",
+    provider: defaultScheduleProvider,
+    location: defaultScheduleLocation,
+    appointmentType: defaultType?.name ?? "Personal Injury Office Visit",
+    caseLabel: "",
+    room: "",
+    startDate: selectedDate,
+    startTime: "09:00",
+    durationHours: baseDuration.durationHours,
+    durationMinutes: baseDuration.durationMinutes,
+    note: "",
+    walkIn: false,
+    isRecurring: false,
+    recurInterval: 1,
+    recurUnit: "weeks",
+    recurrenceEndMode: "date",
+    recurDays: [getDayOfWeek(selectedDate)],
+    recurEndDate: addDays(selectedDate, 30),
+    recurVisitCount: 12,
+    overrideOfficeHours: false,
+  };
+}
+
+function getDatesForDraft(draft: NewAppointmentDraft) {
+  if (!draft.isRecurring) {
+    return [draft.startDate];
+  }
+
+  const stopByDate = draft.recurrenceEndMode === "date";
+  const stopByVisits = draft.recurrenceEndMode === "visits";
+  const visitLimit = Math.max(1, Math.round(draft.recurVisitCount));
+
+  if (stopByDate && draft.recurEndDate < draft.startDate) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  const interval = Math.max(1, Math.round(draft.recurInterval));
+
+  if (draft.recurUnit === "days") {
+    let current = draft.startDate;
+    while (true) {
+      if (stopByDate && current > draft.recurEndDate) {
+        break;
+      }
+      dates.push(current);
+      if (stopByVisits && dates.length >= visitLimit) {
+        break;
+      }
+      current = addDays(current, interval);
+    }
+    return dates;
+  }
+
+  const selectedDays = draft.recurDays;
+  if (selectedDays.length === 0) {
+    return [];
+  }
+  const daySet = new Set(selectedDays);
+  let current = draft.startDate;
+
+  const startDate = parseIsoDate(draft.startDate);
+  if (!startDate) {
+    return [];
+  }
+  const startMs = startDate.getTime();
+
+  while (true) {
+    if (stopByDate && current > draft.recurEndDate) {
+      break;
+    }
+    const currentDate = parseIsoDate(current);
+    if (!currentDate) {
+      break;
+    }
+    const dayOfWeek = currentDate.getUTCDay();
+    const diffDays = Math.floor((currentDate.getTime() - startMs) / 86400000);
+    const weekIndex = Math.floor(diffDays / 7);
+
+    if (daySet.has(dayOfWeek) && weekIndex % interval === 0) {
+      dates.push(current);
+      if (stopByVisits && dates.length >= visitLimit) {
+        break;
+      }
+    }
+    current = addDays(current, 1);
+  }
+
+  return dates;
+}
+
+export interface NewAppointmentModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialDate?: string;
+  /** When provided, locks the modal to this patient and hides patient search. */
+  lockedPatientId?: string;
+  onSaved?: (records: ScheduleAppointmentRecord[]) => void;
+}
+
+export function NewAppointmentModal({
+  open,
+  onClose,
+  initialDate,
+  lockedPatientId,
+  onSaved,
+}: NewAppointmentModalProps) {
+  const { scheduleAppointments, addAppointments } = useScheduleAppointments();
+  const { appointmentTypes } = useScheduleAppointmentTypes();
+  const { scheduleRooms } = useScheduleRooms();
+  const { scheduleSettings } = useScheduleSettings();
+  const { keyDates } = useKeyDates();
+
+  const defaultAppointmentType = useMemo(
+    () => appointmentTypes.find((entry) => entry.isDefault) ?? appointmentTypes[0] ?? null,
+    [appointmentTypes],
+  );
+
+  const appointmentTypeByName = useMemo(() => {
+    const map = new Map<string, (typeof appointmentTypes)[number]>();
+    appointmentTypes.forEach((entry) => {
+      map.set(entry.name.toLowerCase(), entry);
+    });
+    return map;
+  }, [appointmentTypes]);
+
+  const [draft, setDraft] = useState<NewAppointmentDraft>(() =>
+    createInitialDraft(initialDate ?? getTodayIsoDate(), defaultAppointmentType),
+  );
+  const [patientSearchDraft, setPatientSearchDraft] = useState("");
+  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false);
+  const [error, setError] = useState("");
+
+  // Reset draft whenever the modal opens
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const baseDate = initialDate ?? getTodayIsoDate();
+    const initial = createInitialDraft(baseDate, defaultAppointmentType);
+    if (lockedPatientId) {
+      const lockedPatient = patients.find((p) => p.id === lockedPatientId);
+      if (lockedPatient) {
+        initial.patientId = lockedPatient.id;
+        initial.caseLabel = buildCaseLabelFromPatient(lockedPatient);
+        setPatientSearchDraft(lockedPatient.fullName);
+      } else {
+        setPatientSearchDraft("");
+      }
+    } else {
+      setPatientSearchDraft("");
+    }
+    setDraft(initial);
+    setShowPatientSuggestions(false);
+    setError("");
+  }, [open, initialDate, lockedPatientId, defaultAppointmentType]);
+
+  const patientById = useMemo(() => {
+    const map = new Map<string, (typeof patients)[number]>();
+    patients.forEach((patient) => {
+      map.set(patient.id, patient);
+    });
+    return map;
+  }, []);
+
+  const selectedDraftType =
+    appointmentTypeByName.get(draft.appointmentType.toLowerCase()) ?? null;
+
+  const filteredPatientSuggestions = useMemo(() => {
+    const query = patientSearchDraft.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+    return patients
+      .filter((patient) => patient.fullName.toLowerCase().includes(query))
+      .slice(0, 12);
+  }, [patientSearchDraft]);
+
+  const providers = useMemo(() => {
+    const values = new Set<string>([defaultScheduleProvider]);
+    scheduleAppointments.forEach((appointment) => values.add(appointment.provider));
+    return Array.from(values);
+  }, [scheduleAppointments]);
+
+  const locations = useMemo(() => {
+    const values = new Set<string>([defaultScheduleLocation]);
+    scheduleAppointments.forEach((appointment) => values.add(appointment.location));
+    return Array.from(values);
+  }, [scheduleAppointments]);
+
+  const configuredRooms = useMemo(
+    () =>
+      scheduleRooms.rooms
+        .filter((room) => room.active)
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [scheduleRooms.rooms],
+  );
+
+  const roomOptions = useMemo(() => {
+    const values = new Set<string>();
+    configuredRooms.forEach((room) => values.add(room.name));
+    scheduleAppointments.forEach((appointment) => {
+      const room = appointment.room.trim();
+      if (room) {
+        values.add(room);
+      }
+    });
+    return Array.from(values).sort((left, right) => left.localeCompare(right));
+  }, [configuredRooms, scheduleAppointments]);
+
+  const openRecurringDays = useMemo(() => {
+    const openDays = scheduleSettings.officeHours
+      .filter((entry) => entry.enabled)
+      .map((entry) => entry.dayOfWeek);
+    return new Set(openDays);
+  }, [scheduleSettings.officeHours]);
+
+  const handlePatientSearchChange = (value: string) => {
+    if (lockedPatientId) {
+      return;
+    }
+    setPatientSearchDraft(value);
+    const normalizedValue = value.trim().toLowerCase();
+    const exactMatch = patients.find((patient) => patient.fullName.toLowerCase() === normalizedValue);
+    setDraft((current) => ({
+      ...current,
+      patientId: exactMatch?.id ?? "",
+      caseLabel: exactMatch ? buildCaseLabelFromPatient(exactMatch) : "",
+    }));
+    if (normalizedValue && !showPatientSuggestions) {
+      setShowPatientSuggestions(true);
+    }
+    if (!normalizedValue) {
+      setShowPatientSuggestions(false);
+    }
+  };
+
+  const handleSelectPatient = (patient: (typeof patients)[number]) => {
+    setPatientSearchDraft(patient.fullName);
+    setDraft((current) => ({
+      ...current,
+      patientId: patient.id,
+      caseLabel: buildCaseLabelFromPatient(patient),
+    }));
+    setShowPatientSuggestions(false);
+    setError("");
+  };
+
+  const handleSubmit = () => {
+    const selectedPatient = patientById.get(draft.patientId);
+    if (!selectedPatient) {
+      setError("Select a patient.");
+      return;
+    }
+    if (!draft.provider.trim() || !draft.location.trim() || !draft.appointmentType.trim()) {
+      setError("Patient, provider, location, and appointment type are required.");
+      return;
+    }
+    if (!draft.startDate || !draft.startTime) {
+      setError("Start date and start time are required.");
+      return;
+    }
+    if (!isStartTimeAlignedToInterval(draft.startTime, scheduleSettings.appointmentIntervalMin)) {
+      setError(
+        `Start time must align to ${scheduleSettings.appointmentIntervalMin}-minute intervals.`,
+      );
+      return;
+    }
+
+    const sanitizedDraft: NewAppointmentDraft =
+      draft.isRecurring && draft.recurUnit === "weeks"
+        ? {
+            ...draft,
+            recurDays: draft.recurDays.filter((day) => openRecurringDays.has(day)),
+          }
+        : draft;
+
+    if (sanitizedDraft.isRecurring && sanitizedDraft.recurUnit === "weeks" && sanitizedDraft.recurDays.length === 0) {
+      setError("Pick at least one open office day for recurring weekly appointments.");
+      return;
+    }
+
+    if (
+      sanitizedDraft.isRecurring &&
+      sanitizedDraft.recurrenceEndMode === "visits" &&
+      (!Number.isFinite(sanitizedDraft.recurVisitCount) || sanitizedDraft.recurVisitCount < 1)
+    ) {
+      setError("Visits must be at least 1.");
+      return;
+    }
+
+    if (
+      sanitizedDraft.isRecurring &&
+      sanitizedDraft.recurrenceEndMode === "date" &&
+      sanitizedDraft.recurEndDate < sanitizedDraft.startDate
+    ) {
+      setError("End date must be on or after start date.");
+      return;
+    }
+
+    const durationMin = getDurationMinutes(sanitizedDraft.durationHours, sanitizedDraft.durationMinutes);
+    const caseLabel = sanitizedDraft.caseLabel.trim() || buildCaseLabelFromPatient(selectedPatient);
+    const scheduleDates = getDatesForDraft(sanitizedDraft);
+    if (!scheduleDates.length) {
+      setError("Recurring rule did not generate any appointment dates.");
+      return;
+    }
+
+    const slotCapacity = Math.max(1, scheduleSettings.maxAppointmentsPerSlot);
+    const overbookedDates = scheduleDates.filter((dateIso) => {
+      const countAtSlot = scheduleAppointments.filter(
+        (entry) => entry.date === dateIso && entry.startTime === sanitizedDraft.startTime,
+      ).length;
+      return countAtSlot >= slotCapacity;
+    });
+    if (overbookedDates.length) {
+      setError(
+        `Time slot ${formatTimeLabel(sanitizedDraft.startTime)} is full (max ${slotCapacity}) on: ${overbookedDates
+          .slice(0, 5)
+          .map((dateIso) => formatUsDateFromIso(dateIso))
+          .join(", ")}${overbookedDates.length > 5 ? "..." : ""}`,
+      );
+      return;
+    }
+
+    const closedDate = scheduleDates.find((dateIso) => Boolean(findClosedKeyDateForDate(keyDates, dateIso)));
+    if (closedDate) {
+      const closedEntry = findClosedKeyDateForDate(keyDates, closedDate);
+      const reasonSuffix = closedEntry?.reason ? ` (${closedEntry.reason})` : "";
+      setError(
+        `Cannot schedule on CLOSED key date ${formatUsDateFromIso(closedDate)}${reasonSuffix}.`,
+      );
+      return;
+    }
+
+    if (scheduleSettings.enforceOfficeHours) {
+      const outsideOfficeHoursDate = scheduleDates.find(
+        (dateIso) =>
+          !isAppointmentWithinOfficeHours(scheduleSettings, dateIso, sanitizedDraft.startTime, durationMin),
+      );
+      if (
+        outsideOfficeHoursDate &&
+        (!scheduleSettings.allowOverride || !sanitizedDraft.overrideOfficeHours)
+      ) {
+        setError(
+          `Outside office hours on ${outsideOfficeHoursDate}. Enable override or adjust office hours.`,
+        );
+        return;
+      }
+    }
+
+    const seriesId = sanitizedDraft.isRecurring ? createAppointmentId() : undefined;
+    const records: ScheduleAppointmentRecord[] = scheduleDates.map((dateIso) => ({
+      id: createAppointmentId(),
+      patientId: selectedPatient.id,
+      patientName: selectedPatient.fullName,
+      provider: sanitizedDraft.provider.trim(),
+      location: sanitizedDraft.location.trim(),
+      appointmentType: sanitizedDraft.appointmentType.trim(),
+      caseLabel,
+      room: sanitizedDraft.room.trim(),
+      date: dateIso,
+      startTime: sanitizedDraft.startTime,
+      durationMin,
+      status: "Scheduled",
+      note: sanitizedDraft.note.trim(),
+      overrideOfficeHours: Boolean(sanitizedDraft.overrideOfficeHours),
+      recurringSeriesId: seriesId,
+    }));
+
+    addAppointments(records);
+    onSaved?.(records);
+
+    const coveredDates = scheduleDates.filter((dateIso) =>
+      findKeyDatesForDate(keyDates, dateIso).some((row) => row.officeStatus === "Covered"),
+    );
+    if (coveredDates.length) {
+      // Surface a soft warning via the error slot in inverse color? Just close.
+    }
+    onClose();
+  };
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(15,46,70,0.45)] px-4 py-8">
+      <section className="w-full max-w-5xl rounded-2xl border border-[var(--line-soft)] bg-white p-5 shadow-[0_18px_46px_rgba(14,41,62,0.25)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-xl font-semibold">New Appointment</h4>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              One-time: set date/time and save. Recurring: set interval, days, and an end date.
+            </p>
+          </div>
+          <button
+            className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="relative grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Patient *</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 disabled:bg-[var(--bg-soft)]"
+              disabled={Boolean(lockedPatientId)}
+              onBlur={() => window.setTimeout(() => setShowPatientSuggestions(false), 120)}
+              onChange={(event) => handlePatientSearchChange(event.target.value)}
+              onFocus={() => {
+                if (!lockedPatientId) {
+                  setShowPatientSuggestions(Boolean(patientSearchDraft.trim()));
+                }
+              }}
+              placeholder="Search patient by name"
+              value={patientSearchDraft}
+            />
+            {!lockedPatientId && showPatientSuggestions && patientSearchDraft.trim() && (
+              <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-10 max-h-56 overflow-y-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-[0_12px_24px_rgba(14,41,62,0.14)]">
+                {filteredPatientSuggestions.length ? (
+                  filteredPatientSuggestions.map((patient) => (
+                    <button
+                      key={`new-appointment-patient-${patient.id}`}
+                      className="flex w-full items-start justify-between gap-3 border-b border-[var(--line-soft)] px-3 py-2 text-left last:border-b-0 hover:bg-[rgba(13,121,191,0.08)]"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSelectPatient(patient)}
+                      type="button"
+                    >
+                      <span className="font-medium">{patient.fullName}</span>
+                      <span className="shrink-0 text-xs text-[var(--text-muted)]">
+                        DOI {formatUsDateFromIso(patient.dateOfLoss)}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-3 py-2 text-sm text-[var(--text-muted)]">No matching patients.</p>
+                )}
+              </div>
+            )}
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Provider *</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              list="new-appointment-modal-provider-list"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, provider: event.target.value }))
+              }
+              value={draft.provider}
+            />
+            <datalist id="new-appointment-modal-provider-list">
+              {providers.map((provider) => (
+                <option key={`provider-option-${provider}`} value={provider} />
+              ))}
+            </datalist>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Location *</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              list="new-appointment-modal-location-list"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, location: event.target.value }))
+              }
+              value={draft.location}
+            />
+            <datalist id="new-appointment-modal-location-list">
+              {locations.map((location) => (
+                <option key={`location-option-${location}`} value={location} />
+              ))}
+            </datalist>
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Type *</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => {
+                const nextTypeName = event.target.value;
+                const matchedType = appointmentTypeByName.get(nextTypeName.toLowerCase());
+                setDraft((current) => {
+                  if (!matchedType) {
+                    return { ...current, appointmentType: nextTypeName };
+                  }
+                  return {
+                    ...current,
+                    appointmentType: nextTypeName,
+                    ...toDurationParts(matchedType.durationMin),
+                  };
+                });
+              }}
+              value={draft.appointmentType}
+            >
+              {appointmentTypes.map((type) => (
+                <option key={`type-option-${type.id}`} value={type.name}>
+                  {type.name}
+                </option>
+              ))}
+            </select>
+            {selectedDraftType && (
+              <span className="inline-flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full border border-[var(--line-soft)]"
+                  style={{ backgroundColor: selectedDraftType.color }}
+                />
+                Default duration: {formatDurationMinutes(selectedDraftType.durationMin)}
+              </span>
+            )}
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Case</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, caseLabel: event.target.value }))
+              }
+              placeholder="Auto-filled from DOI + patient name (example: 072726DOJO)"
+              value={draft.caseLabel}
+            />
+          </label>
+
+          <label className="grid gap-1 md:col-span-2">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Scheduled Room</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, room: event.target.value }))
+              }
+              value={draft.room}
+            >
+              <option value="">No room</option>
+              {roomOptions.map((roomName) => (
+                <option key={`schedule-room-option-${roomName}`} value={roomName}>
+                  {roomName}
+                </option>
+              ))}
+            </select>
+            {roomOptions.length > 0 ? (
+              <span className="text-xs text-[var(--text-muted)]">
+                Add/edit rooms in Settings → Schedule Settings → Room Settings.
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--text-muted)]">
+                No rooms configured yet. You can add them in Settings.
+              </span>
+            )}
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <button
+            className={`rounded-xl border px-4 py-3 text-left font-semibold ${
+              !draft.isRecurring
+                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.1)]"
+                : "border-[var(--line-soft)] bg-[var(--bg-soft)]"
+            }`}
+            onClick={() => setDraft((current) => ({ ...current, isRecurring: false }))}
+            type="button"
+          >
+            One-Time Appointment
+          </button>
+          <button
+            className={`rounded-xl border px-4 py-3 text-left font-semibold ${
+              draft.isRecurring
+                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.1)]"
+                : "border-[var(--line-soft)] bg-[var(--bg-soft)]"
+            }`}
+            onClick={() => setDraft((current) => ({ ...current, isRecurring: true }))}
+            type="button"
+          >
+            Recurring Series
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <label className="grid gap-1 md:col-span-2">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Start Date *</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => {
+                const nextStartDate = event.target.value;
+                const nextStartDay = getDayOfWeek(nextStartDate);
+                setDraft((current) => ({
+                  ...current,
+                  startDate: nextStartDate,
+                  recurDays:
+                    current.isRecurring && current.recurUnit === "weeks"
+                      ? current.recurDays
+                      : [nextStartDay],
+                  recurEndDate:
+                    current.recurrenceEndMode === "date" && current.recurEndDate < nextStartDate
+                      ? addDays(nextStartDate, 30)
+                      : current.recurEndDate,
+                }));
+              }}
+              type="date"
+              value={draft.startDate}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time *</span>
+            <input
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, startTime: event.target.value }))
+              }
+              step={scheduleSettings.appointmentIntervalMin * 60}
+              type="time"
+              value={draft.startTime}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Duration</span>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    durationHours: Number(event.target.value),
+                  }))
+                }
+                value={draft.durationHours}
+              >
+                <option value={0}>0 hr</option>
+                <option value={1}>1 hr</option>
+                <option value={2}>2 hr</option>
+                <option value={3}>3 hr</option>
+                <option value={4}>4 hr</option>
+              </select>
+              <input
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
+                max={59}
+                min={0}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    durationMinutes: Math.max(0, Math.min(59, Number(event.target.value) || 0)),
+                  }))
+                }
+                type="number"
+                value={draft.durationMinutes}
+              />
+            </div>
+          </label>
+        </div>
+
+        {draft.isRecurring && (
+          <div className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+            <div className="grid gap-3 md:grid-cols-5">
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Recurs Every</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  min={1}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      recurInterval: Math.max(1, Number(event.target.value) || 1),
+                    }))
+                  }
+                  type="number"
+                  value={draft.recurInterval}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Unit</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(event) =>
+                    setDraft((current) => {
+                      const nextUnit = event.target.value as RecurrenceUnit;
+                      if (nextUnit !== "weeks") {
+                        return {
+                          ...current,
+                          recurUnit: nextUnit,
+                        };
+                      }
+
+                      const filteredDays = current.recurDays.filter((day) => openRecurringDays.has(day));
+                      const startDay = getDayOfWeek(current.startDate);
+                      const nextDays =
+                        filteredDays.length > 0
+                          ? filteredDays
+                          : openRecurringDays.has(startDay)
+                            ? [startDay]
+                            : [];
+
+                      return {
+                        ...current,
+                        recurUnit: nextUnit,
+                        recurDays: nextDays,
+                      };
+                    })
+                  }
+                  value={draft.recurUnit}
+                >
+                  <option value="days">Day(s)</option>
+                  <option value="weeks">Week(s)</option>
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Ends By</span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(event) =>
+                    setDraft((current) => {
+                      const nextMode = event.target.value as RecurrenceEndMode;
+                      if (nextMode === "date") {
+                        return {
+                          ...current,
+                          recurrenceEndMode: nextMode,
+                          recurEndDate:
+                            current.recurEndDate < current.startDate
+                              ? addDays(current.startDate, 30)
+                              : current.recurEndDate,
+                        };
+                      }
+                      return {
+                        ...current,
+                        recurrenceEndMode: nextMode,
+                        recurVisitCount: Math.max(1, Math.round(current.recurVisitCount || 1)),
+                      };
+                    })
+                  }
+                  value={draft.recurrenceEndMode}
+                >
+                  <option value="date">Date</option>
+                  <option value="visits">Visits</option>
+                </select>
+              </label>
+              {draft.recurrenceEndMode === "date" ? (
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">End Date *</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    min={draft.startDate}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        recurEndDate: event.target.value,
+                      }))
+                    }
+                    type="date"
+                    value={draft.recurEndDate}
+                  />
+                </label>
+              ) : (
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">Visits *</span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    min={1}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        recurVisitCount: Math.max(1, Number(event.target.value) || 1),
+                      }))
+                    }
+                    type="number"
+                    value={draft.recurVisitCount}
+                  />
+                </label>
+              )}
+            </div>
+
+            {draft.recurUnit === "weeks" && (
+              <div className="mt-3">
+                <p className="mb-2 text-sm font-semibold text-[var(--text-muted)]">On</p>
+                <div className="flex flex-wrap gap-2">
+                  {dayToggleOptions.map((option) => {
+                    const isOpenDay = openRecurringDays.has(option.day);
+                    const isSelected =
+                      isOpenDay && draft.recurDays.includes(option.day);
+                    return (
+                      <button
+                        key={`recur-day-${option.day}`}
+                        className={`flex h-10 min-w-10 items-center justify-center rounded-full border px-2 text-sm font-semibold ${
+                          isSelected
+                            ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                            : isOpenDay
+                              ? "border-[var(--line-soft)] bg-[#dce4ea] text-[var(--text-main)]"
+                              : "cursor-not-allowed border-[var(--line-soft)] bg-[#eef2f5] text-[#9ca9b5]"
+                        }`}
+                        disabled={!isOpenDay}
+                        onClick={() =>
+                          setDraft((current) => {
+                            if (!isOpenDay) {
+                              return current;
+                            }
+                            const exists = current.recurDays.includes(option.day);
+                            const nextDays = exists
+                              ? current.recurDays.filter((entry) => entry !== option.day)
+                              : [...current.recurDays, option.day];
+                            return {
+                              ...current,
+                              recurDays: nextDays,
+                            };
+                          })
+                        }
+                        type="button"
+                        title={
+                          isOpenDay
+                            ? weekdayLabels[option.day]
+                            : `${weekdayLabels[option.day]} (closed in office hours)`
+                        }
+                      >
+                        {option.short}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  Only office-open days are selectable.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-2">
+          <label className="inline-flex items-center gap-2 text-sm font-semibold">
+            <input
+              checked={draft.walkIn}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, walkIn: event.target.checked }))
+              }
+              type="checkbox"
+            />
+            Walk-In
+          </label>
+
+          {scheduleSettings.allowOverride && (
+            <label className="inline-flex items-center gap-2 text-sm font-semibold">
+              <input
+                checked={draft.overrideOfficeHours}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    overrideOfficeHours: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              Override office hours for this booking
+            </label>
+          )}
+        </div>
+
+        <label className="mt-4 grid gap-1">
+          <span className="text-sm font-semibold text-[var(--text-muted)]">Appointment Note</span>
+          <textarea
+            className="min-h-[88px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+            maxLength={500}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, note: event.target.value }))
+            }
+            value={draft.note}
+          />
+        </label>
+
+        {error && (
+          <p className="mt-3 text-sm font-semibold text-[#b43b34]">{error}</p>
+        )}
+
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            onClick={onClose}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+            onClick={handleSubmit}
+            type="button"
+          >
+            Save Appointment
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}

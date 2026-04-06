@@ -15,6 +15,7 @@ type RichTextTemplateEditorProps = {
   minHeightClassName?: string;
   className?: string;
   placeholder?: string;
+  onElementClick?: (target: HTMLElement) => void;
 };
 
 function escapeHtml(value: string) {
@@ -81,6 +82,7 @@ export const RichTextTemplateEditor = forwardRef<
     minHeightClassName = "min-h-[320px]",
     className = "",
     placeholder = "Start writing...",
+    onElementClick,
   },
   ref,
 ) {
@@ -348,6 +350,11 @@ export const RichTextTemplateEditor = forwardRef<
         onFocus={() => { isFocusedRef.current = true; }}
         onBlur={() => { isFocusedRef.current = false; emitChange(); }}
         onInput={emitChange}
+        onClick={(event) => {
+          if (onElementClick && event.target instanceof HTMLElement) {
+            onElementClick(event.target);
+          }
+        }}
         spellCheck
         style={{ fontFamily }}
         suppressContentEditableWarning
