@@ -3680,6 +3680,47 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             <div className="mt-3 grid gap-4 xl:grid-cols-3">
               <div className="space-y-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                 <p className="text-sm font-semibold">Add Diagnosis Macro</p>
+                <div className="relative">
+                  <input
+                    className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(event) => {
+                      setDiagnosisListSearch(event.target.value);
+                      setDiagnosisMacroIdDraft("");
+                    }}
+                    placeholder="Search codes..."
+                    value={diagnosisListSearch}
+                  />
+                  {diagnosisListSearch.trim() && (() => {
+                    const q = diagnosisListSearch.trim().toLowerCase();
+                    const results = activeDiagnosisMacros.filter(
+                      (entry) =>
+                        entry.code.toLowerCase().includes(q) ||
+                        entry.description.toLowerCase().includes(q),
+                    );
+                    return results.length > 0 ? (
+                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
+                        {results.map((entry) => (
+                          <button
+                            key={`dx-search-${entry.id}`}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)] ${diagnosisMacroIdDraft === entry.id ? "bg-[var(--bg-soft)] font-semibold" : ""}`}
+                            onClick={() => {
+                              setDiagnosisMacroIdDraft(entry.id);
+                              setDiagnosisListSearch("");
+                            }}
+                            type="button"
+                          >
+                            <span className="font-semibold">{entry.code}</span>{" "}
+                            <span className="text-[var(--text-muted)]">- {entry.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="absolute z-20 mt-1 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--text-muted)] shadow-lg">
+                        No matching codes
+                      </div>
+                    );
+                  })()}
+                </div>
                 <select
                   className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
                   onChange={(event) => setDiagnosisMacroIdDraft(event.target.value)}
@@ -3750,18 +3791,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             {diagnosisMessage && <p className="mt-3 text-sm font-semibold text-[var(--brand-primary)]">{diagnosisMessage}</p>}
 
-            {patientDiagnoses.length > 0 && (
-              <div className="mt-3">
-                <input
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-                  onChange={(event) => setDiagnosisListSearch(event.target.value)}
-                  placeholder="Search diagnosis codes..."
-                  value={diagnosisListSearch}
-                />
-              </div>
-            )}
-
-            <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)] bg-white">
+            <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--line-soft)] bg-white">
               <table className="min-w-full border-collapse text-sm">
                 <thead>
                   <tr className="bg-[var(--bg-soft)] text-left">
@@ -3774,70 +3804,56 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    const query = diagnosisListSearch.trim().toLowerCase();
-                    const filtered = query
-                      ? patientDiagnoses.filter(
-                          (entry) =>
-                            entry.code.toLowerCase().includes(query) ||
-                            entry.description.toLowerCase().includes(query) ||
-                            entry.source.toLowerCase().includes(query),
-                        )
-                      : patientDiagnoses;
-                    return filtered.map((entry) => {
-                      const realIndex = patientDiagnoses.indexOf(entry);
-                      const isDragging = dxDragIndex === realIndex;
-                      const isDragOver = dxDragOverIndex === realIndex && dxDragIndex !== realIndex;
-                      return (
-                        <tr
-                          key={entry.id}
-                          className={`border-t border-[var(--line-soft)] transition-colors ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-blue-50" : ""}`}
-                          draggable={!query}
-                          onDragStart={() => setDxDragIndex(realIndex)}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            setDxDragOverIndex(realIndex);
-                          }}
-                          onDragLeave={() => {
-                            if (dxDragOverIndex === realIndex) setDxDragOverIndex(null);
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            if (dxDragIndex !== null && dxDragIndex !== realIndex) {
-                              reorderDiagnoses(dxDragIndex, realIndex);
-                            }
-                            setDxDragIndex(null);
-                            setDxDragOverIndex(null);
-                          }}
-                          onDragEnd={() => {
-                            setDxDragIndex(null);
-                            setDxDragOverIndex(null);
-                          }}
-                        >
-                          <td className="px-1 py-2 text-center cursor-grab active:cursor-grabbing text-[var(--text-muted)]">
-                            {!query && (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 inline-block">
-                                <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 5A.75.75 0 012.75 9h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 9.75zm0 5a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-[var(--text-muted)] text-xs font-semibold">{realIndex + 1}</td>
-                          <td className="px-3 py-2 font-semibold">{entry.code}</td>
-                          <td className="px-3 py-2">{entry.description}</td>
-                          <td className="px-3 py-2 text-[var(--text-muted)]">{entry.source}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                              onClick={() => { if (window.confirm(`Remove diagnosis "${entry.code}"?`)) removeDiagnosis(entry.id); }}
-                              type="button"
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
+                  {patientDiagnoses.map((entry, idx) => {
+                    const isDragging = dxDragIndex === idx;
+                    const isDragOver = dxDragOverIndex === idx && dxDragIndex !== idx;
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={`border-t border-[var(--line-soft)] transition-colors ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-blue-50" : ""}`}
+                        draggable
+                        onDragStart={() => setDxDragIndex(idx)}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setDxDragOverIndex(idx);
+                        }}
+                        onDragLeave={() => {
+                          if (dxDragOverIndex === idx) setDxDragOverIndex(null);
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (dxDragIndex !== null && dxDragIndex !== idx) {
+                            reorderDiagnoses(dxDragIndex, idx);
+                          }
+                          setDxDragIndex(null);
+                          setDxDragOverIndex(null);
+                        }}
+                        onDragEnd={() => {
+                          setDxDragIndex(null);
+                          setDxDragOverIndex(null);
+                        }}
+                      >
+                        <td className="px-1 py-2 text-center cursor-grab active:cursor-grabbing text-[var(--text-muted)]">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 inline-block">
+                            <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 5A.75.75 0 012.75 9h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 9.75zm0 5a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+                          </svg>
+                        </td>
+                        <td className="px-3 py-2 text-[var(--text-muted)] text-xs font-semibold">{idx + 1}</td>
+                        <td className="px-3 py-2 font-semibold">{entry.code}</td>
+                        <td className="px-3 py-2">{entry.description}</td>
+                        <td className="px-3 py-2 text-[var(--text-muted)]">{entry.source}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
+                            onClick={() => { if (window.confirm(`Remove diagnosis "${entry.code}"?`)) removeDiagnosis(entry.id); }}
+                            type="button"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {patientDiagnoses.length === 0 && (
                     <tr>
                       <td className="px-3 py-3 text-[var(--text-muted)]" colSpan={6}>
