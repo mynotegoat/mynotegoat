@@ -102,11 +102,27 @@ export function usePatientDiagnoses(patientId: string) {
     [update],
   );
 
+  const reorderDiagnoses = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      update((current) => {
+        if (fromIndex < 0 || fromIndex >= current.length || toIndex < 0 || toIndex >= current.length || fromIndex === toIndex) {
+          return current;
+        }
+        const next = [...current];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        return next;
+      });
+    },
+    [update],
+  );
+
   return {
     entries,
     addDiagnosis,
     addBulkDiagnoses,
     removeDiagnosis,
+    reorderDiagnoses,
   };
 }
 
