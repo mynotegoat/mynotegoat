@@ -1477,6 +1477,34 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     >
                       {selectedEncounter.signed ? "Reopen Encounter" : "Close Encounter"}
                     </button>
+                    {!selectedEncounter.signed && (
+                      <button
+                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
+                        disabled={!linkedAppointmentForStatus}
+                        onClick={() => {
+                          setSigned(selectedEncounter.id, true);
+                          if (linkedAppointmentForStatus) {
+                            updateAppointment(linkedAppointmentForStatus.id, (current) => ({
+                              ...current,
+                              status: "Check Out",
+                            }));
+                            setMessage(
+                              `Encounter closed and ${selectedEncounter.patientName} checked out.`,
+                            );
+                          } else {
+                            setMessage("Encounter closed.");
+                          }
+                        }}
+                        title={
+                          linkedAppointmentForStatus
+                            ? "Close encounter and mark linked appointment as Check Out"
+                            : "No linked appointment found for this encounter date"
+                        }
+                        type="button"
+                      >
+                        Close + Check Out
+                      </button>
+                    )}
                     <button
                       className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
                       onClick={handleDeleteEncounter}
