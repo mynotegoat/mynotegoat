@@ -1037,6 +1037,79 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setMessage(`Copied ${sectionLabels[activeSection]} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`);
   };
 
+  const handleCopyAllSoapFromSelected = () => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to copy prior SOAP text.");
+      return;
+    }
+    if (!saltSourceEncounter) {
+      setMessage("Select a prior encounter first.");
+      return;
+    }
+    const sectionsWithText = encounterSections.filter(
+      (section) => saltSourceEncounter.soap[section].trim().length > 0,
+    );
+    if (sectionsWithText.length === 0) {
+      setMessage(`No SOAP text found on ${saltSourceEncounter.encounterDate}.`);
+      return;
+    }
+    const hasExistingText = encounterSections.some(
+      (section) => selectedEncounter.soap[section].trim().length > 0,
+    );
+    if (hasExistingText) {
+      const confirmed = window.confirm(
+        `Replace ALL current SOAP sections with the notes from ${saltSourceEncounter.encounterDate}?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    const macroRunWrapperPattern =
+      /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
+    let totalSections = 0;
+    let totalMacros = 0;
+    sectionsWithText.forEach((section) => {
+      const sourceText = saltSourceEncounter.soap[section].trim();
+      const idRewrites: Array<{ oldId: string; newId: string }> = [];
+      const rewrittenText = sourceText.replace(
+        macroRunWrapperPattern,
+        (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
+          const newId = createEncounterMacroRunId();
+          idRewrites.push({ oldId, newId });
+          return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
+        },
+      );
+      setSoapSection(selectedEncounter.id, section, rewrittenText);
+      idRewrites.forEach(({ oldId, newId }) => {
+        const sourceRun = saltSourceEncounter.macroRuns.find((entry) => entry.id === oldId);
+        if (!sourceRun) {
+          return;
+        }
+        const innerText = sourceRun.generatedText
+          .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+          .replace(/<\/span>$/i, "");
+        addMacroRun(selectedEncounter.id, {
+          id: newId,
+          section,
+          macroId: sourceRun.macroId,
+          macroName: sourceRun.macroName,
+          body: sourceRun.body,
+          answers: { ...sourceRun.answers },
+          generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</span>`,
+        });
+        totalMacros += 1;
+      });
+      totalSections += 1;
+    });
+    const macroSuffix = totalMacros > 0 ? ` (with ${totalMacros} editable macro${totalMacros === 1 ? "" : "s"})` : "";
+    setMessage(
+      `Copied ${totalSections} SOAP section${totalSections === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`,
+    );
+  };
+
   const handleCopyChargesFromSelected = () => {
     if (!selectedEncounter) {
       return;
@@ -1661,6 +1734,23 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       type="button"
                     >
                       Copy ({sectionLabels[activeSection]})
+                    </button>
+                    <button
+                      className="rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-3 py-2 text-sm font-semibold text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                      disabled={
+                        selectedEncounter.signed ||
+                        priorPatientEncounters.length === 0 ||
+                        !saltSourceEncounter
+                      }
+                      onClick={handleCopyAllSoapFromSelected}
+                      title={
+                        saltSourceEncounter
+                          ? `Copy all SOAP sections from ${saltSourceEncounter.encounterDate}`
+                          : "Select a prior encounter to copy SOAP from"
+                      }
+                      type="button"
+                    >
+                      Copy SOAP
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-[var(--text-muted)]">
