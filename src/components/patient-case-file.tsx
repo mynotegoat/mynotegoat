@@ -19,7 +19,7 @@ import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
 import { useTasks } from "@/hooks/use-tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import { renderDocumentTemplate, type DocumentTemplateScope } from "@/lib/document-templates";
-import { encounterSections } from "@/lib/encounter-notes";
+import { createEncounterMacroRunId, encounterSections } from "@/lib/encounter-notes";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 import { type QuickStatOptionKey } from "@/lib/quick-stats-settings";
 import { buildNarrativeReportContext, renderNarrativeReportBody } from "@/lib/report-generator";
@@ -689,7 +689,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { addTask } = useTasks();
-  const { encountersByNewest, createEncounter, setSoapSection } = useEncounterNotes();
+  const { encountersByNewest, createEncounter, setSoapSection, addMacroRun } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
   const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
@@ -2416,12 +2416,43 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
       if (sourceEncounter) {
         let copiedCount = 0;
+        const macroRunWrapperPattern =
+          /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
         selectedSections.forEach((section) => {
           const sourceText = sourceEncounter.soap[section].trim();
           if (!sourceText) {
             return;
           }
-          setSoapSection(newEncounterId, section, sourceText);
+          // Re-key macro snippets so taps re-open the picker on the new encounter,
+          // then carry the underlying macro runs over.
+          const idRewrites: Array<{ oldId: string; newId: string }> = [];
+          const rewrittenText = sourceText.replace(
+            macroRunWrapperPattern,
+            (_match, beforeAttrs: string, oldId: string, afterAttrs: string, inner: string) => {
+              const newId = createEncounterMacroRunId();
+              idRewrites.push({ oldId, newId });
+              return `<span${beforeAttrs}data-macro-run-id="${newId}"${afterAttrs}>${inner}</span>`;
+            },
+          );
+          setSoapSection(newEncounterId, section, rewrittenText);
+          idRewrites.forEach(({ oldId, newId }) => {
+            const sourceRun = sourceEncounter.macroRuns.find((entry) => entry.id === oldId);
+            if (!sourceRun) {
+              return;
+            }
+            const innerText = sourceRun.generatedText
+              .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+              .replace(/<\/span>$/i, "");
+            addMacroRun(newEncounterId, {
+              id: newId,
+              section,
+              macroId: sourceRun.macroId,
+              macroName: sourceRun.macroName,
+              body: sourceRun.body,
+              answers: { ...sourceRun.answers },
+              generatedText: `<span class="macro-snippet" data-macro-run-id="${newId}">${innerText}</span>`,
+            });
+          });
           copiedCount += 1;
         });
         if (copiedCount > 0) {

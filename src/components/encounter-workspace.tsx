@@ -1001,8 +1001,40 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         return;
       }
     }
-    setSoapSection(selectedEncounter.id, activeSection, sourceText);
-    setMessage(`Copied ${sectionLabels[activeSection]} from ${saltSourceEncounter.encounterDate}.`);
+    // Re-key any macro snippets so they belong to the destination encounter,
+    // then carry the underlying macro runs over so taps still re-open the picker.
+    const macroRunWrapperPattern = /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
+    const idRewrites: Array<{ oldId: string; newId: string }> = [];
+    const rewrittenText = sourceText.replace(
+      macroRunWrapperPattern,
+      (_match, beforeAttrs: string, oldId: string, afterAttrs: string, inner: string) => {
+        const newId = createEncounterMacroRunId();
+        idRewrites.push({ oldId, newId });
+        return `<span${beforeAttrs}data-macro-run-id="${newId}"${afterAttrs}>${inner}</span>`;
+      },
+    );
+    setSoapSection(selectedEncounter.id, activeSection, rewrittenText);
+    let copiedRunCount = 0;
+    idRewrites.forEach(({ oldId, newId }) => {
+      const sourceRun = saltSourceEncounter.macroRuns.find((entry) => entry.id === oldId);
+      if (!sourceRun) {
+        return;
+      }
+      addMacroRun(selectedEncounter.id, {
+        id: newId,
+        section: activeSection,
+        macroId: sourceRun.macroId,
+        macroName: sourceRun.macroName,
+        body: sourceRun.body,
+        answers: { ...sourceRun.answers },
+        generatedText: `<span class="macro-snippet" data-macro-run-id="${newId}">${sourceRun.generatedText
+          .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+          .replace(/<\/span>$/i, "")}</span>`,
+      });
+      copiedRunCount += 1;
+    });
+    const macroSuffix = copiedRunCount > 0 ? ` (with ${copiedRunCount} editable macro${copiedRunCount === 1 ? "" : "s"})` : "";
+    setMessage(`Copied ${sectionLabels[activeSection]} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`);
   };
 
   const handleDeleteEncounter = () => {
