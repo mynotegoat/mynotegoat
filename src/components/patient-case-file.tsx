@@ -2428,10 +2428,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           const idRewrites: Array<{ oldId: string; newId: string }> = [];
           const rewrittenText = sourceText.replace(
             macroRunWrapperPattern,
-            (_match, beforeAttrs: string, oldId: string, afterAttrs: string, inner: string) => {
+            (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
               const newId = createEncounterMacroRunId();
               idRewrites.push({ oldId, newId });
-              return `<span${beforeAttrs}data-macro-run-id="${newId}"${afterAttrs}>${inner}</span>`;
+              return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
             },
           );
           setSoapSection(newEncounterId, section, rewrittenText);
@@ -2450,7 +2450,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               macroName: sourceRun.macroName,
               body: sourceRun.body,
               answers: { ...sourceRun.answers },
-              generatedText: `<span class="macro-snippet" data-macro-run-id="${newId}">${innerText}</span>`,
+              generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</span>`,
             });
           });
           copiedCount += 1;

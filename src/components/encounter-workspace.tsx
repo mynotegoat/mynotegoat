@@ -833,7 +833,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       return;
     }
     const snippetId = existingRun?.id ?? createEncounterMacroRunId();
-    const generatedText = `<span class="macro-snippet" data-macro-run-id="${snippetId}">${cleanedText}</span>`;
+    const generatedText = `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${snippetId}">${cleanedText}</span>`;
     if (existingRun) {
       const currentSectionText = selectedEncounter.soap[activeSection];
       // Try to locate the existing wrapped snippet by its id and replace it in place
@@ -1007,10 +1007,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     const idRewrites: Array<{ oldId: string; newId: string }> = [];
     const rewrittenText = sourceText.replace(
       macroRunWrapperPattern,
-      (_match, beforeAttrs: string, oldId: string, afterAttrs: string, inner: string) => {
+      (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
         const newId = createEncounterMacroRunId();
         idRewrites.push({ oldId, newId });
-        return `<span${beforeAttrs}data-macro-run-id="${newId}"${afterAttrs}>${inner}</span>`;
+        return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
       },
     );
     setSoapSection(selectedEncounter.id, activeSection, rewrittenText);
@@ -1027,7 +1027,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         macroName: sourceRun.macroName,
         body: sourceRun.body,
         answers: { ...sourceRun.answers },
-        generatedText: `<span class="macro-snippet" data-macro-run-id="${newId}">${sourceRun.generatedText
+        generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${sourceRun.generatedText
           .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
           .replace(/<\/span>$/i, "")}</span>`,
       });

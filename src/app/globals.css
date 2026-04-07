@@ -214,6 +214,8 @@ a {
   padding: 0 2px;
   cursor: pointer;
   transition: background-color 120ms ease;
+  user-select: none;
+  -webkit-user-modify: read-only;
 }
 
 .rich-text-editor .macro-snippet:hover {
