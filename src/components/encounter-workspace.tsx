@@ -17,8 +17,10 @@ import {
   type EncounterSection,
 } from "@/lib/encounter-notes";
 import {
+  formatMacroAnswerValue,
   groupMacrosByFolder,
-  renderMacroTemplate,
+  renderMacroPromptSpan,
+  renderMacroTemplateWithPromptSpans,
   type MacroAnswerMap,
   type MacroTemplate,
 } from "@/lib/macro-templates";
@@ -30,6 +32,28 @@ type EncounterWorkspaceProps = {
   initialPatientId?: string;
   initialEncounterId?: string;
 };
+
+/**
+ * Walk an HTML string and replace every `data-macro-run-id="X"` attribute
+ * with a freshly generated id, returning the rewritten HTML and a map from
+ * old ids to new ids. Used by SALT to copy macro snippets from one encounter
+ * to another while keeping each macro run uniquely tied to its destination.
+ */
+function rewriteMacroRunIds(html: string): { html: string; idMap: Map<string, string> } {
+  const idMap = new Map<string, string>();
+  const next = html.replace(
+    /data-macro-run-id=["']([^"']+)["']/g,
+    (_match, oldId: string) => {
+      let newId = idMap.get(oldId);
+      if (!newId) {
+        newId = createEncounterMacroRunId();
+        idMap.set(oldId, newId);
+      }
+      return `data-macro-run-id="${newId}"`;
+    },
+  );
+  return { html: next, idMap };
+}
 
 function getNames(fullName: string) {
   const [lastName = "", firstName = ""] = fullName.split(",").map((value) => value.trim());
@@ -554,6 +578,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const [runMacroId, setRunMacroId] = useState<string | null>(null);
   const [editingMacroRunId, setEditingMacroRunId] = useState<string | null>(null);
   const [runMacroAnswers, setRunMacroAnswers] = useState<MacroAnswerMap>({});
+  // When set, the macro picker dialog is editing a single prompt only — used
+  // when the user taps an inline prompt span in the SOAP editor and wants to
+  // change just that one answer without re-running the whole macro.
+  const [editingMacroPromptId, setEditingMacroPromptId] = useState<string | null>(null);
   const [saltSourceEncounterIdDraft, setSaltSourceEncounterIdDraft] = useState("");
 
   const selectedEncounterPatientId = useMemo(() => {
@@ -822,41 +850,60 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (typeof specialistAnswer === "string" && specialistAnswer.trim()) {
       context.SPECIALIST_REFERRED = specialistAnswer.trim();
     }
-    const rawGeneratedText = renderMacroTemplate(macro.body, answers, context);
-    // Strip leading/trailing empty HTML paragraphs that cause blank spacing
-    const cleanedText = rawGeneratedText
-      .replace(/^(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+/gi, "")
-      .replace(/(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+$/gi, "")
-      .trim();
-    if (!cleanedText) {
+    const snippetId = existingRun?.id ?? createEncounterMacroRunId();
+    // Render the full macro body with each prompt answer wrapped in an inline
+    // atomic span. The static parts of the macro stay editable; only the
+    // answer pills are read-only and re-tappable.
+    const generatedText = renderMacroTemplateWithPromptSpans(
+      macro.body,
+      answers,
+      context,
+      snippetId,
+    );
+    if (!generatedText) {
       setMessage("Generated macro output was empty.");
       return;
     }
-    const snippetId = existingRun?.id ?? createEncounterMacroRunId();
-    const generatedText = `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${snippetId}">${cleanedText}</div>`;
+
     if (existingRun) {
       const currentSectionText = selectedEncounter.soap[activeSection];
-      // Try to locate the existing wrapped snippet by its id and replace it in place
-      const wrapperPattern = new RegExp(
-        `<(?:span|div)[^>]*data-macro-run-id=["']${snippetId}["'][^>]*>[\\s\\S]*?</(?:span|div)>`,
+      let nextSectionText = currentSectionText;
+
+      // 1) New format — surgical per-prompt-span replacement so the user's
+      //    edits to the static text are preserved.
+      const hasPromptSpans = new RegExp(
+        `data-macro-run-id=["']${snippetId}["'][^>]*data-prompt-id=`,
+        "i",
+      ).test(currentSectionText);
+
+      // 2) Legacy format — old single wrapper around the entire macro output.
+      const legacyWrapperPattern = new RegExp(
+        `<(?:div|span)[^>]*data-macro-run-id=["']${snippetId}["'](?![^>]*data-prompt-id)[^>]*>[\\s\\S]*?</(?:div|span)>`,
         "i",
       );
-      let nextSectionText: string;
-      if (wrapperPattern.test(currentSectionText)) {
-        nextSectionText = currentSectionText.replace(wrapperPattern, generatedText);
+
+      if (hasPromptSpans) {
+        macro.questions.forEach((question) => {
+          const replacement = renderMacroPromptSpan(
+            snippetId,
+            question.id,
+            formatMacroAnswerValue(answers[question.id]),
+          );
+          const promptPattern = new RegExp(
+            `<span[^>]*data-macro-run-id=["']${snippetId}["'][^>]*data-prompt-id=["']${question.id}["'][^>]*>[\\s\\S]*?</span>`,
+            "gi",
+          );
+          nextSectionText = nextSectionText.replace(promptPattern, replacement);
+        });
+      } else if (legacyWrapperPattern.test(currentSectionText)) {
+        nextSectionText = currentSectionText.replace(legacyWrapperPattern, generatedText);
       } else {
-        // Fallback: try matching the previously stored generatedText literally
-        const existingSnippet = existingRun.generatedText;
-        const existingIndex = existingSnippet ? currentSectionText.indexOf(existingSnippet) : -1;
-        nextSectionText =
-          existingIndex >= 0
-            ? `${currentSectionText.slice(0, existingIndex)}${generatedText}${currentSectionText.slice(
-                existingIndex + existingSnippet.length,
-              )}`
-            : currentSectionText.trim()
-              ? `${currentSectionText.trim()}\n\n${generatedText}`
-              : generatedText;
+        // Couldn't locate the original macro output — append fresh.
+        nextSectionText = currentSectionText.trim()
+          ? `${currentSectionText.trim()}\n\n${generatedText}`
+          : generatedText;
       }
+
       setSoapSection(selectedEncounter.id, activeSection, nextSectionText);
       updateMacroRun(selectedEncounter.id, existingRun.id, {
         answers: { ...answers },
@@ -905,7 +952,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setRunMacroId(macro.id);
   };
 
-  const handleEditExistingMacroRun = (run: EncounterMacroRunRecord) => {
+  const handleEditExistingMacroRun = (
+    run: EncounterMacroRunRecord,
+    onlyPromptId: string | null = null,
+  ) => {
     if (!selectedEncounter) {
       return;
     }
@@ -942,6 +992,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       initialAnswers.__specialist_referred__ = (typeof saved === "string" ? saved : "") || specialistContactNames[0] || "";
     }
     setEditingMacroRunId(run.id);
+    setEditingMacroPromptId(onlyPromptId);
     setRunMacroAnswers(initialAnswers);
     setRunMacroId(macro.id);
   };
@@ -962,7 +1013,11 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (!matchingRun) {
       return;
     }
-    handleEditExistingMacroRun(matchingRun);
+    // New format: tapping a single prompt span opens an inline edit for just
+    // that question. Legacy wrappers (no data-prompt-id) fall back to the
+    // full-macro picker.
+    const promptId = wrapper.getAttribute("data-prompt-id");
+    handleEditExistingMacroRun(matchingRun, promptId);
   };
 
   const handleConfirmMacroRun = () => {
@@ -972,6 +1027,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     applyMacroTemplate(runMacro, runMacroAnswers, editingMacroRun);
     setRunMacroId(null);
     setEditingMacroRunId(null);
+    setEditingMacroPromptId(null);
     setRunMacroAnswers({});
   };
 
@@ -1001,21 +1057,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         return;
       }
     }
-    // Re-key any macro snippets so they belong to the destination encounter,
-    // then carry the underlying macro runs over so taps still re-open the picker.
-    const macroRunWrapperPattern = /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
-    const idRewrites: Array<{ oldId: string; newId: string }> = [];
-    const rewrittenText = sourceText.replace(
-      macroRunWrapperPattern,
-      (_match, _tag: string, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
-        const newId = createEncounterMacroRunId();
-        idRewrites.push({ oldId, newId });
-        return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
-      },
-    );
+    // Re-key every macro-run id reference in the source HTML (covers both
+    // the new per-prompt span format and the legacy single-wrapper format),
+    // then carry the underlying macro runs over so taps still re-open the
+    // picker on the destination encounter.
+    const { html: rewrittenText, idMap } = rewriteMacroRunIds(sourceText);
     setSoapSection(selectedEncounter.id, activeSection, rewrittenText);
     let copiedRunCount = 0;
-    idRewrites.forEach(({ oldId, newId }) => {
+    idMap.forEach((newId, oldId) => {
       const sourceRun = saltSourceEncounter.macroRuns.find((entry) => entry.id === oldId);
       if (!sourceRun) {
         return;
@@ -1027,9 +1076,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         macroName: sourceRun.macroName,
         body: sourceRun.body,
         answers: { ...sourceRun.answers },
-        generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${sourceRun.generatedText
-          .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-          .replace(/<\/(?:span|div)>$/i, "")}</div>`,
+        generatedText: sourceRun.generatedText.replace(
+          new RegExp(`data-macro-run-id=["']${oldId}["']`, "g"),
+          `data-macro-run-id="${newId}"`,
+        ),
       });
       copiedRunCount += 1;
     });
@@ -1067,30 +1117,17 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         return;
       }
     }
-    const macroRunWrapperPattern =
-      /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
     let totalSections = 0;
     let totalMacros = 0;
     sectionsWithText.forEach((section) => {
       const sourceText = saltSourceEncounter.soap[section].trim();
-      const idRewrites: Array<{ oldId: string; newId: string }> = [];
-      const rewrittenText = sourceText.replace(
-        macroRunWrapperPattern,
-        (_match, _tag: string, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
-          const newId = createEncounterMacroRunId();
-          idRewrites.push({ oldId, newId });
-          return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
-        },
-      );
+      const { html: rewrittenText, idMap } = rewriteMacroRunIds(sourceText);
       setSoapSection(selectedEncounter.id, section, rewrittenText);
-      idRewrites.forEach(({ oldId, newId }) => {
+      idMap.forEach((newId, oldId) => {
         const sourceRun = saltSourceEncounter.macroRuns.find((entry) => entry.id === oldId);
         if (!sourceRun) {
           return;
         }
-        const innerText = sourceRun.generatedText
-          .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-          .replace(/<\/(?:span|div)>$/i, "");
         addMacroRun(selectedEncounter.id, {
           id: newId,
           section,
@@ -1098,7 +1135,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           macroName: sourceRun.macroName,
           body: sourceRun.body,
           answers: { ...sourceRun.answers },
-          generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</div>`,
+          generatedText: sourceRun.generatedText.replace(
+            new RegExp(`data-macro-run-id=["']${oldId}["']`, "g"),
+            `data-macro-run-id="${newId}"`,
+          ),
         });
         totalMacros += 1;
       });
@@ -2045,13 +2085,18 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           <div className="panel-card max-h-[85vh] w-full max-w-3xl overflow-auto p-4">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-xl font-semibold">
-                {editingMacroRun ? `Edit Macro Answers: ${runMacro.buttonName}` : `Run Macro: ${runMacro.buttonName}`}
+                {editingMacroPromptId
+                  ? `Edit Answer: ${runMacro.questions.find((q) => q.id === editingMacroPromptId)?.label ?? runMacro.buttonName}`
+                  : editingMacroRun
+                    ? `Edit Macro Answers: ${runMacro.buttonName}`
+                    : `Run Macro: ${runMacro.buttonName}`}
               </h4>
               <button
                 className="rounded-lg border border-[var(--line-soft)] px-3 py-1"
                 onClick={() => {
                   setRunMacroId(null);
                   setEditingMacroRunId(null);
+                  setEditingMacroPromptId(null);
                 }}
                 type="button"
               >
@@ -2060,8 +2105,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
             </div>
 
             <div className="space-y-3">
-              {/* Specialist Picker — shown when template uses {{SPECIALIST_REFERRED}} */}
-              {runMacroAnswers.__specialist_referred__ !== undefined && (
+              {/* Specialist Picker — shown when template uses {{SPECIALIST_REFERRED}}.
+                  Hidden when editing a single non-specialist prompt. */}
+              {runMacroAnswers.__specialist_referred__ !== undefined &&
+                (!editingMacroPromptId || editingMacroPromptId === "__specialist_referred__") && (
                 <div className="rounded-xl border-2 border-[#0d79bf] bg-[#e9f4fb] p-3">
                   <p className="text-sm font-semibold">
                     Referring Specialist
@@ -2138,7 +2185,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                 </div>
               )}
 
-              {runMacro.questions.map((question) => (
+              {(editingMacroPromptId
+                ? runMacro.questions.filter((question) => question.id === editingMacroPromptId)
+                : runMacro.questions
+              ).map((question) => (
                 (() => {
                   const normalizedOptions = question.options
                     .map((option) => option.trim())
@@ -2318,6 +2368,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                 onClick={() => {
                   setRunMacroId(null);
                   setEditingMacroRunId(null);
+                  setEditingMacroPromptId(null);
                 }}
                 type="button"
               >

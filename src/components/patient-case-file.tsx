@@ -2416,40 +2416,32 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
       if (sourceEncounter) {
         let copiedCount = 0;
-        const macroRunWrapperPattern =
-          /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
         selectedSections.forEach((section) => {
           const sourceText = sourceEncounter.soap[section].trim();
           if (!sourceText) {
             return;
           }
-          // Re-key macro snippets so taps re-open the picker on the new encounter,
-          // then carry the underlying macro runs over.
-          const idRewrites: Array<{ oldId: string; newId: string }> = [];
+          // Re-key every data-macro-run-id reference in the source HTML
+          // (covers both the new per-prompt span format and the legacy
+          // wrapper format), then carry the underlying macro runs over.
+          const idMap = new Map<string, string>();
           const rewrittenText = sourceText.replace(
-            macroRunWrapperPattern,
-            (
-              _match,
-              _tag: string,
-              _beforeAttrs: string,
-              oldId: string,
-              _afterAttrs: string,
-              inner: string,
-            ) => {
-              const newId = createEncounterMacroRunId();
-              idRewrites.push({ oldId, newId });
-              return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
+            /data-macro-run-id=["']([^"']+)["']/g,
+            (_match, oldId: string) => {
+              let newId = idMap.get(oldId);
+              if (!newId) {
+                newId = createEncounterMacroRunId();
+                idMap.set(oldId, newId);
+              }
+              return `data-macro-run-id="${newId}"`;
             },
           );
           setSoapSection(newEncounterId, section, rewrittenText);
-          idRewrites.forEach(({ oldId, newId }) => {
+          idMap.forEach((newId, oldId) => {
             const sourceRun = sourceEncounter.macroRuns.find((entry) => entry.id === oldId);
             if (!sourceRun) {
               return;
             }
-            const innerText = sourceRun.generatedText
-              .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-              .replace(/<\/(?:span|div)>$/i, "");
             addMacroRun(newEncounterId, {
               id: newId,
               section,
@@ -2457,7 +2449,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               macroName: sourceRun.macroName,
               body: sourceRun.body,
               answers: { ...sourceRun.answers },
-              generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</div>`,
+              generatedText: sourceRun.generatedText.replace(
+                new RegExp(`data-macro-run-id=["']${oldId}["']`, "g"),
+                `data-macro-run-id="${newId}"`,
+              ),
             });
           });
           copiedCount += 1;

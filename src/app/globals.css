@@ -206,6 +206,33 @@ a {
   font-size: 1.1rem;
 }
 
+/* Inline pill: wraps a single answer to a macro prompt. The surrounding
+   macro text is freely editable; only this pill is read-only and tappable
+   to re-open the picker for that one question. */
+.rich-text-editor .macro-prompt {
+  display: inline;
+  background-color: rgba(56, 132, 197, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin: 0 1px;
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+  -webkit-user-modify: read-only;
+  white-space: normal;
+}
+
+.rich-text-editor .macro-prompt:hover {
+  background-color: rgba(56, 132, 197, 0.22);
+  box-shadow: 0 0 0 1px rgba(56, 132, 197, 0.4);
+}
+
+.rich-text-editor .macro-prompt:empty::before {
+  content: "—";
+  opacity: 0.5;
+}
+
+/* Legacy: full-macro wrapper used by previously saved encounters. Keep
+   support so old notes still render and stay tappable. */
 .rich-text-editor .macro-snippet {
   display: block;
   background-color: rgba(56, 132, 197, 0.06);

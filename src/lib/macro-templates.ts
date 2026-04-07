@@ -357,44 +357,96 @@ export function getQuestionIdsFromBody(body: string) {
   return Array.from(new Set(ids));
 }
 
+export function formatMacroAnswerValue(value: MacroAnswerValue | undefined): string {
+  const conjunctionFormatter =
+    typeof Intl !== "undefined" && typeof Intl.ListFormat === "function"
+      ? new Intl.ListFormat("en-US", { style: "long", type: "conjunction" })
+      : null;
+  if (Array.isArray(value)) {
+    const selected = value
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (!selected.length) {
+      return "";
+    }
+    if (selected.length === 1) {
+      return selected[0];
+    }
+    if (conjunctionFormatter) {
+      return conjunctionFormatter.format(selected);
+    }
+    if (selected.length === 2) {
+      return `${selected[0]} and ${selected[1]}`;
+    }
+    return `${selected.slice(0, -1).join(", ")}, and ${selected[selected.length - 1]}`;
+  }
+  return typeof value === "string" ? value : "";
+}
+
+export function escapeMacroHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Build the inline atomic span used to wrap a single answer to a macro prompt.
+ * The span is contenteditable=false so the user cannot type inside it, but the
+ * surrounding macro text remains fully editable. Tapping the span re-opens
+ * the picker for that single prompt.
+ */
+export function renderMacroPromptSpan(
+  runId: string,
+  promptId: string,
+  value: string,
+): string {
+  const display = value && value.trim() ? escapeMacroHtml(value) : "&nbsp;";
+  return `<span class="macro-prompt" contenteditable="false" data-macro-run-id="${runId}" data-prompt-id="${promptId}">${display}</span>`;
+}
+
 export function renderMacroTemplate(
   template: string,
   answers: MacroAnswerMap,
   context: MacroRenderContext,
 ) {
-  const conjunctionFormatter =
-    typeof Intl !== "undefined" && typeof Intl.ListFormat === "function"
-      ? new Intl.ListFormat("en-US", { style: "long", type: "conjunction" })
-      : null;
-
-  const formatAnswerValue = (value: MacroAnswerValue | undefined) => {
-    if (Array.isArray(value)) {
-      const selected = value
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0);
-      if (!selected.length) {
-        return "";
-      }
-      if (selected.length === 1) {
-        return selected[0];
-      }
-      if (conjunctionFormatter) {
-        return conjunctionFormatter.format(selected);
-      }
-      if (selected.length === 2) {
-        return `${selected[0]} and ${selected[1]}`;
-      }
-      return `${selected.slice(0, -1).join(", ")}, and ${selected[selected.length - 1]}`;
-    }
-    return typeof value === "string" ? value : "";
-  };
-
   const withAutoFields = template.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
     return context[key] ?? "";
   });
 
   const withQuestions = withAutoFields.replace(/\[\[\s*([a-zA-Z0-9_-]+)\s*\]\]/g, (_, key: string) => {
-    return formatAnswerValue(answers[key]);
+    return formatMacroAnswerValue(answers[key]);
+  });
+
+  return withQuestions
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "")
+    .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, "")
+    .replace(/^(<p>\s*<\/p>\s*)+/gi, "")
+    .replace(/(<p>\s*<\/p>\s*)+$/gi, "")
+    .trim();
+}
+
+/**
+ * Render a macro template, but wrap each prompt answer in an inline atomic
+ * span (`renderMacroPromptSpan`). The static text of the macro stays freely
+ * editable inside the SOAP editor; only the answer values are clickable to
+ * re-open the picker for that one question.
+ */
+export function renderMacroTemplateWithPromptSpans(
+  template: string,
+  answers: MacroAnswerMap,
+  context: MacroRenderContext,
+  runId: string,
+) {
+  const withAutoFields = template.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
+    return context[key] ?? "";
+  });
+
+  const withQuestions = withAutoFields.replace(/\[\[\s*([a-zA-Z0-9_-]+)\s*\]\]/g, (_, key: string) => {
+    return renderMacroPromptSpan(runId, key, formatMacroAnswerValue(answers[key]));
   });
 
   return withQuestions
