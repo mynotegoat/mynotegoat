@@ -2417,7 +2417,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       if (sourceEncounter) {
         let copiedCount = 0;
         const macroRunWrapperPattern =
-          /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
+          /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
         selectedSections.forEach((section) => {
           const sourceText = sourceEncounter.soap[section].trim();
           if (!sourceText) {
@@ -2428,10 +2428,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           const idRewrites: Array<{ oldId: string; newId: string }> = [];
           const rewrittenText = sourceText.replace(
             macroRunWrapperPattern,
-            (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
+            (
+              _match,
+              _tag: string,
+              _beforeAttrs: string,
+              oldId: string,
+              _afterAttrs: string,
+              inner: string,
+            ) => {
               const newId = createEncounterMacroRunId();
               idRewrites.push({ oldId, newId });
-              return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
+              return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
             },
           );
           setSoapSection(newEncounterId, section, rewrittenText);
@@ -2441,8 +2448,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               return;
             }
             const innerText = sourceRun.generatedText
-              .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-              .replace(/<\/span>$/i, "");
+              .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+              .replace(/<\/(?:span|div)>$/i, "");
             addMacroRun(newEncounterId, {
               id: newId,
               section,
@@ -2450,7 +2457,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               macroName: sourceRun.macroName,
               body: sourceRun.body,
               answers: { ...sourceRun.answers },
-              generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</span>`,
+              generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</div>`,
             });
           });
           copiedCount += 1;

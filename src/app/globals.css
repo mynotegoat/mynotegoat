@@ -207,11 +207,12 @@ a {
 }
 
 .rich-text-editor .macro-snippet {
-  display: inline;
-  background-color: rgba(56, 132, 197, 0.08);
-  border-bottom: 1px dashed rgba(56, 132, 197, 0.5);
-  border-radius: 3px;
-  padding: 0 2px;
+  display: block;
+  background-color: rgba(56, 132, 197, 0.06);
+  border-left: 3px solid rgba(56, 132, 197, 0.55);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 6px 0;
   cursor: pointer;
   transition: background-color 120ms ease;
   user-select: none;
@@ -219,11 +220,19 @@ a {
 }
 
 .rich-text-editor .macro-snippet:hover {
-  background-color: rgba(56, 132, 197, 0.18);
+  background-color: rgba(56, 132, 197, 0.14);
 }
 
 .rich-text-editor .macro-snippet * {
   cursor: pointer;
+}
+
+.rich-text-editor .macro-snippet p {
+  margin: 0 0 0.4em;
+}
+
+.rich-text-editor .macro-snippet p:last-child {
+  margin-bottom: 0;
 }
 
 .status-pill {

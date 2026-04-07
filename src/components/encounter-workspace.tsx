@@ -833,12 +833,12 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       return;
     }
     const snippetId = existingRun?.id ?? createEncounterMacroRunId();
-    const generatedText = `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${snippetId}">${cleanedText}</span>`;
+    const generatedText = `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${snippetId}">${cleanedText}</div>`;
     if (existingRun) {
       const currentSectionText = selectedEncounter.soap[activeSection];
       // Try to locate the existing wrapped snippet by its id and replace it in place
       const wrapperPattern = new RegExp(
-        `<span[^>]*data-macro-run-id=["']${snippetId}["'][^>]*>[\\s\\S]*?</span>`,
+        `<(?:span|div)[^>]*data-macro-run-id=["']${snippetId}["'][^>]*>[\\s\\S]*?</(?:span|div)>`,
         "i",
       );
       let nextSectionText: string;
@@ -1003,14 +1003,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     }
     // Re-key any macro snippets so they belong to the destination encounter,
     // then carry the underlying macro runs over so taps still re-open the picker.
-    const macroRunWrapperPattern = /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
+    const macroRunWrapperPattern = /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
     const idRewrites: Array<{ oldId: string; newId: string }> = [];
     const rewrittenText = sourceText.replace(
       macroRunWrapperPattern,
-      (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
+      (_match, _tag: string, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
         const newId = createEncounterMacroRunId();
         idRewrites.push({ oldId, newId });
-        return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
+        return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
       },
     );
     setSoapSection(selectedEncounter.id, activeSection, rewrittenText);
@@ -1027,9 +1027,9 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         macroName: sourceRun.macroName,
         body: sourceRun.body,
         answers: { ...sourceRun.answers },
-        generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${sourceRun.generatedText
-          .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-          .replace(/<\/span>$/i, "")}</span>`,
+        generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${sourceRun.generatedText
+          .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+          .replace(/<\/(?:span|div)>$/i, "")}</div>`,
       });
       copiedRunCount += 1;
     });
@@ -1068,7 +1068,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       }
     }
     const macroRunWrapperPattern =
-      /<span([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/span>/gi;
+      /<(span|div)([^>]*?)data-macro-run-id=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/\1>/gi;
     let totalSections = 0;
     let totalMacros = 0;
     sectionsWithText.forEach((section) => {
@@ -1076,10 +1076,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       const idRewrites: Array<{ oldId: string; newId: string }> = [];
       const rewrittenText = sourceText.replace(
         macroRunWrapperPattern,
-        (_match, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
+        (_match, _tag: string, _beforeAttrs: string, oldId: string, _afterAttrs: string, inner: string) => {
           const newId = createEncounterMacroRunId();
           idRewrites.push({ oldId, newId });
-          return `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</span>`;
+          return `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${inner}</div>`;
         },
       );
       setSoapSection(selectedEncounter.id, section, rewrittenText);
@@ -1089,8 +1089,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           return;
         }
         const innerText = sourceRun.generatedText
-          .replace(/^<span[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
-          .replace(/<\/span>$/i, "");
+          .replace(/^<(?:span|div)[^>]*data-macro-run-id=["'][^"']+["'][^>]*>/i, "")
+          .replace(/<\/(?:span|div)>$/i, "");
         addMacroRun(selectedEncounter.id, {
           id: newId,
           section,
@@ -1098,7 +1098,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           macroName: sourceRun.macroName,
           body: sourceRun.body,
           answers: { ...sourceRun.answers },
-          generatedText: `<span class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</span>`,
+          generatedText: `<div class="macro-snippet" contenteditable="false" data-macro-run-id="${newId}">${innerText}</div>`,
         });
         totalMacros += 1;
       });
