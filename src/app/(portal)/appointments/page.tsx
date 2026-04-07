@@ -395,7 +395,7 @@ function getCardBackground(status: AppointmentStatus) {
 
 export default function AppointmentsPage() {
   const router = useRouter();
-  const { scheduleAppointments, addAppointments, updateAppointment } = useScheduleAppointments();
+  const { scheduleAppointments, addAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { encountersByNewest, createEncounter } = useEncounterNotes();
   const { appointmentTypes } = useScheduleAppointmentTypes();
   const { scheduleRooms } = useScheduleRooms();
@@ -2114,21 +2114,45 @@ export default function AppointmentsPage() {
 
             {editError && <p className="mt-3 text-sm font-semibold text-[#b43b34]">{editError}</p>}
 
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                onClick={() => setSelectedAppointmentId(null)}
+                className="rounded-xl border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-4 py-2 font-semibold text-[#b43b34]"
+                onClick={() => {
+                  if (!selectedAppointment) {
+                    return;
+                  }
+                  const confirmed = window.confirm(
+                    `Delete the ${selectedAppointment.appointmentType} appointment for ${selectedAppointment.patientName} on ${formatUsDateFromIso(selectedAppointment.date)} at ${formatTimeLabel(selectedAppointment.startTime)}? This cannot be undone.`,
+                  );
+                  if (!confirmed) {
+                    return;
+                  }
+                  removeAppointment(selectedAppointment.id);
+                  setScheduleAlert(
+                    `Appointment for ${selectedAppointment.patientName} on ${formatUsDateFromIso(selectedAppointment.date)} deleted.`,
+                  );
+                  setSelectedAppointmentId(null);
+                }}
                 type="button"
               >
-                Cancel
+                Delete Appointment
               </button>
-              <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
-                onClick={handleSaveAppointmentUpdates}
-                type="button"
-              >
-                Save Status
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  onClick={() => setSelectedAppointmentId(null)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  onClick={handleSaveAppointmentUpdates}
+                  type="button"
+                >
+                  Save Status
+                </button>
+              </div>
             </div>
           </section>
         </div>

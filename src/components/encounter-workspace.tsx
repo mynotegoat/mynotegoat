@@ -444,6 +444,7 @@ function AppointmentsOverview({
             <tbody>
               {todayAppointments.map((apt) => {
                 const linked = getLinkedEncounter(apt);
+                const canStart = apt.status === "Check In" || apt.status === "Check Out";
                 return (
                   <tr key={apt.id} className="border-t border-[var(--line-soft)]">
                     <td className="px-3 py-2 tabular-nums">{apt.startTime}</td>
@@ -461,7 +462,12 @@ function AppointmentsOverview({
                         </button>
                       ) : (
                         <button
-                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                          className={`rounded-lg border px-2 py-1 text-xs font-semibold ${
+                            canStart
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                              : "cursor-not-allowed border-[var(--line-soft)] bg-[var(--bg-soft)] text-[var(--text-muted)]"
+                          }`}
+                          disabled={!canStart}
                           onClick={() => {
                             const dateUs = (() => {
                               const [y, m, d] = apt.date.split("-");
@@ -469,6 +475,11 @@ function AppointmentsOverview({
                             })();
                             onCreateEncounter(apt.id, apt.patientId, apt.patientName, apt.appointmentType, dateUs);
                           }}
+                          title={
+                            canStart
+                              ? "Start encounter"
+                              : "Patient must be Checked In before starting an encounter"
+                          }
                           type="button"
                         >
                           + Encounter
@@ -1288,6 +1299,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       const linked = encountersByNewest.find(
                         (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
                       );
+                      const canStart = apt.status === "Check In" || apt.status === "Check Out";
                       return (
                         <tr key={apt.id} className="border-t border-[var(--line-soft)]">
                           <td className="px-2 py-1.5 tabular-nums">{dateUs}</td>
@@ -1304,8 +1316,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               </button>
                             ) : (
                               <button
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                                className={`rounded-lg border px-2 py-0.5 text-xs font-semibold ${
+                                  canStart
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                    : "cursor-not-allowed border-[var(--line-soft)] bg-[var(--bg-soft)] text-[var(--text-muted)]"
+                                }`}
+                                disabled={!canStart}
                                 onClick={() => {
+                                  if (!canStart) {
+                                    return;
+                                  }
                                   const provider = officeSettings.doctorName || "Provider";
                                   const newId = createEncounter({
                                     patientId: apt.patientId,
@@ -1319,6 +1339,11 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                                     setMessage(`Encounter created for ${dateUs}.`);
                                   }
                                 }}
+                                title={
+                                  canStart
+                                    ? "Start encounter"
+                                    : "Patient must be Checked In before starting an encounter"
+                                }
                                 type="button"
                               >
                                 + Encounter

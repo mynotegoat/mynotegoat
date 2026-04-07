@@ -687,7 +687,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { reportTemplates } = useReportTemplates();
   const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
-  const { scheduleAppointments, updateAppointment } = useScheduleAppointments();
+  const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { addTask } = useTasks();
   const { encountersByNewest, createEncounter, setSoapSection } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
@@ -2328,6 +2328,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setQuickTimeDraft("");
   };
 
+  const handleDeleteAppointment = (appointment: ScheduleAppointmentRecord) => {
+    const dateLabel = toUsDate(appointment.date);
+    const timeLabel = formatTimeLabel(appointment.startTime);
+    const confirmed = window.confirm(
+      `Delete the ${appointment.appointmentType} appointment on ${dateLabel} at ${timeLabel}? This cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+    removeAppointment(appointment.id);
+    setEncounterMessage(`Appointment on ${dateLabel} at ${timeLabel} deleted.`);
+  };
+
   const commitQuickTimeEdit = (appointment: ScheduleAppointmentRecord) => {
     const nextTime = quickTimeDraft.trim();
     if (!nextTime || nextTime === appointment.startTime) {
@@ -3621,6 +3634,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         <th className="px-2 py-2">Type</th>
                         <th className="px-2 py-2">Status</th>
                         <th className="px-2 py-2">Encounter</th>
+                        <th className="px-2 py-2"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3767,12 +3781,24 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                 <span className="text-xs text-[var(--text-muted)]">-</span>
                               )}
                             </td>
+                            <td className="px-2 py-2 text-right">
+                              {appointment ? (
+                                <button
+                                  className="rounded-lg border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-2 py-1 text-xs font-semibold text-[#b43b34]"
+                                  onClick={() => handleDeleteAppointment(appointment)}
+                                  title="Delete appointment"
+                                  type="button"
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </td>
                           </tr>
                         );
                       })}
                       {appointmentRows.length === 0 && (
                         <tr>
-                          <td className="px-2 py-3 text-[var(--text-muted)]" colSpan={5}>
+                          <td className="px-2 py-3 text-[var(--text-muted)]" colSpan={6}>
                             No appointments scheduled for this patient yet.
                           </td>
                         </tr>
