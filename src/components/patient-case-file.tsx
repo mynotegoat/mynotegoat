@@ -689,7 +689,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { addTask } = useTasks();
-  const { encountersByNewest, createEncounter, setSoapSection, addMacroRun } = useEncounterNotes();
+  const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
   const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
@@ -2455,9 +2455,27 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           });
           copiedCount += 1;
         });
-        if (copiedCount > 0) {
+        // Also carry encounter charges over so the new visit starts with the prior plan.
+        let copiedChargeCount = 0;
+        sourceEncounter.charges.forEach((charge) => {
+          const added = addCharge(newEncounterId, {
+            treatmentMacroId: charge.treatmentMacroId,
+            name: charge.name,
+            procedureCode: charge.procedureCode,
+            unitPrice: charge.unitPrice,
+            units: charge.units,
+          });
+          if (added) {
+            copiedChargeCount += 1;
+          }
+        });
+        if (copiedCount > 0 || copiedChargeCount > 0) {
+          const chargeSuffix =
+            copiedChargeCount > 0
+              ? ` and ${copiedChargeCount} charge${copiedChargeCount === 1 ? "" : "s"}`
+              : "";
           setEncounterMessage(
-            `Encounter created for ${appointmentDate}. SALT copied ${copiedCount} section(s) from ${sourceEncounter.encounterDate}.`,
+            `Encounter created for ${appointmentDate}. SALT copied ${copiedCount} section(s)${chargeSuffix} from ${sourceEncounter.encounterDate}.`,
           );
         } else {
           setEncounterMessage(`Encounter created for ${appointmentDate}.`);

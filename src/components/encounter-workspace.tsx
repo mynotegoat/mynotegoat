@@ -1037,6 +1037,48 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setMessage(`Copied ${sectionLabels[activeSection]} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`);
   };
 
+  const handleCopyChargesFromSelected = () => {
+    if (!selectedEncounter) {
+      return;
+    }
+    if (selectedEncounter.signed) {
+      setMessage("Encounter is closed. Reopen it to copy prior charges.");
+      return;
+    }
+    if (!saltSourceEncounter) {
+      setMessage("Select a prior encounter first.");
+      return;
+    }
+    if (saltSourceEncounter.charges.length === 0) {
+      setMessage(`No charges found on ${saltSourceEncounter.encounterDate}.`);
+      return;
+    }
+    if (selectedEncounter.charges.length > 0) {
+      const confirmed = window.confirm(
+        `Append ${saltSourceEncounter.charges.length} charge(s) from ${saltSourceEncounter.encounterDate} to this encounter? Existing charges will be kept.`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    let copiedCount = 0;
+    saltSourceEncounter.charges.forEach((charge) => {
+      const added = addCharge(selectedEncounter.id, {
+        treatmentMacroId: charge.treatmentMacroId,
+        name: charge.name,
+        procedureCode: charge.procedureCode,
+        unitPrice: charge.unitPrice,
+        units: charge.units,
+      });
+      if (added) {
+        copiedCount += 1;
+      }
+    });
+    setMessage(
+      `Copied ${copiedCount} charge${copiedCount === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}.`,
+    );
+  };
+
   const handleDeleteEncounter = () => {
     if (!selectedEncounter) {
       return;
@@ -1731,7 +1773,22 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
               <section>
                 <article className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
-                  <h4 className="text-lg font-semibold">Encounter Charges</h4>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-lg font-semibold">Encounter Charges</h4>
+                    <button
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                      disabled={!saltSourceEncounter || selectedEncounter.signed}
+                      onClick={handleCopyChargesFromSelected}
+                      title={
+                        saltSourceEncounter
+                          ? `Copy charges from ${saltSourceEncounter.encounterDate}`
+                          : "Select a prior encounter to copy charges from"
+                      }
+                      type="button"
+                    >
+                      Copy Charges From Prior
+                    </button>
+                  </div>
                   <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
