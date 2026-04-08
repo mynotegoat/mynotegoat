@@ -12,6 +12,7 @@ import { loadDashboardWorkspaceSettings } from "@/lib/dashboard-workspace-settin
 import { formatUsDateFromIso, type TaskPriority, type TaskRecord } from "@/lib/tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import {
+  buildCaseNumber,
   buildFollowUpItems,
   formatLeadingDateDisplay,
   formatUsDateDisplay,
@@ -281,6 +282,8 @@ export default function PatientsPage() {
   const [taskQuickPriority, setTaskQuickPriority] = useState<TaskPriority>("Medium");
   const [taskQuickDueDate, setTaskQuickDueDate] = useState("");
   const [taskQuickPatientId, setTaskQuickPatientId] = useState("");
+  const [taskQuickPatientQuery, setTaskQuickPatientQuery] = useState("");
+  const [taskQuickCaseQuery, setTaskQuickCaseQuery] = useState("");
   const [taskSearch, setTaskSearch] = useState("");
   const [taskStatusFilter, setTaskStatusFilter] = useState<"All" | "Open" | "Done">(() =>
     loadDashboardWorkspaceSettings().myTasks.openOnly ? "Open" : "All",
@@ -804,7 +807,46 @@ export default function PatientsPage() {
       patientName: linkedPatient?.fullName,
     });
     if (!result.added) { setTaskMessage(result.reason); return; }
-    setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate(""); setTaskQuickPatientId(""); setTaskMessage("Task added.");
+    setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate("");
+    setTaskQuickPatientId(""); setTaskQuickPatientQuery(""); setTaskQuickCaseQuery("");
+    setTaskMessage("Task added.");
+  };
+
+  const taskPatientCaseEntries = useMemo(
+    () => patients.map((p) => ({
+      id: p.id,
+      fullName: p.fullName,
+      caseNumber: buildCaseNumber(p.dateOfLoss, p.fullName),
+    })),
+    [],
+  );
+
+  const taskPatientMatches = useMemo(() => {
+    const q = taskQuickPatientQuery.trim().toLowerCase();
+    if (!q || taskQuickPatientId) return [];
+    return taskPatientCaseEntries
+      .filter((e) => e.fullName.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [taskPatientCaseEntries, taskQuickPatientQuery, taskQuickPatientId]);
+
+  const taskCaseMatches = useMemo(() => {
+    const q = taskQuickCaseQuery.trim().toUpperCase();
+    if (!q || taskQuickPatientId) return [];
+    return taskPatientCaseEntries
+      .filter((e) => e.caseNumber.toUpperCase().includes(q))
+      .slice(0, 6);
+  }, [taskPatientCaseEntries, taskQuickCaseQuery, taskQuickPatientId]);
+
+  const selectTaskPatient = (entry: { id: string; fullName: string; caseNumber: string }) => {
+    setTaskQuickPatientId(entry.id);
+    setTaskQuickPatientQuery(entry.fullName);
+    setTaskQuickCaseQuery(entry.caseNumber);
+  };
+
+  const clearTaskPatient = () => {
+    setTaskQuickPatientId("");
+    setTaskQuickPatientQuery("");
+    setTaskQuickCaseQuery("");
   };
 
   const startEditingTask = (task: TaskRecord) => {
@@ -1228,18 +1270,82 @@ export default function PatientsPage() {
           <section className="panel-card p-4">
             <h4 className="text-lg font-semibold">Quick Add</h4>
             <div className="mt-3 grid gap-3 md:grid-cols-12">
-              <label className="grid gap-1 md:col-span-4">
+              <label className="grid gap-1 md:col-span-12">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Task *</span>
                 <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickTitle(e.target.value)} placeholder="Call attorney re: lien update" value={taskQuickTitle} />
               </label>
-              <label className="grid gap-1 md:col-span-3">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Patient (optional)</span>
-                <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickPatientId(e.target.value)} value={taskQuickPatientId}>
-                  <option value="">— None —</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>{p.fullName}</option>
-                  ))}
-                </select>
+              <label className="relative grid gap-1 md:col-span-4">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Patient</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setTaskQuickPatientQuery(v);
+                    if (taskQuickPatientId) {
+                      setTaskQuickPatientId("");
+                      setTaskQuickCaseQuery("");
+                    }
+                  }}
+                  placeholder="Search patient..."
+                  value={taskQuickPatientQuery}
+                />
+                {taskQuickPatientId && (
+                  <button
+                    className="absolute right-2 top-[30px] rounded-md px-2 text-xs text-[var(--text-muted)]"
+                    onClick={clearTaskPatient}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                )}
+                {taskPatientMatches.length > 0 && (
+                  <ul className="absolute left-0 right-0 top-[60px] z-10 max-h-56 overflow-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
+                    {taskPatientMatches.map((entry) => (
+                      <li key={entry.id}>
+                        <button
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)]"
+                          onClick={() => selectTaskPatient(entry)}
+                          type="button"
+                        >
+                          <span>{entry.fullName}</span>
+                          <span className="text-xs text-[var(--text-muted)]">{entry.caseNumber}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+              <label className="relative grid gap-1 md:col-span-3">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Case #</span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 uppercase"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setTaskQuickCaseQuery(v);
+                    if (taskQuickPatientId) {
+                      setTaskQuickPatientId("");
+                      setTaskQuickPatientQuery("");
+                    }
+                  }}
+                  placeholder="Search case #..."
+                  value={taskQuickCaseQuery}
+                />
+                {taskCaseMatches.length > 0 && (
+                  <ul className="absolute left-0 right-0 top-[60px] z-10 max-h-56 overflow-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
+                    {taskCaseMatches.map((entry) => (
+                      <li key={entry.id}>
+                        <button
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)]"
+                          onClick={() => selectTaskPatient(entry)}
+                          type="button"
+                        >
+                          <span className="font-mono text-xs">{entry.caseNumber}</span>
+                          <span>{entry.fullName}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>

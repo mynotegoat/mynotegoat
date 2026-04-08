@@ -45,6 +45,7 @@ export default function ContactsPage() {
   const { categories } = useContactCategories();
   const { contacts, addContact, updateContact } = useContactDirectory();
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [contactSearch, setContactSearch] = useState("");
   const defaultCategory = useMemo(
     () =>
       categories.find((entry) => normalizeLookupValue(entry) === "attorney") ??
@@ -97,8 +98,24 @@ export default function ContactsPage() {
         : contacts.filter(
             (contact) => normalizeLookupValue(contact.category) === normalizeLookupValue(resolvedSelectedCategory),
           );
-    return [...list].sort((a, b) => a.name.localeCompare(b.name));
-  }, [contacts, resolvedSelectedCategory]);
+    const query = normalizeLookupValue(contactSearch);
+    const searched = query
+      ? list.filter((contact) => {
+          const haystack = [
+            contact.name,
+            contact.category,
+            contact.phone,
+            contact.fax ?? "",
+            contact.email ?? "",
+            contact.address ?? "",
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(query);
+        })
+      : list;
+    return [...searched].sort((a, b) => a.name.localeCompare(b.name));
+  }, [contacts, resolvedSelectedCategory, contactSearch]);
 
   const startEditing = (contact: ContactRecord) => {
     setEditingContactId(contact.id);
@@ -166,6 +183,18 @@ export default function ContactsPage() {
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Search
+              </span>
+              <input
+                className="w-64 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                onChange={(event) => setContactSearch(event.target.value)}
+                placeholder="Search name, phone, email..."
+                type="text"
+                value={contactSearch}
+              />
+            </label>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Category
