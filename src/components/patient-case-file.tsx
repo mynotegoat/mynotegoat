@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { ContactGapPrompt, findContactByName, type ContactGap } from "@/components/contact-gap-prompt";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
@@ -828,6 +829,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     }));
   });
   const [specialistMessage, setSpecialistMessage] = useState("");
+  const [contactGap, setContactGap] = useState<ContactGap | null>(null);
   const [editingSpecialist, setEditingSpecialist] = useState<SpecialistReferral | null>(null);
   const [imagingPanelsOpen, setImagingPanelsOpen] = useState<Record<ImagingPanelKey, boolean>>({
     xray: false,
@@ -1816,6 +1818,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       sentDate: "",
     });
     setSpecialistMessage(`${specialistName} added. Use Edit to update scheduling/report status.`);
+    // Contact gap check: if this specialist isn't already in contacts, offer to add them.
+    const found = findContactByName(contacts, specialistName);
+    if (!found) {
+      setContactGap({
+        name: specialistName,
+        categoryHint: "Specialist",
+        message: `"${specialistName}" isn't in your Contacts yet — add them now?`,
+      });
+    }
   };
 
   const openSpecialistEditor = (entry: SpecialistReferral, event?: MouseEvent<HTMLElement>) => {
@@ -5582,6 +5593,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           </div>
         </div>
       )}
+
+      <ContactGapPrompt gap={contactGap} onClose={() => setContactGap(null)} />
     </div>
   );
 }
