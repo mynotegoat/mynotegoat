@@ -280,6 +280,7 @@ export default function PatientsPage() {
   const [taskQuickTitle, setTaskQuickTitle] = useState("");
   const [taskQuickPriority, setTaskQuickPriority] = useState<TaskPriority>("Medium");
   const [taskQuickDueDate, setTaskQuickDueDate] = useState("");
+  const [taskQuickPatientId, setTaskQuickPatientId] = useState("");
   const [taskSearch, setTaskSearch] = useState("");
   const [taskStatusFilter, setTaskStatusFilter] = useState<"All" | "Open" | "Done">(() =>
     loadDashboardWorkspaceSettings().myTasks.openOnly ? "Open" : "All",
@@ -794,9 +795,16 @@ export default function PatientsPage() {
   const handleAddTask = () => {
     const dueDateIso = taskQuickDueDate.trim() ? toIsoFromUsDate(taskQuickDueDate) : "";
     if (taskQuickDueDate.trim() && !dueDateIso) { setTaskMessage("Enter due date as MM/DD/YYYY."); return; }
-    const result = addTask({ title: taskQuickTitle, priority: taskQuickPriority, dueDate: dueDateIso });
+    const linkedPatient = taskQuickPatientId ? patients.find((p) => p.id === taskQuickPatientId) : undefined;
+    const result = addTask({
+      title: taskQuickTitle,
+      priority: taskQuickPriority,
+      dueDate: dueDateIso,
+      patientId: linkedPatient?.id,
+      patientName: linkedPatient?.fullName,
+    });
     if (!result.added) { setTaskMessage(result.reason); return; }
-    setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate(""); setTaskMessage("Task added.");
+    setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate(""); setTaskQuickPatientId(""); setTaskMessage("Task added.");
   };
 
   const startEditingTask = (task: TaskRecord) => {
@@ -1218,24 +1226,20 @@ export default function PatientsPage() {
       {view === "toDo" && (
         <div className="space-y-4">
           <section className="panel-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h4 className="text-lg font-semibold">To Do</h4>
-                <p className="text-sm text-[var(--text-muted)]">Quick task capture with priority, status tracking, and easy cleanup.</p>
-              </div>
-              <div className="grid gap-1 text-right text-sm">
-                <p><span className="font-semibold text-[#0b5c93]">{taskOpenCount}</span> Open</p>
-                <p><span className="font-semibold text-[#196d3a]">{taskDoneCount}</span> Done</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="panel-card p-4">
             <h4 className="text-lg font-semibold">Quick Add</h4>
             <div className="mt-3 grid gap-3 md:grid-cols-12">
-              <label className="grid gap-1 md:col-span-6">
+              <label className="grid gap-1 md:col-span-4">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Task *</span>
                 <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickTitle(e.target.value)} placeholder="Call attorney re: lien update" value={taskQuickTitle} />
+              </label>
+              <label className="grid gap-1 md:col-span-3">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Patient (optional)</span>
+                <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickPatientId(e.target.value)} value={taskQuickPatientId}>
+                  <option value="">— None —</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>{p.fullName}</option>
+                  ))}
+                </select>
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>
@@ -1247,14 +1251,21 @@ export default function PatientsPage() {
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Due Date</span>
                 <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" inputMode="numeric" maxLength={10} onChange={(e) => setTaskQuickDueDate(formatTaskDateInput(e.target.value))} placeholder="MM/DD/YYYY" type="text" value={taskQuickDueDate} />
               </label>
-              <div className="flex items-end md:col-span-2">
-                <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white" onClick={handleAddTask} type="button">Add Task</button>
+              <div className="flex items-end md:col-span-1">
+                <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white" onClick={handleAddTask} type="button">Add</button>
               </div>
             </div>
             {taskMessage && <p className="mt-3 text-sm font-semibold text-[var(--text-muted)]">{taskMessage}</p>}
           </section>
 
           <section className="panel-card p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-lg font-semibold">Tasks</h4>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="rounded-full bg-[rgba(21,123,191,0.12)] px-3 py-1 font-semibold text-[#0b5c93]">{taskOpenCount} Open</span>
+                <span className="rounded-full bg-[rgba(25,109,58,0.12)] px-3 py-1 font-semibold text-[#196d3a]">{taskDoneCount} Done</span>
+              </div>
+            </div>
             <div className="grid gap-3 md:grid-cols-12">
               <label className="grid gap-1 md:col-span-7">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Search</span>
@@ -1293,7 +1304,7 @@ export default function PatientsPage() {
                         ) : (
                           <>
                             <p className={`font-semibold ${task.done ? "text-[var(--text-muted)] line-through" : ""}`}>{task.title}</p>
-                            <p className="text-xs text-[var(--text-muted)]">Created: {new Date(task.createdAt).toLocaleDateString("en-US")}{task.dueDate ? ` • Due: ${formatUsDateFromIso(task.dueDate)}` : ""}</p>
+                            <p className="text-xs text-[var(--text-muted)]">Created: {new Date(task.createdAt).toLocaleDateString("en-US")}{task.dueDate ? ` • Due: ${formatUsDateFromIso(task.dueDate)}` : ""}{task.patientName ? ` • Patient: ${task.patientName}` : ""}</p>
                           </>
                         )}
                         {editingTaskId === task.id && editTaskError ? <p className="text-xs font-semibold text-[#b43b34]">{editTaskError}</p> : null}
