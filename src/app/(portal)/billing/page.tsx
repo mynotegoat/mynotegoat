@@ -794,36 +794,65 @@ export default function BillingPage() {
           placeholder="Search patient..."
           value={patientSearch}
         />
-        <div className="mt-3 max-h-[72vh] space-y-2 overflow-auto pr-1">
-          {filteredPatients.map((entry) => {
-            const selected = entry.id === activePatientId;
-            return (
-              <button
-                className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                  selected
-                    ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
-                    : "border-[var(--line-soft)] bg-white hover:bg-[var(--bg-soft)]"
-                }`}
-                key={entry.id}
-                onClick={() => {
-                  setSelectedPatientId(entry.id);
-                  setMessage("");
-                }}
-                type="button"
-              >
-                <p className="font-semibold">{entry.fullName}</p>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Case #: {entry.caseNumber || "-"} • DOI: {entry.dateOfLoss || "-"}
-                </p>
-              </button>
-            );
-          })}
-          {filteredPatients.length === 0 && (
-            <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-4 text-sm text-[var(--text-muted)]">
-              No matching patients.
+        {/* Live search: only show the patient list while the user is typing
+            a query or until they've picked a patient. Once a patient is
+            selected and the search box is empty, the list collapses to a
+            single "currently viewing" pill so the page isn't dominated by
+            the directory. */}
+        {patientSearch.trim() ? (
+          <div className="mt-3 max-h-[72vh] space-y-2 overflow-auto pr-1">
+            {filteredPatients.slice(0, 20).map((entry) => {
+              const selected = entry.id === activePatientId;
+              return (
+                <button
+                  className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                    selected
+                      ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
+                      : "border-[var(--line-soft)] bg-white hover:bg-[var(--bg-soft)]"
+                  }`}
+                  key={entry.id}
+                  onClick={() => {
+                    setSelectedPatientId(entry.id);
+                    setPatientSearch("");
+                    setMessage("");
+                  }}
+                  type="button"
+                >
+                  <p className="font-semibold">{entry.fullName}</p>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Case #: {entry.caseNumber || "-"} • DOI: {entry.dateOfLoss || "-"}
+                  </p>
+                </button>
+              );
+            })}
+            {filteredPatients.length === 0 && (
+              <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-4 text-sm text-[var(--text-muted)]">
+                No matching patients.
+              </p>
+            )}
+          </div>
+        ) : selectedPatient ? (
+          <div className="mt-3 rounded-xl border border-[var(--brand-primary)] bg-[var(--bg-soft)] px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Viewing
             </p>
-          )}
-        </div>
+            <p className="font-semibold">{selectedPatient.fullName}</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Case #: {selectedPatient.caseNumber || "-"} • DOI: {selectedPatient.dateOfLoss || "-"}
+            </p>
+            <button
+              className="mt-2 text-xs font-semibold text-[var(--brand-primary)] underline"
+              onClick={() => setSelectedPatientId("")}
+              type="button"
+            >
+              Change patient
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 rounded-xl border border-dashed border-[var(--line-soft)] px-3 py-4 text-sm text-[var(--text-muted)]">
+            Start typing a patient name above to begin.
+          </p>
+        )}
       </section>
 
       <div className="space-y-4">

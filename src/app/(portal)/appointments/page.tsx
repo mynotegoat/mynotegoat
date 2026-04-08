@@ -396,7 +396,7 @@ function getCardBackground(status: AppointmentStatus) {
 export default function AppointmentsPage() {
   const router = useRouter();
   const { scheduleAppointments, addAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
-  const { encountersByNewest, createEncounter } = useEncounterNotes();
+  const { encountersByNewest, createEncounter, deleteEncounter } = useEncounterNotes();
   const { appointmentTypes } = useScheduleAppointmentTypes();
   const { scheduleRooms } = useScheduleRooms();
   const { scheduleSettings } = useScheduleSettings();
@@ -2121,15 +2121,44 @@ export default function AppointmentsPage() {
                   if (!selectedAppointment) {
                     return;
                   }
+                  const dateLabel = formatUsDateFromIso(selectedAppointment.date);
+                  const linkedEncounter = encountersByNewest.find(
+                    (entry) =>
+                      entry.patientId === selectedAppointment.patientId &&
+                      entry.encounterDate === dateLabel,
+                  );
+                  if (linkedEncounter) {
+                    const chargeCount = linkedEncounter.charges.length;
+                    const proceed = window.confirm(
+                      `This appointment has an attached encounter${
+                        linkedEncounter.signed ? " (CLOSED)" : ""
+                      } on ${dateLabel}${chargeCount > 0 ? ` with ${chargeCount} charge${chargeCount === 1 ? "" : "s"}` : ""}.\n\n` +
+                        `Click OK to delete BOTH the appointment AND the encounter (and any attached charges).\n` +
+                        `Click Cancel to keep everything.`,
+                    );
+                    if (!proceed) {
+                      return;
+                    }
+                    deleteEncounter(linkedEncounter.id);
+                    removeAppointment(selectedAppointment.id);
+                    setScheduleAlert(
+                      `Appointment for ${selectedAppointment.patientName} on ${dateLabel} and its encounter${
+                        chargeCount > 0 ? ` (${chargeCount} charge${chargeCount === 1 ? "" : "s"})` : ""
+                      } deleted.`,
+                    );
+                    setSelectedAppointmentId(null);
+                    return;
+                  }
+
                   const confirmed = window.confirm(
-                    `Delete the ${selectedAppointment.appointmentType} appointment for ${selectedAppointment.patientName} on ${formatUsDateFromIso(selectedAppointment.date)} at ${formatTimeLabel(selectedAppointment.startTime)}? This cannot be undone.`,
+                    `Delete the ${selectedAppointment.appointmentType} appointment for ${selectedAppointment.patientName} on ${dateLabel} at ${formatTimeLabel(selectedAppointment.startTime)}? This cannot be undone.`,
                   );
                   if (!confirmed) {
                     return;
                   }
                   removeAppointment(selectedAppointment.id);
                   setScheduleAlert(
-                    `Appointment for ${selectedAppointment.patientName} on ${formatUsDateFromIso(selectedAppointment.date)} deleted.`,
+                    `Appointment for ${selectedAppointment.patientName} on ${dateLabel} deleted.`,
                   );
                   setSelectedAppointmentId(null);
                 }}

@@ -13,6 +13,8 @@ type AddTaskDraft = {
   title: string;
   priority: TaskPriority;
   dueDate?: string;
+  patientId?: string;
+  patientName?: string;
 };
 
 type AddTaskResult =
@@ -24,6 +26,8 @@ type UpdateTaskDraft = {
   priority?: TaskPriority;
   dueDate?: string;
   done?: boolean;
+  patientId?: string;
+  patientName?: string;
 };
 
 function compareByUpdatedAtDesc(left: TaskRecord, right: TaskRecord) {
@@ -48,6 +52,8 @@ export function useTasks() {
         return { added: false, reason: "Task name is required." };
       }
       const now = new Date().toISOString();
+      const patientId = draft.patientId?.trim() || undefined;
+      const patientName = draft.patientName?.trim() || undefined;
       const next: TaskRecord = {
         id: createTaskId(),
         title,
@@ -56,6 +62,8 @@ export function useTasks() {
         done: false,
         createdAt: now,
         updatedAt: now,
+        patientId,
+        patientName,
       };
       updateTasks((current) => [next, ...current]);
       return { added: true, task: next };

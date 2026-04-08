@@ -26,7 +26,11 @@ import {
 } from "@/lib/macro-templates";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { patients } from "@/lib/mock-data";
-import { appointmentStatusOptions, type AppointmentStatus } from "@/lib/schedule-appointments";
+import {
+  appointmentStatusOptions,
+  isAppointmentStatusSelectable,
+  type AppointmentStatus,
+} from "@/lib/schedule-appointments";
 
 type EncounterWorkspaceProps = {
   initialPatientId?: string;
@@ -574,6 +578,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const [printSelectionByPatient, setPrintSelectionByPatient] = useState<Record<string, string[]>>({});
   const [openChargesPanel, setOpenChargesPanel] = useState(false);
   const [chargeSearch, setChargeSearch] = useState("");
+  const [showPriorChargesPreview, setShowPriorChargesPreview] = useState(false);
 
   const [runMacroId, setRunMacroId] = useState<string | null>(null);
   const [editingMacroRunId, setEditingMacroRunId] = useState<string | null>(null);
@@ -663,11 +668,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (!selectedEncounter) {
       return [];
     }
+    // Only include encounters dated strictly BEFORE the current encounter so
+    // the user can never accidentally SALT-copy from a future visit into a
+    // back-dated note.
+    const currentStamp = toSortStamp(selectedEncounter.encounterDate);
     return encountersByNewest
       .filter(
         (entry) =>
           entry.patientId === selectedEncounter.patientId &&
-          entry.id !== selectedEncounter.id,
+          entry.id !== selectedEncounter.id &&
+          toSortStamp(entry.encounterDate) < currentStamp,
       )
       .sort((left, right) => {
         const byDate = toSortStamp(right.encounterDate) - toSortStamp(left.encounterDate);
@@ -1196,14 +1206,25 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (!selectedEncounter) {
       return;
     }
+    const chargeCount = selectedEncounter.charges.length;
+    const chargeWarning =
+      chargeCount > 0
+        ? `\n\nThis will also remove ${chargeCount} charge${chargeCount === 1 ? "" : ""} attached to this encounter so billing stays in sync.`
+        : "";
     const confirmed = window.confirm(
-      `Delete encounter for ${selectedEncounter.patientName} on ${selectedEncounter.encounterDate}?`,
+      `Delete encounter for ${selectedEncounter.patientName} on ${selectedEncounter.encounterDate}?${chargeWarning}`,
     );
     if (!confirmed) {
       return;
     }
+    // Charges live inside EncounterNoteRecord.charges[], so deleting the
+    // encounter naturally removes all attached charges in one shot.
     deleteEncounter(selectedEncounter.id);
-    setMessage("Encounter deleted.");
+    setMessage(
+      chargeCount > 0
+        ? `Encounter deleted (${chargeCount} charge${chargeCount === 1 ? "" : "s"} removed).`
+        : "Encounter deleted.",
+    );
   };
 
   const addChargeFromTreatment = (treatmentMacroId: string) => {
@@ -1302,6 +1323,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       setMessage("No linked appointment found on this encounter date.");
       return;
     }
+    if (!isAppointmentStatusSelectable(nextStatus, linkedAppointmentForStatus.status)) {
+      setMessage(`Cannot mark ${nextStatus} — patient must be Checked In first.`);
+      return;
+    }
     updateAppointment(linkedAppointmentForStatus.id, (current) => ({
       ...current,
       status: nextStatus,
@@ -1327,6 +1352,18 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         officeSettings={officeSettings}
         appointmentTypes={appointmentTypes}
         onCreateEncounter={(appointmentId, patientId, patientName, appointmentType, date) => {
+          // Gate: only allow encounter creation when the source appointment is
+          // currently Checked In (or already Checked Out, which means the
+          // encounter was started earlier and we're re-opening). This keeps
+          // No Show / Canceled / Reschedule appointments from accidentally
+          // getting paired with a chartable visit.
+          const sourceAppointment = scheduleAppointments.find((entry) => entry.id === appointmentId);
+          if (sourceAppointment && sourceAppointment.status !== "Check In" && sourceAppointment.status !== "Check Out") {
+            setMessage(
+              `Cannot start encounter — patient must be Checked In first (current status: ${sourceAppointment.status}).`,
+            );
+            return;
+          }
           const provider = officeSettings.doctorName || "Provider";
           const newId = createEncounter({
             patientId,
@@ -1686,11 +1723,22 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         }
                         value={scheduleStatusValue}
                       >
-                        {appointmentStatusOptions.map((option) => (
-                          <option key={`encounter-schedule-status-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
+                        {appointmentStatusOptions.map((option) => {
+                          const disabled = !isAppointmentStatusSelectable(
+                            option,
+                            (linkedAppointmentForStatus?.status ?? scheduleStatusValue) as AppointmentStatus,
+                          );
+                          return (
+                            <option
+                              key={`encounter-schedule-status-${option}`}
+                              disabled={disabled}
+                              value={option}
+                            >
+                              {option}
+                              {disabled ? " (requires Check In first)" : ""}
+                            </option>
+                          );
+                        })}
                       </select>
                     </label>
                     <p className="text-xs text-[var(--text-muted)]">
@@ -1905,9 +1953,21 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       <span className="text-sm font-semibold text-[var(--text-muted)]">
                         Previous {sectionLabels[activeSection]} ({saltSourceEncounter.encounterDate})
                       </span>
-                      <div className="min-h-44 whitespace-pre-wrap rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm">
-                        {saltSourceEncounter.soap[activeSection].trim() || "No text in this section for selected prior encounter."}
-                      </div>
+                      {saltSourceEncounter.soap[activeSection].trim() ? (
+                        <div
+                          className="rich-text-editor min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                          // Prior encounter notes are stored as HTML so they can
+                          // contain bold/underline/macro pills. Render the markup
+                          // instead of showing the raw tags.
+                          dangerouslySetInnerHTML={{
+                            __html: saltSourceEncounter.soap[activeSection],
+                          }}
+                        />
+                      ) : (
+                        <div className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--text-muted)]">
+                          No text in this section for selected prior encounter.
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1933,20 +1993,79 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                 <article className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="text-lg font-semibold">Encounter Charges</h4>
-                    <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
-                      disabled={!saltSourceEncounter || selectedEncounter.signed}
-                      onClick={handleCopyChargesFromSelected}
-                      title={
-                        saltSourceEncounter
-                          ? `Copy charges from ${saltSourceEncounter.encounterDate}`
-                          : "Select a prior encounter to copy charges from"
-                      }
-                      type="button"
-                    >
-                      Copy Charges From Prior
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                        disabled={!saltSourceEncounter}
+                        onClick={() => setShowPriorChargesPreview((prev) => !prev)}
+                        title={
+                          saltSourceEncounter
+                            ? `View charges from ${saltSourceEncounter.encounterDate}`
+                            : "Select a prior encounter to view its charges"
+                        }
+                        type="button"
+                      >
+                        {showPriorChargesPreview ? "Hide Prior Charges" : "View Prior Charges"}
+                      </button>
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                        disabled={!saltSourceEncounter || selectedEncounter.signed}
+                        onClick={handleCopyChargesFromSelected}
+                        title={
+                          saltSourceEncounter
+                            ? `Copy charges from ${saltSourceEncounter.encounterDate}`
+                            : "Select a prior encounter to copy charges from"
+                        }
+                        type="button"
+                      >
+                        Copy Charges From Prior
+                      </button>
+                    </div>
                   </div>
+                  {showPriorChargesPreview && saltSourceEncounter && (
+                    <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[#f6f9fc] p-3 text-sm">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                        Prior charges from {saltSourceEncounter.encounterDate}
+                      </p>
+                      {saltSourceEncounter.charges.length === 0 ? (
+                        <p className="text-[var(--text-muted)]">
+                          No charges recorded on this prior encounter.
+                        </p>
+                      ) : (
+                        <>
+                          <ul className="grid gap-1">
+                            {saltSourceEncounter.charges.map((charge) => (
+                              <li
+                                key={`prior-charge-${charge.id}`}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5"
+                              >
+                                <span className="font-semibold">
+                                  {charge.name}
+                                  {charge.procedureCode ? (
+                                    <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">
+                                      {charge.procedureCode}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="tabular-nums text-[var(--text-muted)]">
+                                  ${charge.unitPrice.toFixed(2)} × {charge.units} ={" "}
+                                  <span className="font-semibold text-[var(--text-main)]">
+                                    ${(charge.unitPrice * charge.units).toFixed(2)}
+                                  </span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="mt-2 text-right text-xs font-semibold">
+                            Prior total: $
+                            {saltSourceEncounter.charges
+                              .reduce((sum, c) => sum + c.unitPrice * c.units, 0)
+                              .toFixed(2)}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button

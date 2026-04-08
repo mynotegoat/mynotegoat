@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-settings";
 import { useTasks } from "@/hooks/use-tasks";
 import { loadDashboardWorkspaceSettings } from "@/lib/dashboard-workspace-settings";
+import { patients as allPatients } from "@/lib/mock-data";
 import { formatUsDateFromIso, type TaskPriority, type TaskRecord } from "@/lib/tasks";
 
 type StatusFilter = "All" | "Open" | "Done";
@@ -76,11 +76,11 @@ function matchesStatus(task: TaskRecord, filter: StatusFilter) {
 
 export default function TasksPage() {
   const { tasks, addTask, updateTask, toggleTaskDone, removeTask, clearCompleted } = useTasks();
-  const { dashboardWorkspaceSettings } = useDashboardWorkspaceSettings();
 
   const [quickTitle, setQuickTitle] = useState("");
   const [quickPriority, setQuickPriority] = useState<TaskPriority>("Medium");
   const [quickDueDate, setQuickDueDate] = useState("");
+  const [quickPatientId, setQuickPatientId] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() =>
     loadDashboardWorkspaceSettings().myTasks.openOnly ? "Open" : "All",
@@ -119,10 +119,13 @@ export default function TasksPage() {
       setMessage("Enter due date as MM/DD/YYYY.");
       return;
     }
+    const linkedPatient = quickPatientId ? allPatients.find((p) => p.id === quickPatientId) : undefined;
     const result = addTask({
       title: quickTitle,
       priority: quickPriority,
       dueDate: dueDateIso,
+      patientId: linkedPatient?.id,
+      patientName: linkedPatient?.fullName,
     });
     if (!result.added) {
       setMessage(result.reason);
@@ -131,6 +134,7 @@ export default function TasksPage() {
     setQuickTitle("");
     setQuickPriority("Medium");
     setQuickDueDate("");
+    setQuickPatientId("");
     setMessage("Task added.");
   };
 
@@ -173,31 +177,9 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <section className="panel-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-xl font-semibold">To Do</h3>
-            <p className="text-sm text-[var(--text-muted)]">
-              Quick task capture with priority, status tracking, and easy cleanup.
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">
-              Default status filter: {dashboardWorkspaceSettings.myTasks.openOnly ? "Open" : "All"}
-            </p>
-          </div>
-          <div className="grid gap-1 text-right text-sm">
-            <p>
-              <span className="font-semibold text-[#0b5c93]">{openCount}</span> Open
-            </p>
-            <p>
-              <span className="font-semibold text-[#196d3a]">{doneCount}</span> Done
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel-card p-4">
         <h4 className="text-lg font-semibold">Quick Add</h4>
         <div className="mt-3 grid gap-3 md:grid-cols-12">
-          <label className="grid gap-1 md:col-span-6">
+          <label className="grid gap-1 md:col-span-4">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Task *</span>
             <input
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -205,6 +187,21 @@ export default function TasksPage() {
               placeholder="Call attorney re: lien update"
               value={quickTitle}
             />
+          </label>
+          <label className="grid gap-1 md:col-span-3">
+            <span className="text-sm font-semibold text-[var(--text-muted)]">Patient (optional)</span>
+            <select
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              onChange={(event) => setQuickPatientId(event.target.value)}
+              value={quickPatientId}
+            >
+              <option value="">— None —</option>
+              {allPatients.map((patient) => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.fullName}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="grid gap-1 md:col-span-2">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>
@@ -231,13 +228,13 @@ export default function TasksPage() {
               value={quickDueDate}
             />
           </label>
-          <div className="flex items-end md:col-span-2">
+          <div className="flex items-end md:col-span-1">
             <button
               className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
               onClick={handleAddTask}
               type="button"
             >
-              Add Task
+              Add
             </button>
           </div>
         </div>
@@ -245,6 +242,17 @@ export default function TasksPage() {
       </section>
 
       <section className="panel-card p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-lg font-semibold">Tasks</h4>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="rounded-full bg-[rgba(21,123,191,0.12)] px-3 py-1 font-semibold text-[#0b5c93]">
+              {openCount} Open
+            </span>
+            <span className="rounded-full bg-[rgba(25,109,58,0.12)] px-3 py-1 font-semibold text-[#196d3a]">
+              {doneCount} Done
+            </span>
+          </div>
+        </div>
         <div className="grid gap-3 md:grid-cols-12">
           <label className="grid gap-1 md:col-span-7">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Search</span>
@@ -360,6 +368,7 @@ export default function TasksPage() {
                         <p className="text-xs text-[var(--text-muted)]">
                           Created: {new Date(task.createdAt).toLocaleDateString("en-US")}
                           {task.dueDate ? ` • Due: ${formatUsDateFromIso(task.dueDate)}` : ""}
+                          {task.patientName ? ` • Patient: ${task.patientName}` : ""}
                         </p>
                       </>
                     )}

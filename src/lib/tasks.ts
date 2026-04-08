@@ -8,6 +8,8 @@ export interface TaskRecord {
   dueDate: string; // ISO date (YYYY-MM-DD)
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
+  patientId?: string;
+  patientName?: string;
 }
 
 const STORAGE_KEY = "casemate.tasks.v1";
@@ -67,6 +69,8 @@ function normalizeTask(value: unknown): TaskRecord | null {
   const dueDate = normalizeIsoDate(row.dueDate);
   const createdAt = normalizeIsoTimestamp(row.createdAt) || new Date().toISOString();
   const updatedAt = normalizeIsoTimestamp(row.updatedAt) || createdAt;
+  const patientId = normalizeText(row.patientId);
+  const patientName = normalizeText(row.patientName);
 
   if (!id || !title) {
     return null;
@@ -80,6 +84,8 @@ function normalizeTask(value: unknown): TaskRecord | null {
     dueDate,
     createdAt,
     updatedAt,
+    patientId: patientId || undefined,
+    patientName: patientName || undefined,
   };
 }
 

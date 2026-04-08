@@ -27,6 +27,7 @@ import {
   appointmentStatusOptions,
   formatTimeLabel,
   getStatusBadgeClass,
+  isAppointmentStatusSelectable,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
@@ -689,7 +690,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { addTask } = useTasks();
-  const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge } = useEncounterNotes();
+  const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge, deleteEncounter } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
   const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
@@ -2311,6 +2312,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       setRescheduleAppointmentId(appointmentId);
       return;
     }
+    const target = scheduleAppointments.find((entry) => entry.id === appointmentId);
+    if (target && !isAppointmentStatusSelectable(nextStatus, target.status)) {
+      setEncounterMessage(
+        `Cannot mark ${nextStatus} — patient must be Checked In first.`,
+      );
+      return;
+    }
     updateAppointment(appointmentId, (current) => ({
       ...current,
       status: nextStatus,
@@ -2331,6 +2339,35 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const handleDeleteAppointment = (appointment: ScheduleAppointmentRecord) => {
     const dateLabel = toUsDate(appointment.date);
     const timeLabel = formatTimeLabel(appointment.startTime);
+    // Look for an encounter linked to this appointment by patient + date.
+    // Encounters reference appointments via (patientId, encounterDate) so the
+    // user can chain delete both in a single confirmation.
+    const linkedEncounter = patientEncounterRecords.find(
+      (entry) => entry.patientId === appointment.patientId && entry.encounterDate === dateLabel,
+    );
+
+    if (linkedEncounter) {
+      const chargeCount = linkedEncounter.charges.length;
+      const proceed = window.confirm(
+        `This appointment has an attached encounter${
+          linkedEncounter.signed ? " (CLOSED)" : ""
+        } on ${dateLabel}${chargeCount > 0 ? ` with ${chargeCount} charge${chargeCount === 1 ? "" : "s"}` : ""}.\n\n` +
+          `Click OK to delete BOTH the appointment AND the encounter (and any attached charges).\n` +
+          `Click Cancel to keep everything.`,
+      );
+      if (!proceed) {
+        return;
+      }
+      deleteEncounter(linkedEncounter.id);
+      removeAppointment(appointment.id);
+      setEncounterMessage(
+        `Appointment on ${dateLabel} at ${timeLabel} and its encounter${
+          chargeCount > 0 ? ` (${chargeCount} charge${chargeCount === 1 ? "" : "s"})` : ""
+        } deleted.`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete the ${appointment.appointmentType} appointment on ${dateLabel} at ${timeLabel}? This cannot be undone.`,
     );
@@ -3784,11 +3821,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                   title="Click to change status"
                                   value={appointment.status}
                                 >
-                                  {appointmentStatusOptions.map((status) => (
-                                    <option key={`pcf-status-${appointment.id}-${status}`} value={status}>
-                                      {status}
-                                    </option>
-                                  ))}
+                                  {appointmentStatusOptions.map((status) => {
+                                    const disabled = !isAppointmentStatusSelectable(status, appointment.status);
+                                    return (
+                                      <option
+                                        key={`pcf-status-${appointment.id}-${status}`}
+                                        disabled={disabled}
+                                        value={status}
+                                      >
+                                        {status}
+                                        {disabled ? " (requires Check In first)" : ""}
+                                      </option>
+                                    );
+                                  })}
                                 </select>
                               ) : (
                                 <span className="text-xs text-[var(--text-muted)]">{row.statusLabel}</span>

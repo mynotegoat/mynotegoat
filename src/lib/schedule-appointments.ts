@@ -39,6 +39,23 @@ export const appointmentStatusOptions: AppointmentStatus[] = [
   "Reschedule",
 ];
 
+/**
+ * Whether a given target status is allowed given the current status. Used to
+ * disable invalid transitions in the status dropdowns. Specifically: a patient
+ * cannot be moved to "Check Out" unless they were already "Check In" (or are
+ * already checked out, in which case the option is left visible so the
+ * dropdown still shows the current value).
+ */
+export function isAppointmentStatusSelectable(
+  option: AppointmentStatus,
+  current: AppointmentStatus,
+): boolean {
+  if (option === "Check Out") {
+    return current === "Check In" || current === "Check Out";
+  }
+  return true;
+}
+
 export const appointmentTypeOptions = [
   "Personal Injury Office Visit",
   "Spinal Decompression - C/S",

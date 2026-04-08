@@ -12,6 +12,7 @@ import {
 } from "@/lib/key-dates";
 import {
   appointmentStatusOptions,
+  isAppointmentStatusSelectable,
   formatTimeLabel,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
@@ -301,11 +302,15 @@ export function EditAppointmentModal({
               onChange={(event) => setStatus(event.target.value as AppointmentStatus)}
               value={status}
             >
-              {appointmentStatusOptions.map((option) => (
-                <option key={`edit-status-${option}`} value={option}>
-                  {option}
-                </option>
-              ))}
+              {appointmentStatusOptions.map((option) => {
+                const disabled = !isAppointmentStatusSelectable(option, appointment.status);
+                return (
+                  <option key={`edit-status-${option}`} disabled={disabled} value={option}>
+                    {option}
+                    {disabled ? " (requires Check In first)" : ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
 
