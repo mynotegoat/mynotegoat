@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import {
   buildWorkspaceIdForUser,
+  ensureWorkspaceForUser,
   prepareCloudStateBeforeMount,
-  setActiveWorkspaceId,
 } from "@/lib/cloud-state";
 import { installStorageSyncInterceptor, onSyncStatusChange, pauseSync, resumeSync } from "@/lib/storage-sync-interceptor";
 import { resolveAuthAccessState } from "@/lib/auth-access";
@@ -62,7 +62,13 @@ export default function PortalLayout({
       }
 
       const workspaceId = buildWorkspaceIdForUser(access.userId);
-      setActiveWorkspaceId(workspaceId);
+
+      // CRITICAL: Before doing ANYTHING else, make sure localStorage belongs
+      // to THIS user. If the previous workspace pointer doesn't match (or is
+      // empty while data is still sitting around from a prior session), wipe
+      // every casemate.* key. This prevents one account's data from being
+      // shown to — or, worse, synced up to the cloud under — another account.
+      ensureWorkspaceForUser(workspaceId);
 
       // Install interceptor paused so bootstrap writes don't trigger syncs
       pauseSync();
@@ -73,14 +79,8 @@ export default function PortalLayout({
         }
       });
 
-      // MOUNT IMMEDIATELY — localStorage already has the data from last session.
-      // Don't block the page on a cloud fetch.
-      if (active) {
-        setMounted(true);
-      }
-
-      // Pull cloud data in the BACKGROUND after the page is already visible.
-      // If cloud has newer data, it overwrites localStorage and hooks re-read on next render.
+      // Pull cloud data BEFORE mounting. We must not let hooks read stale
+      // localStorage and trigger writes that would overwrite cloud data.
       try {
         await prepareCloudStateBeforeMount();
       } catch (error) {
@@ -88,6 +88,10 @@ export default function PortalLayout({
       }
 
       resumeSync();
+
+      if (active) {
+        setMounted(true);
+      }
     }
 
     void bootstrap();

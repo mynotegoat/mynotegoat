@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { wipeLocalWorkspaceForSignOut } from "@/lib/cloud-state";
 import { getVisiblePortalNavItems, type PlanTier } from "@/lib/plan-access";
 
 function classNames(...classes: Array<string | false | undefined>) {
@@ -67,6 +68,10 @@ export function AppShell({
 
     setSigningOut(true);
     await supabase.auth.signOut();
+    // Wipe every casemate.* key so the next user to use this browser
+    // starts with a truly empty slate. Defense-in-depth: the portal
+    // bootstrap also re-checks on mount.
+    wipeLocalWorkspaceForSignOut();
     window.location.href = "/auth/login";
   };
 

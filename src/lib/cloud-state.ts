@@ -55,6 +55,44 @@ export function setActiveWorkspaceId(workspaceId: string) {
   window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
 }
 
+/**
+ * Synchronously guarantee that localStorage belongs to `expectedWorkspaceId`.
+ *
+ * If the stored active-workspace pointer is missing OR points to a different
+ * workspace, every casemate.* key is wiped before this function returns.
+ * Always called from the portal layout BEFORE any hook reads localStorage,
+ * so a fresh signup in an existing browser starts with a truly empty slate
+ * instead of inheriting the previous session's patient data.
+ *
+ * The previous behavior — pre-setting active-workspace-id and then comparing
+ * inside an async cloud bootstrap — caused the comparison to always pass and
+ * the leftover data to be sync-pushed under the new user's id.
+ */
+/**
+ * Called from the sign-out button. Wipes every casemate.* key AND the
+ * active-workspace pointer so the next user to land in this browser
+ * starts with a truly empty slate.
+ */
+export function wipeLocalWorkspaceForSignOut() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  clearLocalWorkspaceData();
+  window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+}
+
+export function ensureWorkspaceForUser(expectedWorkspaceId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const previous = window.localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? "";
+  if (previous !== expectedWorkspaceId) {
+    // Wipes every casemate.* key (preserves backup + sync-at + workspace-id).
+    clearLocalWorkspaceData();
+    window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, expectedWorkspaceId);
+  }
+}
+
 function getActiveWorkspaceId() {
   if (typeof window === "undefined") {
     return "";
@@ -166,26 +204,12 @@ function parseTimestamp(value: string | null) {
   return Number.isNaN(parsed) ? Number.NaN : parsed;
 }
 
-// Cache authenticated config so we don't call getSession() on every push.
-// Refreshed at most once per 60 seconds.
-let cachedAuthedConfig: {
-  url: string;
-  anonKey: string;
-  table: string;
-  officeId: string;
-  supabase: NonNullable<ReturnType<typeof getSupabaseBrowserClient>>;
-  userId: string;
-  workspaceId: string;
-} | null = null;
-let cachedAuthedConfigAt = 0;
-const AUTH_CACHE_TTL = 60_000; // 60 seconds
-
+// IMPORTANT: do NOT cache the resolved auth config across calls. A previous
+// version cached for 60 seconds, which meant a brand-new signup could resolve
+// to the prior user's workspace_id and clobber data across accounts. getSession
+// reads from the supabase client's in-memory + localStorage state, so it's
+// already cheap — we re-resolve every time.
 async function getAuthedConfig() {
-  const now = Date.now();
-  if (cachedAuthedConfig && now - cachedAuthedConfigAt < AUTH_CACHE_TTL) {
-    return cachedAuthedConfig;
-  }
-
   const config = getConfig();
   const supabase = getSupabaseBrowserClient();
   if (!config || !supabase) {
@@ -198,19 +222,15 @@ async function getAuthedConfig() {
 
   const userId = session?.user?.id;
   if (!userId) {
-    cachedAuthedConfig = null;
     return null;
   }
 
-  const expectedWorkspaceId = `${userId}:${config.officeId}`;
-  cachedAuthedConfig = {
+  return {
     ...config,
     supabase,
     userId,
-    workspaceId: expectedWorkspaceId,
+    workspaceId: `${userId}:${config.officeId}`,
   };
-  cachedAuthedConfigAt = now;
-  return cachedAuthedConfig;
 }
 
 async function fetchRemoteSnapshot(workspaceId: string) {

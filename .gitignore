@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# data migration source files (PHI — never commit)
+/migrations/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
