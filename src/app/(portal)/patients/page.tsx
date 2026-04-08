@@ -283,7 +283,6 @@ export default function PatientsPage() {
   const [taskQuickDueDate, setTaskQuickDueDate] = useState("");
   const [taskQuickPatientId, setTaskQuickPatientId] = useState("");
   const [taskQuickPatientQuery, setTaskQuickPatientQuery] = useState("");
-  const [taskQuickCaseQuery, setTaskQuickCaseQuery] = useState("");
   const [taskSearch, setTaskSearch] = useState("");
   const [taskStatusFilter, setTaskStatusFilter] = useState<"All" | "Open" | "Done">(() =>
     loadDashboardWorkspaceSettings().myTasks.openOnly ? "Open" : "All",
@@ -808,7 +807,7 @@ export default function PatientsPage() {
     });
     if (!result.added) { setTaskMessage(result.reason); return; }
     setTaskQuickTitle(""); setTaskQuickPriority("Medium"); setTaskQuickDueDate("");
-    setTaskQuickPatientId(""); setTaskQuickPatientQuery(""); setTaskQuickCaseQuery("");
+    setTaskQuickPatientId(""); setTaskQuickPatientQuery("");
     setTaskMessage("Task added.");
   };
 
@@ -829,24 +828,14 @@ export default function PatientsPage() {
       .slice(0, 6);
   }, [taskPatientCaseEntries, taskQuickPatientQuery, taskQuickPatientId]);
 
-  const taskCaseMatches = useMemo(() => {
-    const q = taskQuickCaseQuery.trim().toUpperCase();
-    if (!q || taskQuickPatientId) return [];
-    return taskPatientCaseEntries
-      .filter((e) => e.caseNumber.toUpperCase().includes(q))
-      .slice(0, 6);
-  }, [taskPatientCaseEntries, taskQuickCaseQuery, taskQuickPatientId]);
-
   const selectTaskPatient = (entry: { id: string; fullName: string; caseNumber: string }) => {
     setTaskQuickPatientId(entry.id);
     setTaskQuickPatientQuery(entry.fullName);
-    setTaskQuickCaseQuery(entry.caseNumber);
   };
 
   const clearTaskPatient = () => {
     setTaskQuickPatientId("");
     setTaskQuickPatientQuery("");
-    setTaskQuickCaseQuery("");
   };
 
   const startEditingTask = (task: TaskRecord) => {
@@ -1272,9 +1261,15 @@ export default function PatientsPage() {
             <div className="mt-3 grid gap-3 md:grid-cols-12">
               <label className="grid gap-1 md:col-span-12">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Task *</span>
-                <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickTitle(e.target.value)} placeholder="Call attorney re: lien update" value={taskQuickTitle} />
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setTaskQuickTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTask(); } }}
+                  placeholder="Call attorney re: lien update"
+                  value={taskQuickTitle}
+                />
               </label>
-              <label className="relative grid gap-1 md:col-span-4">
+              <label className="relative grid gap-1 md:col-span-5">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Patient</span>
                 <input
                   className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -1283,9 +1278,9 @@ export default function PatientsPage() {
                     setTaskQuickPatientQuery(v);
                     if (taskQuickPatientId) {
                       setTaskQuickPatientId("");
-                      setTaskQuickCaseQuery("");
                     }
                   }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && taskPatientMatches.length === 0) { e.preventDefault(); handleAddTask(); } }}
                   placeholder="Search patient..."
                   value={taskQuickPatientQuery}
                 />
@@ -1315,49 +1310,26 @@ export default function PatientsPage() {
                   </ul>
                 )}
               </label>
-              <label className="relative grid gap-1 md:col-span-3">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Case #</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 uppercase"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setTaskQuickCaseQuery(v);
-                    if (taskQuickPatientId) {
-                      setTaskQuickPatientId("");
-                      setTaskQuickPatientQuery("");
-                    }
-                  }}
-                  placeholder="Search case #..."
-                  value={taskQuickCaseQuery}
-                />
-                {taskCaseMatches.length > 0 && (
-                  <ul className="absolute left-0 right-0 top-[60px] z-10 max-h-56 overflow-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
-                    {taskCaseMatches.map((entry) => (
-                      <li key={entry.id}>
-                        <button
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)]"
-                          onClick={() => selectTaskPatient(entry)}
-                          type="button"
-                        >
-                          <span className="font-mono text-xs">{entry.caseNumber}</span>
-                          <span>{entry.fullName}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Priority</span>
                 <select className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" onChange={(e) => setTaskQuickPriority(e.target.value as TaskPriority)} value={taskQuickPriority}>
                   <option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Urgent">Urgent</option>
                 </select>
               </label>
-              <label className="grid gap-1 md:col-span-2">
+              <label className="grid gap-1 md:col-span-3">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Due Date</span>
-                <input className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2" inputMode="numeric" maxLength={10} onChange={(e) => setTaskQuickDueDate(formatTaskDateInput(e.target.value))} placeholder="MM/DD/YYYY" type="text" value={taskQuickDueDate} />
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  inputMode="numeric"
+                  maxLength={10}
+                  onChange={(e) => setTaskQuickDueDate(formatTaskDateInput(e.target.value))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTask(); } }}
+                  placeholder="MM/DD/YYYY"
+                  type="text"
+                  value={taskQuickDueDate}
+                />
               </label>
-              <div className="flex items-end md:col-span-1">
+              <div className="flex items-end md:col-span-2">
                 <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white" onClick={handleAddTask} type="button">Add</button>
               </div>
             </div>

@@ -1685,7 +1685,24 @@ export default function AppointmentsPage() {
                     ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.1)]"
                     : "border-[var(--line-soft)] bg-[var(--bg-soft)]"
                 }`}
-                onClick={() => setNewAppointmentDraft((current) => ({ ...current, isRecurring: true }))}
+                onClick={() =>
+                  setNewAppointmentDraft((current) => {
+                    const startDay = getDayOfWeek(current.startDate);
+                    const seededDays =
+                      current.recurDays.length > 0
+                        ? current.recurDays
+                        : openRecurringDays.has(startDay)
+                          ? [startDay]
+                          : [];
+                    return {
+                      ...current,
+                      isRecurring: true,
+                      recurUnit: "weeks",
+                      recurInterval: 1,
+                      recurDays: seededDays,
+                    };
+                  })
+                }
                 type="button"
               >
                 Recurring Series
@@ -1767,58 +1784,7 @@ export default function AppointmentsPage() {
 
             {newAppointmentDraft.isRecurring && (
               <div className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <div className="grid gap-3 md:grid-cols-5">
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Recurs Every</span>
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      min={1}
-                      onChange={(event) =>
-                        setNewAppointmentDraft((current) => ({
-                          ...current,
-                          recurInterval: Math.max(1, Number(event.target.value) || 1),
-                        }))
-                      }
-                      type="number"
-                      value={newAppointmentDraft.recurInterval}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Unit</span>
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      onChange={(event) =>
-                        setNewAppointmentDraft((current) => {
-                          const nextUnit = event.target.value as RecurrenceUnit;
-                          if (nextUnit !== "weeks") {
-                            return {
-                              ...current,
-                              recurUnit: nextUnit,
-                            };
-                          }
-
-                          const filteredDays = current.recurDays.filter((day) => openRecurringDays.has(day));
-                          const startDay = getDayOfWeek(current.startDate);
-                          const nextDays =
-                            filteredDays.length > 0
-                              ? filteredDays
-                              : openRecurringDays.has(startDay)
-                                ? [startDay]
-                                : [];
-
-                          return {
-                            ...current,
-                            recurUnit: nextUnit,
-                            recurDays: nextDays,
-                          };
-                        })
-                      }
-                      value={newAppointmentDraft.recurUnit}
-                    >
-                      <option value="days">Day(s)</option>
-                      <option value="weeks">Week(s)</option>
-                    </select>
-                  </label>
+                <div className="grid gap-3 md:grid-cols-3">
                   <label className="grid gap-1">
                     <span className="text-sm font-semibold text-[var(--text-muted)]">Ends By</span>
                     <select
@@ -1886,7 +1852,7 @@ export default function AppointmentsPage() {
 
                 {newAppointmentDraft.recurUnit === "weeks" && (
                   <div className="mt-3">
-                    <p className="mb-2 text-sm font-semibold text-[var(--text-muted)]">On</p>
+                    <p className="mb-2 text-sm font-semibold text-[var(--text-muted)]">Recurs Every</p>
                     <div className="flex flex-wrap gap-2">
                       {dayToggleOptions.map((option) => {
                         const isOpenDay = openRecurringDays.has(option.day);
