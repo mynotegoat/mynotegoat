@@ -417,7 +417,20 @@ export default function AppointmentsPage() {
     dateOfLoss: "",
   });
   const [quickNewPatientError, setQuickNewPatientError] = useState("");
+  const [quickAttorneyFocused, setQuickAttorneyFocused] = useState(false);
   const [contactGap, setContactGap] = useState<ContactGap | null>(null);
+
+  const attorneyContactOptions = useMemo(
+    () => contacts.filter((c) => c.category.toLowerCase() === "attorney"),
+    [contacts],
+  );
+  const quickAttorneyMatches = useMemo(() => {
+    const q = quickNewPatientDraft.attorney.trim().toLowerCase();
+    if (!q) return [];
+    // Hide list if exact match (already picked)
+    if (attorneyContactOptions.some((c) => c.name.trim().toLowerCase() === q)) return [];
+    return attorneyContactOptions.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [attorneyContactOptions, quickNewPatientDraft.attorney]);
   const [newAppointmentDraft, setNewAppointmentDraft] = useState<NewAppointmentDraft>(() =>
     createInitialDraft(getTodayIsoDate(), null),
   );
@@ -1504,16 +1517,38 @@ export default function AppointmentsPage() {
                         value={quickNewPatientDraft.phone}
                       />
                     </label>
-                    <label className="grid gap-1">
+                    <label className="relative grid gap-1">
                       <span className="text-xs font-semibold text-[var(--text-muted)]">Attorney</span>
                       <input
                         className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                        onBlur={() => window.setTimeout(() => setQuickAttorneyFocused(false), 120)}
                         onChange={(e) =>
                           setQuickNewPatientDraft((c) => ({ ...c, attorney: e.target.value }))
                         }
-                        placeholder="Attorney name (optional)"
+                        onFocus={() => setQuickAttorneyFocused(true)}
+                        placeholder="Search or type attorney"
                         value={quickNewPatientDraft.attorney}
                       />
+                      {quickAttorneyFocused && quickAttorneyMatches.length > 0 && (
+                        <ul className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-20 max-h-56 overflow-auto rounded-lg border border-[var(--line-soft)] bg-white shadow-[0_12px_24px_rgba(14,41,62,0.14)]">
+                          {quickAttorneyMatches.map((entry) => (
+                            <li key={entry.id}>
+                              <button
+                                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[rgba(13,121,191,0.08)]"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setQuickNewPatientDraft((c) => ({ ...c, attorney: entry.name }));
+                                  setQuickAttorneyFocused(false);
+                                }}
+                                type="button"
+                              >
+                                <span className="font-medium">{entry.name}</span>
+                                <span className="text-xs text-[var(--text-muted)]">{entry.phone || ""}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </label>
                     <label className="grid gap-1">
                       <span className="text-xs font-semibold text-[var(--text-muted)]">Date of Injury</span>
