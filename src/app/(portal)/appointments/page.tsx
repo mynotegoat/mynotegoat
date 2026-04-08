@@ -415,6 +415,7 @@ export default function AppointmentsPage() {
     phone: "",
     attorney: "",
     dateOfLoss: "",
+    notes: "",
   });
   const [quickNewPatientError, setQuickNewPatientError] = useState("");
   const [quickAttorneyFocused, setQuickAttorneyFocused] = useState(false);
@@ -669,7 +670,7 @@ export default function AppointmentsPage() {
 
   const resetQuickNewPatientPanel = () => {
     setShowQuickNewPatient(false);
-    setQuickNewPatientDraft({ firstName: "", lastName: "", phone: "", attorney: "", dateOfLoss: "" });
+    setQuickNewPatientDraft({ firstName: "", lastName: "", phone: "", attorney: "", dateOfLoss: "", notes: "" });
     setQuickNewPatientError("");
   };
 
@@ -695,6 +696,7 @@ export default function AppointmentsPage() {
       attorney: quickNewPatientDraft.attorney.trim() || undefined,
       phone: quickNewPatientDraft.phone.trim() || undefined,
       dateOfLoss: dolIso,
+      notes: quickNewPatientDraft.notes.trim() || undefined,
     });
     if (!created) {
       setQuickNewPatientError("Could not create patient.");
@@ -1568,6 +1570,18 @@ export default function AppointmentsPage() {
                       />
                     </label>
                   </div>
+                  <label className="mt-3 grid gap-1">
+                    <span className="text-xs font-semibold text-[var(--text-muted)]">Note</span>
+                    <textarea
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                      onChange={(e) =>
+                        setQuickNewPatientDraft((c) => ({ ...c, notes: e.target.value }))
+                      }
+                      placeholder="Anything from the call: chief complaint, referral source, language, ride needs, etc."
+                      rows={2}
+                      value={quickNewPatientDraft.notes}
+                    />
+                  </label>
                   {quickNewPatientError && (
                     <p className="mt-2 text-xs font-semibold text-[#b43b34]">{quickNewPatientError}</p>
                   )}

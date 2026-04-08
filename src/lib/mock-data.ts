@@ -424,6 +424,7 @@ export type CreatePatientDraft = {
   caseStatus?: CaseStatus;
   lienStatus?: string;
   priorCare?: string;
+  notes?: string;
 };
 
 export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | null {
@@ -441,6 +442,7 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
   const initialExam = cleanString(draft.initialExam);
   const lienStatus = cleanString(draft.lienStatus);
   const priorCare = cleanString(draft.priorCare);
+  const notes = cleanString(draft.notes);
 
   if (phone && phone !== "-") {
     matrix.contact = phone;
@@ -453,6 +455,9 @@ export function createPatientRecord(draft: CreatePatientDraft): PatientRecord | 
   }
   if (priorCare) {
     matrix.priorCare = priorCare;
+  }
+  if (notes) {
+    matrix.notes = notes;
   }
 
   const nextPatient: PatientRecord = {
