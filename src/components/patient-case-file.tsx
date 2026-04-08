@@ -2800,7 +2800,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 setAlertDraft("");
               }
             }}
-            placeholder="Add patient alert (e.g. PREGNANT, HX OF CANCER, BROKEN RIB...)"
+            placeholder="Add Patient Alert (Ex: Hx of Cancer, Broken Rib, etc.)"
             value={alertDraft}
           />
           <button
