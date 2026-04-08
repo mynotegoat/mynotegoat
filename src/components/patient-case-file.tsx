@@ -36,6 +36,7 @@ import { NewAppointmentModal } from "@/components/new-appointment-modal";
 import { RescheduleAppointmentModal } from "@/components/reschedule-appointment-modal";
 import { EditAppointmentModal } from "@/components/edit-appointment-modal";
 import { forceSyncNow } from "@/lib/storage-sync-interceptor";
+import { buildFollowUpItems } from "@/lib/follow-up-queue";
 import { type TaskPriority } from "@/lib/tasks";
 import {
   patients as allPatients,
@@ -690,7 +691,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
-  const { addTask } = useTasks();
+  const { tasks, addTask, toggleTaskDone } = useTasks();
+  const patientFlowItems = useMemo(() => buildFollowUpItems([patient]), [patient]);
+  const patientTasks = useMemo(
+    () => tasks.filter((task) => task.patientId === patient.id),
+    [tasks, patient.id],
+  );
   const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge, deleteEncounter } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
@@ -3518,47 +3524,74 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             onClick={() => toggleSectionPanel("reExam")}
             type="button"
           >
-            <span>Re-Exam</span>
+            <span>Case Flow &amp; To-Do</span>
             <span className="text-xl">{sectionPanelsOpen.reExam ? "−" : "+"}</span>
           </button>
           {sectionPanelsOpen.reExam && (
-            <>
-              <div className="mt-3 flex gap-2">
-                <input
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) => setReExamDraft(formatUsDateInput(event.target.value))}
-                  placeholder="MM/DD/YYYY"
-                  value={reExamDraft}
-                />
-                <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                  onClick={addReExam}
-                  type="button"
-                >
-                  Add
-                </button>
+            <div className="mt-3 grid gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Case Flow
+                </div>
+                {patientFlowItems.length === 0 ? (
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">No open flow items.</p>
+                ) : (
+                  <ul className="mt-1 grid gap-2">
+                    {patientFlowItems.map((item) => (
+                      <li
+                        key={item.id}
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">{item.category}</span>
+                          {item.daysFromAnchor !== null && (
+                            <span className="text-xs text-[var(--text-muted)]">
+                              {item.daysFromAnchor}d
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[var(--text-muted)]">{item.stage}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {reExams.map((date, index) => (
-                  <span
-                    key={`${date}-${index}`}
-                    className="inline-flex items-center gap-2 rounded-full border border-[var(--line-soft)] bg-white px-3 py-1 text-sm"
-                  >
-                    <span>{date}</span>
-                    <button
-                      className="rounded-full border border-[var(--line-soft)] px-2 text-xs font-semibold"
-                      onClick={() => { if (window.confirm("Remove this re-exam date?")) removeReExam(index); }}
-                      type="button"
-                    >
-                      x
-                    </button>
-                  </span>
-                ))}
-                {reExams.length === 0 && <p className="text-sm text-[var(--text-muted)]">No re-exams added.</p>}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  To-Do
+                </div>
+                {patientTasks.length === 0 ? (
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">No to-do items for this patient.</p>
+                ) : (
+                  <ul className="mt-1 grid gap-2">
+                    {patientTasks.map((task) => (
+                      <li
+                        key={task.id}
+                        className="flex items-start gap-2 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                      >
+                        <input
+                          checked={task.done}
+                          className="mt-1"
+                          onChange={() => toggleTaskDone(task.id)}
+                          type="checkbox"
+                        />
+                        <div className="flex-1">
+                          <div className={task.done ? "line-through text-[var(--text-muted)]" : "font-semibold"}>
+                            {task.title}
+                          </div>
+                          {(task.dueDate || task.priority) && (
+                            <div className="text-xs text-[var(--text-muted)]">
+                              {task.priority}
+                              {task.dueDate ? ` • Due ${task.dueDate}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            </>
+            </div>
           )}
         </article>
 
