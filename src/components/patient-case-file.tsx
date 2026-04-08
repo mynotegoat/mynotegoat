@@ -1499,12 +1499,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       title: quickTaskTitle,
       priority: quickTaskPriority,
       dueDate: dueDateIso,
+      patientId: patient.id,
+      patientName: patient.fullName,
     });
     if (!result.added) {
       setQuickTaskModalMessage(result.reason);
       return;
     }
-    setQuickTaskStatusMessage("Task added to To Do.");
+    setQuickTaskStatusMessage("To-Do added.");
     closeQuickTaskModal();
   };
 
@@ -2748,7 +2750,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 ref={quickTaskButtonRef}
                 type="button"
               >
-                + Task
+                + To Do
               </button>
             </div>
             {quickTaskStatusMessage && (
@@ -4976,7 +4978,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           <div className="relative h-full w-full">
             <form className="panel-card p-4" style={getAnchoredModalStyle(quickTaskAnchor, 680, 60)} onSubmit={(e) => { e.preventDefault(); saveQuickTask(); }}>
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-xl font-semibold">Quick Add Task</h3>
+                <h3 className="text-xl font-semibold">Quick Add To Do</h3>
                 <button
                   className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm"
                   onClick={closeQuickTaskModal}
@@ -5044,7 +5046,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
                   type="submit"
                 >
-                  Add Task
+                  Add To Do
                 </button>
               </div>
             </form>
