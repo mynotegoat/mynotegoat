@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import {
   buildWorkspaceIdForUser,
+  CloudBootstrapError,
   ensureWorkspaceForUser,
   prepareCloudStateBeforeMount,
 } from "@/lib/cloud-state";
 import { installStorageSyncInterceptor, onSyncStatusChange, pauseSync, resumeSync } from "@/lib/storage-sync-interceptor";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
 import { PlanTierProvider } from "@/lib/plan-context";
@@ -22,6 +24,8 @@ export default function PortalLayout({
   const [mounted, setMounted] = useState(false);
   const [planTier, setPlanTier] = useState<PlanTier>("complete");
   const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "error">("synced");
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [syncBlocked, setSyncBlocked] = useState<{ localSize: number; remoteSize: number } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -81,10 +85,20 @@ export default function PortalLayout({
 
       // Pull cloud data BEFORE mounting. We must not let hooks read stale
       // localStorage and trigger writes that would overwrite cloud data.
+      // CRITICAL: if this fails, we DO NOT mount the app. The user sees a
+      // hard error screen instead. Mounting on stale/empty localStorage is
+      // exactly how the 2026-04-08 data loss happened.
       try {
         await prepareCloudStateBeforeMount();
       } catch (error) {
-        console.warn("[Portal] Cloud sync skipped:", error);
+        if (!active) return;
+        const message =
+          error instanceof CloudBootstrapError
+            ? error.message
+            : "Could not load your data from the cloud. Refusing to open the app to protect your records.";
+        setBootstrapError(message);
+        // Leave sync paused so nothing in this tab can push.
+        return;
       }
 
       resumeSync();
@@ -96,10 +110,60 @@ export default function PortalLayout({
 
     void bootstrap();
 
+    // Listen for destructive-write blocks from the cloud sync layer.
+    const onBlocked = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { localSize: number; remoteSize: number } | undefined;
+      if (detail && active) {
+        setSyncBlocked({ localSize: detail.localSize, remoteSize: detail.remoteSize });
+      }
+    };
+    window.addEventListener("casemate:cloud-sync-blocked", onBlocked);
+
     return () => {
       active = false;
+      window.removeEventListener("casemate:cloud-sync-blocked", onBlocked);
     };
   }, [router]);
+
+  if (bootstrapError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-6 lg:px-8">
+        <div className="max-w-xl w-full rounded-2xl border border-red-500/40 bg-red-950/40 p-6 text-sm text-red-100 shadow-xl">
+          <div className="text-base font-semibold text-red-50 mb-2">
+            Cloud sync failed — app is locked for your protection
+          </div>
+          <p className="mb-3 leading-relaxed">{bootstrapError}</p>
+          <p className="mb-4 leading-relaxed text-red-200/90">
+            Your cloud data is safe. The app refuses to open until it can confirm it
+            has the latest version, so a stale local copy can never overwrite the
+            cloud.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-400"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  const supabase = getSupabaseBrowserClient();
+                  if (supabase) await supabase.auth.signOut();
+                  window.location.href = "/auth/login";
+                })();
+              }}
+              className="rounded-lg border border-red-400/60 px-4 py-2 font-semibold text-red-100 hover:bg-red-900/40"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!mounted) {
     return (
@@ -125,6 +189,20 @@ export default function PortalLayout({
             </div>
           )}
         </div>
+        {syncBlocked && (
+          <div className="fixed inset-x-0 top-0 z-[60] bg-red-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-lg">
+            ⚠ Cloud sync blocked — this browser has less data than the cloud (
+            {syncBlocked.localSize} vs {syncBlocked.remoteSize} bytes). Changes are
+            NOT being saved. Reload to pull the latest data from the cloud.{" "}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="ml-2 underline"
+            >
+              Reload now
+            </button>
+          </div>
+        )}
         {children}
       </AppShell>
     </PlanTierProvider>

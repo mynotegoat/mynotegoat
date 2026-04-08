@@ -127,21 +127,54 @@ function clearLocalWorkspaceData() {
   // Always create a safety backup before clearing
   backupLocalWorkspaceData();
 
-  const keysToRemove: string[] = [];
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (!key || !key.startsWith(LOCAL_KEY_PREFIX)) {
-      continue;
+  // CRITICAL: pause the storage-sync interceptor for the duration of the
+  // wipe. Without this, every removeItem() below would schedule a cloud
+  // push, and the resulting push could overwrite the cloud row with an
+  // empty/near-empty snapshot. The 2026-04-08 incident was caused by
+  // exactly this race condition.
+  //
+  // Imported lazily to avoid a circular dependency between cloud-state and
+  // storage-sync-interceptor.
+  let resume: (() => void) | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const interceptor = require("@/lib/storage-sync-interceptor") as {
+      pauseSync?: () => void;
+      resumeSync?: () => void;
+    };
+    if (typeof interceptor.pauseSync === "function") {
+      interceptor.pauseSync();
+      resume = () => interceptor.resumeSync?.();
     }
-    if (key === ACTIVE_WORKSPACE_KEY || key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`) || key === BACKUP_KEY) {
-      continue;
-    }
-    keysToRemove.push(key);
+  } catch {
+    // interceptor module not loaded yet — nothing to pause.
   }
 
-  keysToRemove.forEach((key) => {
-    window.localStorage.removeItem(key);
-  });
+  try {
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key || !key.startsWith(LOCAL_KEY_PREFIX)) {
+        continue;
+      }
+      if (
+        key === ACTIVE_WORKSPACE_KEY ||
+        key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`) ||
+        key === BACKUP_KEY
+      ) {
+        continue;
+      }
+      keysToRemove.push(key);
+    }
+
+    keysToRemove.forEach((key) => {
+      window.localStorage.removeItem(key);
+    });
+  } finally {
+    if (resume) {
+      resume();
+    }
+  }
 }
 
 function readLocalSnapshot(): LocalSnapshot {
@@ -156,8 +189,14 @@ function readLocalSnapshot(): LocalSnapshot {
       !key ||
       !key.startsWith(LOCAL_KEY_PREFIX) ||
       key === ACTIVE_WORKSPACE_KEY ||
+      key === BACKUP_KEY ||
       key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`)
     ) {
+      // BACKUP_KEY is intentionally excluded from snapshots that get pushed
+      // to the cloud. On 2026-04-08 a wipe loop left only the safety backup
+      // in localStorage, and the next autosave pushed a snapshot containing
+      // ONLY that key — wiping every patient/SOAP/macro/letter from the
+      // cloud row. Never let the safety backup be the data.
       continue;
     }
 
@@ -165,6 +204,26 @@ function readLocalSnapshot(): LocalSnapshot {
     snapshot[key] = value ?? "";
   }
   return snapshot;
+}
+
+/**
+ * Count the keys in a snapshot that represent real user data.
+ * Used by the destructive-write guard.
+ */
+function countMeaningfulKeys(snapshot: Record<string, unknown>): number {
+  let count = 0;
+  for (const key of Object.keys(snapshot)) {
+    if (!key.startsWith(LOCAL_KEY_PREFIX)) continue;
+    if (key === BACKUP_KEY) continue;
+    if (key === ACTIVE_WORKSPACE_KEY) continue;
+    if (key.startsWith(`${LOCAL_SYNC_AT_PREFIX}.`)) continue;
+    const value = snapshot[key];
+    const str = typeof value === "string" ? value : JSON.stringify(value ?? "");
+    const trimmed = str.trim();
+    if (trimmed.length === 0 || trimmed === "{}" || trimmed === "[]") continue;
+    count += 1;
+  }
+  return count;
 }
 
 function writeLocalSnapshot(snapshot: Record<string, unknown>) {
@@ -278,19 +337,32 @@ async function upsertRemoteSnapshot(workspaceId: string, snapshot: LocalSnapshot
   window.localStorage.setItem(getSyncAtKey(workspaceId), nowIso);
 }
 
+export class CloudBootstrapError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = "CloudBootstrapError";
+  }
+}
+
 export async function prepareCloudStateBeforeMount() {
   if (typeof window === "undefined" || !isCloudSyncEnabled()) {
     return;
   }
 
-  // Hard timeout: never let cloud sync block longer than 5 seconds
+  // Hard timeout: never let cloud sync block longer than 15 seconds.
+  // (Bumped from 5s — we now BLOCK on success, so a slow network must
+  // not silently fall through to an empty render.)
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
   try {
     const authed = await getAuthedConfig();
-    if (!authed || controller.signal.aborted) {
+    if (!authed) {
+      // Not signed in yet — nothing to bootstrap. Caller should redirect.
       return;
+    }
+    if (controller.signal.aborted) {
+      throw new CloudBootstrapError("Cloud bootstrap timed out before auth");
     }
 
     const previousWorkspaceId = getActiveWorkspaceId();
@@ -305,7 +377,9 @@ export async function prepareCloudStateBeforeMount() {
 
     setActiveWorkspaceId(authed.workspaceId);
 
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) {
+      throw new CloudBootstrapError("Cloud bootstrap timed out");
+    }
 
     const localSnapshot = readLocalSnapshot();
     const localHasData = hasMeaningfulLocalData(localSnapshot);
@@ -314,11 +388,19 @@ export async function prepareCloudStateBeforeMount() {
     try {
       remote = await fetchRemoteSnapshot(authed.workspaceId);
     } catch (error) {
-      console.warn("[Cloud Sync] Could not fetch remote, keeping local data:", error);
-      return;
+      // CRITICAL: do NOT silently fall through. If we can't talk to the
+      // cloud we must refuse to mount the app — otherwise the user could
+      // start editing on top of empty/stale localStorage and the next
+      // autosave would push that empty state up.
+      throw new CloudBootstrapError(
+        "Could not reach the cloud. Refusing to load the app with potentially stale local data. Please check your internet connection and try again.",
+        error,
+      );
     }
 
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) {
+      throw new CloudBootstrapError("Cloud bootstrap timed out fetching remote");
+    }
 
     const remoteHasData =
       remote &&
@@ -369,7 +451,16 @@ export async function prepareCloudStateBeforeMount() {
       await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }
   } catch (error) {
-    console.warn("[Cloud Sync] Startup sync skipped:", error);
+    // Re-throw bootstrap errors so the layout can show a hard error screen.
+    // Only swallow truly unexpected, non-fatal errors.
+    if (error instanceof CloudBootstrapError) {
+      throw error;
+    }
+    console.error("[Cloud Sync] Unexpected bootstrap error:", error);
+    throw new CloudBootstrapError(
+      "Unexpected error while syncing with the cloud. Refusing to load the app.",
+      error,
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -467,14 +558,74 @@ export async function pushLocalStateToCloud() {
       return;
     }
 
-    if (getActiveWorkspaceId() !== authed.workspaceId) {
-      setActiveWorkspaceId(authed.workspaceId);
+    // Refuse to push under the wrong workspace_id. The previous behavior
+    // would silently set the active id and push, which is exactly how data
+    // could leak across accounts. If the active pointer doesn't match the
+    // signed-in user, abort the push entirely — the bootstrap will correct
+    // the pointer on next mount.
+    const activeWorkspaceId = getActiveWorkspaceId();
+    if (activeWorkspaceId && activeWorkspaceId !== authed.workspaceId) {
+      console.warn(
+        "[Cloud Sync] Refusing push: active workspace pointer does not match signed-in user.",
+      );
+      return;
     }
 
     const localSnapshot = readLocalSnapshot();
     if (!hasMeaningfulLocalData(localSnapshot)) {
       return;
     }
+
+    // ── DESTRUCTIVE-WRITE GUARD (client-side, defense in depth) ──
+    // Before pushing, fetch the current remote snapshot. If the remote
+    // already contains substantially MORE data than what we're about to
+    // push, refuse the push. This prevents wipe-loops, race conditions,
+    // and bootstrap failures from destroying the cloud copy.
+    //
+    // The database trigger (app_snapshots_protect) is the real bedrock —
+    // even if this client check is bypassed, Postgres will reject the
+    // write. This is just the polite first line of defense so we don't
+    // round-trip a guaranteed-to-fail upsert.
+    const localKeyCount = countMeaningfulKeys(localSnapshot);
+    const localSize = JSON.stringify(localSnapshot).length;
+
+    let remote: Awaited<ReturnType<typeof fetchRemoteSnapshot>> = null;
+    try {
+      remote = await fetchRemoteSnapshot(authed.workspaceId);
+    } catch (error) {
+      console.warn(
+        "[Cloud Sync] Could not fetch remote for safety check — refusing push:",
+        error,
+      );
+      return;
+    }
+
+    if (remote && remote.snapshot && typeof remote.snapshot === "object") {
+      const remoteSnapshot = remote.snapshot as Record<string, unknown>;
+      const remoteSize = JSON.stringify(remoteSnapshot).length;
+      const remoteKeyCount = countMeaningfulKeys(remoteSnapshot);
+
+      if (
+        remoteSize > 10_000 &&
+        (localSize < remoteSize / 2 ||
+          (remoteKeyCount > 5 && localKeyCount < (remoteKeyCount * 7) / 10))
+      ) {
+        console.error(
+          `[Cloud Sync] REFUSED destructive write. local_size=${localSize} local_keys=${localKeyCount} remote_size=${remoteSize} remote_keys=${remoteKeyCount}. The cloud has more data than the local copy — refusing to overwrite. Reload the page to pull cloud data.`,
+        );
+        // Notify any listener (e.g. the sync status UI) so the user sees
+        // a hard error instead of a silent loss.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("casemate:cloud-sync-blocked", {
+              detail: { localSize, remoteSize, localKeyCount, remoteKeyCount },
+            }),
+          );
+        }
+        return;
+      }
+    }
+
     await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
   } catch (error) {
     console.warn("[Cloud Sync] Autosave failed:", error);
