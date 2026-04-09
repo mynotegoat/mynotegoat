@@ -461,6 +461,16 @@ export async function prepareCloudStateBeforeMount() {
     if (localHasData) {
       await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }
+
+    // Phase-1 cloud-as-truth pull for table-backed entities. Runs AFTER the
+    // legacy blob bootstrap has settled localStorage, so the table read is
+    // the FINAL word on those entities for this session. Wrapped so a
+    // Phase-1 hiccup never tears down the legacy load path.
+    try {
+      await bootstrapTableBackedEntities();
+    } catch (entityErr) {
+      console.error("[Cloud Sync] Phase-1 entity bootstrap failed:", entityErr);
+    }
   } catch (error) {
     // Re-throw bootstrap errors so the layout can show a hard error screen.
     // Only swallow truly unexpected, non-fatal errors.
@@ -475,6 +485,78 @@ export async function prepareCloudStateBeforeMount() {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Phase-1 bootstrap for table-backed entities.
+ *
+ * When the `patients` feature flag is on (via localStorage override or
+ * compile-time default), this fetches the authoritative patient list from
+ * the `patients` table and replaces the in-memory + legacy-blob cache.
+ *
+ * First-run migration: if the table is empty for this workspace but the
+ * legacy blob has patients, every patient is pushed up to the table in one
+ * bulk upsert. Subsequent boots simply pull from the table.
+ */
+async function bootstrapTableBackedEntities() {
+  if (typeof window === "undefined") return;
+
+  // Lazy imports to avoid pulling Supabase tables into the cold-path and
+  // to prevent circular imports (mock-data ↔ patients-cloud ↔ cloud-state).
+  const { isCloudEntityEnabled } = await import("@/lib/feature-flags");
+  if (!isCloudEntityEnabled("patients")) return;
+
+  const { fetchAllPatientsFromTable, isPatientsTableReady, bulkUpsertPatientsToTable } =
+    await import("@/lib/patients-cloud");
+  const { patients, replacePatientsFromCloud } = await import("@/lib/mock-data");
+  const { pauseSync, resumeSync } = await import("@/lib/storage-sync-interceptor");
+
+  const ready = await isPatientsTableReady();
+  if (!ready) {
+    console.warn(
+      "[Cloud Sync] patients flag is on but the table isn't ready. " +
+      "Run supabase/patients_table.sql in the SQL editor and refresh.",
+    );
+    return;
+  }
+
+  const tableRows = await fetchAllPatientsFromTable();
+  if (tableRows === null) {
+    // Couldn't reach the table — leave legacy cache in place.
+    return;
+  }
+
+  if (tableRows.length === 0 && patients.length > 0) {
+    // First-run migration: table empty but legacy blob has patients.
+    // Push every existing patient to the table. Runs ONLY when the table
+    // is truly empty for this workspace so a flag re-flip never re-uploads.
+    console.info(
+      `[Cloud Sync] Migrating ${patients.length} patient(s) from legacy blob to table...`,
+    );
+    const result = await bulkUpsertPatientsToTable([...patients]);
+    if (!result.ok) {
+      console.error("[Cloud Sync] Patient migration failed:", result.error);
+    } else {
+      console.info(`[Cloud Sync] Migrated ${result.count} patient(s).`);
+    }
+    return;
+  }
+
+  if (tableRows.length === 0) {
+    // Table empty AND legacy blob empty — nothing to do.
+    return;
+  }
+
+  // Table is the source of truth. Replace the legacy cache from the table
+  // BEFORE the patients page mounts. Pause the storage-sync interceptor so
+  // the localStorage write doesn't trigger a push to the legacy blob row.
+  pauseSync();
+  try {
+    replacePatientsFromCloud(tableRows);
+  } finally {
+    resumeSync();
+  }
+  console.info(`[Cloud Sync] Loaded ${tableRows.length} patient(s) from table.`);
 }
 
 /**

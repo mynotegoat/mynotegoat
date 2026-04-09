@@ -46,6 +46,23 @@ export type CloudEntityFlag =
   | "contacts"
   | "tasks";
 
+/**
+ * Per-browser override key. Setting `casemate.feature-flag.<name>` to "on"
+ * in localStorage flips the flag in this browser only — useful for testing
+ * a phase rollout end-to-end on your own session before flipping the
+ * compile-time default for everyone. Set to "off" to force-disable.
+ */
+const OVERRIDE_PREFIX = "casemate.feature-flag.";
+
 export function isCloudEntityEnabled(flag: CloudEntityFlag): boolean {
+  if (typeof window !== "undefined") {
+    try {
+      const override = window.localStorage.getItem(`${OVERRIDE_PREFIX}${flag}`);
+      if (override === "on") return true;
+      if (override === "off") return false;
+    } catch {
+      // localStorage may be unavailable in private mode — fall through
+    }
+  }
   return cloudEntityFlags[flag] === true;
 }

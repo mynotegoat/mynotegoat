@@ -392,6 +392,67 @@ export function getEncountersByPatientId(patientId: string) {
 }
 
 function persistPatients(nextPatients: PatientRecord[]) {
+  const previousById = new Map(patients.map((entry) => [entry.id, entry]));
+  patients.splice(0, patients.length, ...nextPatients);
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(PATIENTS_STORAGE_KEY, JSON.stringify(nextPatients));
+
+  // Phase-1 cloud-as-truth dual-write. Only fires when the `patients` feature
+  // flag is on (per-browser localStorage override or compile-time default).
+  // We push individual upserts only for rows that actually changed since the
+  // last persist, plus deletes for rows that vanished — this keeps the table
+  // small-edit friendly instead of rewriting every patient on every keystroke.
+  // Errors are logged inside the cloud module and never thrown.
+  void dualWritePatientsToCloud(nextPatients, previousById);
+}
+
+async function dualWritePatientsToCloud(
+  nextPatients: PatientRecord[],
+  previousById: Map<string, PatientRecord>,
+) {
+  try {
+    // Lazy-imported to avoid pulling Supabase into modules that don't need it
+    // and to avoid a circular dependency between mock-data and patients-cloud.
+    const [{ isCloudEntityEnabled }, { upsertPatientToTable, deletePatientFromTable }] =
+      await Promise.all([
+        import("@/lib/feature-flags"),
+        import("@/lib/patients-cloud"),
+      ]);
+    if (!isCloudEntityEnabled("patients")) {
+      return;
+    }
+
+    const nextById = new Map(nextPatients.map((entry) => [entry.id, entry]));
+
+    // Upsert added or changed rows.
+    for (const patient of nextPatients) {
+      const previous = previousById.get(patient.id);
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(patient)) {
+        void upsertPatientToTable(patient);
+      }
+    }
+
+    // Delete rows that vanished from the next snapshot.
+    for (const previousId of previousById.keys()) {
+      if (!nextById.has(previousId)) {
+        void deletePatientFromTable(previousId);
+      }
+    }
+  } catch (error) {
+    console.error("[mock-data] dual-write to patients table failed:", error);
+  }
+}
+
+/**
+ * Replace the in-memory + legacy-blob patient cache with a fresh list from
+ * the cloud table. Called by the bootstrap when the `patients` feature flag
+ * is on. Does NOT trigger a dual-write — this is a one-way pull from the
+ * authoritative source. Pauses the storage-sync interceptor for the duration
+ * so the localStorage write does not get pushed to the legacy blob row.
+ */
+export function replacePatientsFromCloud(nextPatients: PatientRecord[]) {
   patients.splice(0, patients.length, ...nextPatients);
   if (typeof window === "undefined") {
     return;
