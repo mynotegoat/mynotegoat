@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { clearAllWorkspaceCaches, clearForeignWorkspaceCaches } from "@/lib/workspace-storage";
 
 type LocalSnapshot = Record<string, string>;
 
@@ -78,6 +79,11 @@ export function wipeLocalWorkspaceForSignOut() {
     return;
   }
   clearLocalWorkspaceData();
+  // Phase-0 cloud-as-truth namespace lives outside the legacy casemate.*
+  // wipe loop, so it has to be cleared explicitly. Belt-and-suspenders so
+  // a friend signing into the same browser cannot inherit cached entity
+  // data from the prior account.
+  clearAllWorkspaceCaches();
   window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
 }
 
@@ -89,6 +95,11 @@ export function ensureWorkspaceForUser(expectedWorkspaceId: string) {
   if (previous !== expectedWorkspaceId) {
     // Wipes every casemate.* key (preserves backup + sync-at + workspace-id).
     clearLocalWorkspaceData();
+    // Also wipe any Phase-0+ workspace-namespaced cache that doesn't belong
+    // to the new active workspace. clearAllWorkspaceCaches would also work,
+    // but the foreign-only variant lets us keep the new workspace's own
+    // entries if they were pre-bootstrapped (none today, but future-proof).
+    clearForeignWorkspaceCaches(expectedWorkspaceId);
     window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, expectedWorkspaceId);
   }
 }

@@ -8,6 +8,7 @@ import {
   CloudBootstrapError,
   ensureWorkspaceForUser,
   prepareCloudStateBeforeMount,
+  wipeLocalWorkspaceForSignOut,
 } from "@/lib/cloud-state";
 import { installStorageSyncInterceptor, onSyncStatusChange, pauseSync, resumeSync } from "@/lib/storage-sync-interceptor";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
@@ -119,9 +120,52 @@ export default function PortalLayout({
     };
     window.addEventListener("casemate:cloud-sync-blocked", onBlocked);
 
+    // Mid-session user switch guard. If the Supabase session changes underneath
+    // us — sign-in as a different user, sign-out, token refresh that yields a
+    // different user_id — the data already in memory belongs to the OLD user.
+    // The only safe move is: pause sync, wipe every casemate.* + cache.v1.* key,
+    // and hard-reload so the bootstrap reruns under the new identity. Without
+    // this, an in-memory hook could push the previous user's patient list up
+    // to the new user's cloud row.
+    let lastSeenUserId: string | null = null;
+    const supabase = getSupabaseBrowserClient();
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    if (supabase) {
+      void supabase.auth.getSession().then(({ data }) => {
+        lastSeenUserId = data.session?.user?.id ?? null;
+      });
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+        const nextUserId = session?.user?.id ?? null;
+        if (lastSeenUserId === null) {
+          lastSeenUserId = nextUserId;
+          return;
+        }
+        if (nextUserId !== lastSeenUserId) {
+          // Identity changed under our feet. Stop syncing IMMEDIATELY so the
+          // current tab cannot push the previous user's data anywhere, then
+          // wipe and reload so bootstrap reruns clean.
+          try {
+            pauseSync();
+          } catch {
+            // ignore
+          }
+          try {
+            wipeLocalWorkspaceForSignOut();
+          } catch {
+            // ignore
+          }
+          window.location.replace("/auth/login");
+        }
+      });
+      authSubscription = sub.subscription;
+    }
+
     return () => {
       active = false;
       window.removeEventListener("casemate:cloud-sync-blocked", onBlocked);
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
     };
   }, [router]);
 
