@@ -585,16 +585,34 @@ export default function PatientsPage() {
     });
 
     // Sort
-    // US dates (MM/DD/YYYY) are stored as strings — we must parse them to a
-    // sortable yyyymmdd integer before comparing, otherwise "12/31/2024" sorts
-    // AFTER "01/01/2026" because "12" > "01" alphabetically.
+    // Dates are stored as strings in several historical shapes — `MM/DD/YYYY`,
+    // `M/D/YY`, ISO `YYYY-MM-DD`, and any of those with trailing notes appended
+    // (e.g. "04/02/2026 (rescheduled)"). We must accept ALL of them or rows
+    // silently sort to "missing" (-1) and end up out of order. This previously
+    // caused initial-exam sort to drop ISO-stored or note-suffixed rows into
+    // the wrong position. We mirror the same leading-date detection that
+    // `formatLeadingDateDisplay` already uses for rendering.
     const usDateToSortKey = (raw: string | undefined): number => {
       if (!raw) return -1;
-      const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-      if (!m) return -1;
-      const month = Number(m[1]);
-      const day = Number(m[2]);
-      let year = Number(m[3]);
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "-") return -1;
+      // ISO leading: YYYY-MM-DD optionally followed by anything
+      const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (isoMatch) {
+        const year = Number(isoMatch[1]);
+        const month = Number(isoMatch[2]);
+        const day = Number(isoMatch[3]);
+        if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+          return year * 10000 + month * 100 + day;
+        }
+        return -1;
+      }
+      // US leading: M/D/YY or M/D/YYYY optionally followed by anything
+      const usMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (!usMatch) return -1;
+      const month = Number(usMatch[1]);
+      const day = Number(usMatch[2]);
+      let year = Number(usMatch[3]);
       if (year < 100) year += 2000;
       if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) return -1;
       return year * 10000 + month * 100 + day;
