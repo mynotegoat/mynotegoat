@@ -26,6 +26,7 @@ import { type QuickStatOptionKey } from "@/lib/quick-stats-settings";
 import { buildNarrativeReportContext, renderNarrativeReportBody } from "@/lib/report-generator";
 import {
   appointmentStatusOptions,
+  formatAppointmentStatusLabel,
   formatTimeLabel,
   getStatusBadgeClass,
   isAppointmentStatusSelectable,
@@ -1282,7 +1283,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           rowId: `appointment-encounter-row-${appointment.id}`,
           dateLabel: appointmentDate,
           typeLabel: appointment.appointmentType,
-          statusLabel: appointment.status,
+          statusLabel: formatAppointmentStatusLabel(appointment.status),
           appointment,
           linkedEncounter: sameDateMatch,
         });
@@ -3875,8 +3876,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                         disabled={disabled}
                                         value={status}
                                       >
-                                        {status}
-                                        {disabled ? " (requires Check In first)" : ""}
+                                        {formatAppointmentStatusLabel(status)}
+                                        {disabled ? " (requires Checked In first)" : ""}
                                       </option>
                                     );
                                   })}

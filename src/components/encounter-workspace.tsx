@@ -28,6 +28,8 @@ import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { patients } from "@/lib/mock-data";
 import {
   appointmentStatusOptions,
+  formatAppointmentStatusLabel,
+  formatTimeLabel,
   isAppointmentStatusSelectable,
   type AppointmentStatus,
 } from "@/lib/schedule-appointments";
@@ -475,10 +477,10 @@ function AppointmentsOverview({
                 const canStart = apt.status === "Check In" || apt.status === "Check Out";
                 return (
                   <tr key={apt.id} className="border-t border-[var(--line-soft)]">
-                    <td className="px-3 py-2 tabular-nums">{apt.startTime}</td>
+                    <td className="px-3 py-2 tabular-nums">{formatTimeLabel(apt.startTime)}</td>
                     <td className="px-3 py-2 font-semibold">{apt.patientName}</td>
                     <td className="px-3 py-2">{apt.appointmentType}</td>
-                    <td className="px-3 py-2">{apt.status}</td>
+                    <td className="px-3 py-2">{formatAppointmentStatusLabel(apt.status)}</td>
                     <td className="px-3 py-2">
                       {linked ? (
                         <button
@@ -1360,7 +1362,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           const sourceAppointment = scheduleAppointments.find((entry) => entry.id === appointmentId);
           if (sourceAppointment && sourceAppointment.status !== "Check In" && sourceAppointment.status !== "Check Out") {
             setMessage(
-              `Cannot start encounter — patient must be Checked In first (current status: ${sourceAppointment.status}).`,
+              `Cannot start encounter — patient must be Checked In first (current status: ${formatAppointmentStatusLabel(sourceAppointment.status)}).`,
             );
             return;
           }
@@ -1528,7 +1530,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         <tr key={apt.id} className="border-t border-[var(--line-soft)]">
                           <td className="px-2 py-1.5 tabular-nums">{dateUs}</td>
                           <td className="px-2 py-1.5">{apt.appointmentType}</td>
-                          <td className="px-2 py-1.5">{apt.status}</td>
+                          <td className="px-2 py-1.5">{formatAppointmentStatusLabel(apt.status)}</td>
                           <td className="px-2 py-1.5">
                             {linked ? (
                               <button
@@ -1734,8 +1736,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               disabled={disabled}
                               value={option}
                             >
-                              {option}
-                              {disabled ? " (requires Check In first)" : ""}
+                              {formatAppointmentStatusLabel(option)}
+                              {disabled ? " (requires Checked In first)" : ""}
                             </option>
                           );
                         })}
@@ -1743,7 +1745,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </label>
                     <p className="text-xs text-[var(--text-muted)]">
                       {linkedAppointmentForStatus
-                        ? `Linked schedule row: ${linkedAppointmentForStatus.startTime} • ${linkedAppointmentForStatus.appointmentType}`
+                        ? `Linked schedule row: ${formatTimeLabel(linkedAppointmentForStatus.startTime)} • ${linkedAppointmentForStatus.appointmentType}`
                         : "No matching schedule appointment found for this date."}
                     </p>
                   </div>
@@ -2393,11 +2395,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </label>
                   );
 
-                  // Detect if the current answer is custom free text (not one of the predefined options)
-                  const isCustomText = question.options.length > 0
-                    && !question.multiSelect
-                    && selectedAnswer !== ""
-                    && !normalizedOptions.includes(selectedAnswer);
+                  // The free-text field below the options always shows the current
+                  // answer (or the joined multi-select answers) so the user can edit
+                  // it like a "live preview". Picking a radio overwrites the field
+                  // with that option text; the user can then click into the field
+                  // and append a detail (e.g. "Yes" -> "Yes - Glendale Adventist").
+                  const freeTextEditableValue = Array.isArray(answerValue)
+                    ? answerValue.join(", ")
+                    : (answerValue ?? "");
 
                   return (
                     <div key={question.id} className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
@@ -2423,39 +2428,28 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                           ) : (
                             <div className="mt-2 grid gap-2">{selectableOptions.map(renderOptionRow)}</div>
                           )}
-                          {/* Free text option — always available below predefined choices */}
+                          {/* Live-preview / edit field — always shows the current
+                              answer and is always editable. Picking a radio above
+                              updates this field; typing here overwrites the answer.
+                              Lets the user pick "Yes" then type " - Glendale Adventist"
+                              to end up with "Yes - Glendale Adventist" without losing
+                              the macro structure. */}
                           <div className="mt-2">
-                            <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm">
-                              {!question.multiSelect && (
-                                <input
-                                  checked={isCustomText}
-                                  onChange={() =>
-                                    setRunMacroAnswers((current) => ({
-                                      ...current,
-                                      [question.id]: "",
-                                    }))
-                                  }
-                                  type="radio"
-                                />
-                              )}
-                              <input
-                                className="flex-1 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            <label className="flex items-start gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-sm">
+                              <span className="pt-1 text-xs font-semibold text-[var(--text-muted)]">
+                                Other / edit:
+                              </span>
+                              <textarea
+                                className="flex-1 resize-y rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
                                 onChange={(event) =>
                                   setRunMacroAnswers((current) => ({
                                     ...current,
                                     [question.id]: event.target.value,
                                   }))
                                 }
-                                onClick={() => {
-                                  if (!isCustomText) {
-                                    setRunMacroAnswers((current) => ({
-                                      ...current,
-                                      [question.id]: "",
-                                    }));
-                                  }
-                                }}
-                                placeholder="Other (type your answer)"
-                                value={isCustomText ? selectedAnswer : ""}
+                                placeholder="Pick an option above to start, or type your own"
+                                rows={1}
+                                value={freeTextEditableValue}
                               />
                             </label>
                           </div>

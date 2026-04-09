@@ -24,6 +24,7 @@ import {
   createAppointmentId,
   defaultScheduleLocation,
   defaultScheduleProvider,
+  formatAppointmentStatusLabel,
   formatTimeLabel,
   getStatusBadgeClass,
   type AppointmentStatus,
@@ -1172,7 +1173,7 @@ export default function AppointmentsPage() {
                         </span>
                       </span>
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeClass(appointment.status)}`}>
-                        {appointment.status}
+                        {formatAppointmentStatusLabel(appointment.status)}
                       </span>
                     </button>
                   ))
@@ -1260,7 +1261,7 @@ export default function AppointmentsPage() {
                             )}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeClass(appointment.status)}`}>
-                                {appointment.status}
+                                {formatAppointmentStatusLabel(appointment.status)}
                               </span>
                               {appointment.status === "Scheduled" && (
                                 <>
@@ -2150,7 +2151,7 @@ export default function AppointmentsPage() {
                 >
                   {appointmentStatusOptions.map((status) => (
                     <option key={`status-option-${status}`} value={status}>
-                      {status}
+                      {formatAppointmentStatusLabel(status)}
                     </option>
                   ))}
                 </select>

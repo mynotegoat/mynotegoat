@@ -20,7 +20,7 @@ import { useDashboardWorkspaceSettings } from "@/hooks/use-dashboard-workspace-s
 import { useEmailSettings } from "@/hooks/use-email-settings";
 import { getDefaultEmailSettings, emailAutoFields, emailAutoFieldLabels, type EmailAutoField } from "@/lib/email-settings";
 import { quickStatOptions } from "@/lib/quick-stats-settings";
-import { appointmentStatusOptions } from "@/lib/schedule-appointments";
+import { appointmentStatusOptions, formatAppointmentStatusLabel } from "@/lib/schedule-appointments";
 import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
 import { appointmentIntervalOptions, weekdayLabels } from "@/lib/schedule-settings";
 import { formatUsPhoneInput } from "@/lib/phone-format";
@@ -1729,7 +1729,7 @@ export default function SettingsPage() {
                   key={`appointment-status-${status}`}
                   className="rounded-full border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-1 text-sm font-semibold"
                 >
-                  {status}
+                  {formatAppointmentStatusLabel(status)}
                 </span>
               ))}
             </div>

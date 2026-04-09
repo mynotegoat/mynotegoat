@@ -585,20 +585,65 @@ export default function PatientsPage() {
     });
 
     // Sort
+    // US dates (MM/DD/YYYY) are stored as strings — we must parse them to a
+    // sortable yyyymmdd integer before comparing, otherwise "12/31/2024" sorts
+    // AFTER "01/01/2026" because "12" > "01" alphabetically.
+    const usDateToSortKey = (raw: string | undefined): number => {
+      if (!raw) return -1;
+      const m = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (!m) return -1;
+      const month = Number(m[1]);
+      const day = Number(m[2]);
+      let year = Number(m[3]);
+      if (year < 100) year += 2000;
+      if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) return -1;
+      return year * 10000 + month * 100 + day;
+    };
+    // Empty dates always sort to the BOTTOM regardless of asc/desc, so a
+    // brand-new patient with no Initial Exam date doesn't fall to the top
+    // when sorting newest-first.
+    const compareUsDates = (aRaw: string | undefined, bRaw: string | undefined) => {
+      const aKey = usDateToSortKey(aRaw);
+      const bKey = usDateToSortKey(bRaw);
+      const aMissing = aKey < 0;
+      const bMissing = bKey < 0;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;  // a goes after b
+      if (bMissing) return -1; // b goes after a
+      return aKey - bKey;
+    };
+
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
+      let datesNeutral = false; // when true, don't flip cmp for desc order
       if (sortColumn === "patient") {
         cmp = a.fullName.localeCompare(b.fullName);
       } else if (sortColumn === "attorney") {
         cmp = cleanAttorneyLabel(a.attorney).localeCompare(cleanAttorneyLabel(b.attorney));
       } else if (sortColumn === "dateOfLoss") {
-        cmp = (a.dateOfLoss || "").localeCompare(b.dateOfLoss || "");
+        cmp = compareUsDates(a.dateOfLoss, b.dateOfLoss);
+        datesNeutral = true;
       } else if (sortColumn === "initialExam") {
-        const aDate = a.matrix?.initialExam || "";
-        const bDate = b.matrix?.initialExam || "";
-        cmp = aDate.localeCompare(bDate);
+        cmp = compareUsDates(a.matrix?.initialExam, b.matrix?.initialExam);
+        datesNeutral = true;
       } else if (sortColumn === "status") {
         cmp = a.caseStatus.localeCompare(b.caseStatus);
+      }
+      if (datesNeutral) {
+        // Anchor missing dates to the bottom: if exactly one is missing the
+        // comparator already returned ±1; preserve that orientation regardless
+        // of asc/desc so empty rows never bubble to the top.
+        const aMissing =
+          sortColumn === "initialExam"
+            ? usDateToSortKey(a.matrix?.initialExam) < 0
+            : usDateToSortKey(a.dateOfLoss) < 0;
+        const bMissing =
+          sortColumn === "initialExam"
+            ? usDateToSortKey(b.matrix?.initialExam) < 0
+            : usDateToSortKey(b.dateOfLoss) < 0;
+        if (aMissing !== bMissing) {
+          return aMissing ? 1 : -1;
+        }
       }
       return sortAsc ? cmp : -cmp;
     });

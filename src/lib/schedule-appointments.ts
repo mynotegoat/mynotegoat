@@ -40,6 +40,20 @@ export const appointmentStatusOptions: AppointmentStatus[] = [
 ];
 
 /**
+ * Display label for an appointment status. The underlying enum stays as
+ * "Check In" / "Check Out" (changing it would invalidate every stored
+ * appointment), but the UI reads "Checked In" / "Checked Out" because
+ * that's the natural English for the state — the patient HAS BEEN
+ * checked in, not is currently in the act of checking in.
+ */
+export function formatAppointmentStatusLabel(status: AppointmentStatus | string): string {
+  if (status === "Check In") return "Checked In";
+  if (status === "Check Out") return "Checked Out";
+  return status;
+}
+
+
+/**
  * Whether a given target status is allowed given the current status. Used to
  * disable invalid transitions in the status dropdowns. Specifically: a patient
  * cannot be moved to "Check Out" unless they were already "Check In" (or are
