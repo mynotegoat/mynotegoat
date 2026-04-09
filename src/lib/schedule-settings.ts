@@ -216,6 +216,35 @@ export function getOfficeHoursLabel(settings: ScheduleSettingsConfig, dateIso: s
   return `${officeHours.start} - ${officeHours.end}`;
 }
 
+/**
+ * Returns the next ISO date on or after `fromIso` that is a working business day,
+ * i.e. office hours are enabled for that day of week and no CLOSED key-date covers it.
+ * If `inclusive` is false (default), skips `fromIso` itself — useful for "next business day AFTER today".
+ * Falls back to `fromIso` after 60 lookahead days to avoid infinite loops.
+ */
+export function getNextBusinessDayIso(
+  settings: ScheduleSettingsConfig,
+  closedIsoDates: Set<string>,
+  fromIso: string,
+  inclusive = false,
+): string {
+  const parts = fromIso.split("-");
+  if (parts.length !== 3) return fromIso;
+  const [y, m, d] = parts.map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return fromIso;
+  const startOffset = inclusive ? 0 : 1;
+  for (let i = startOffset; i < 60 + startOffset; i += 1) {
+    const probe = new Date(Date.UTC(y, m - 1, d + i));
+    const iso = `${probe.getUTCFullYear()}-${String(probe.getUTCMonth() + 1).padStart(2, "0")}-${String(probe.getUTCDate()).padStart(2, "0")}`;
+    const dow = probe.getUTCDay();
+    const hours = settings.officeHours.find((entry) => entry.dayOfWeek === dow);
+    if (!hours || !hours.enabled) continue;
+    if (closedIsoDates.has(iso)) continue;
+    return iso;
+  }
+  return fromIso;
+}
+
 export function isStartTimeAlignedToInterval(startTime: string, intervalMin: number) {
   const minutes = toMinutes(startTime);
   if (minutes === null) {

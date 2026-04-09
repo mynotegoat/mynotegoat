@@ -48,6 +48,18 @@ export function useScheduleAppointments() {
     [updateScheduleAppointments],
   );
 
+  const updateManyAppointments = useCallback(
+    (
+      predicate: (entry: ScheduleAppointmentRecord) => boolean,
+      updater: (current: ScheduleAppointmentRecord) => ScheduleAppointmentRecord,
+    ) => {
+      updateScheduleAppointments((current) =>
+        current.map((entry) => (predicate(entry) ? updater(entry) : entry)),
+      );
+    },
+    [updateScheduleAppointments],
+  );
+
   const removeAppointment = useCallback(
     (appointmentId: string) => {
       updateScheduleAppointments((current) =>
@@ -61,6 +73,7 @@ export function useScheduleAppointments() {
     scheduleAppointments,
     addAppointments,
     updateAppointment,
+    updateManyAppointments,
     removeAppointment,
   };
 }

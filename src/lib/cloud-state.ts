@@ -624,6 +624,42 @@ export async function pushLocalStateToCloud() {
         }
         return;
       }
+
+      // ── FRESHNESS GUARD (cloud-as-truth, multi-device) ──
+      // If the cloud's updated_at is newer than this device's last successful
+      // sync, another device has written data we haven't pulled yet. We must
+      // refuse the push — otherwise a stale tab on (e.g.) the tablet would
+      // overwrite the desktop's just-edited names. The bootstrap will pull
+      // the newer remote on the next page load and this device will then
+      // hold fresh data and be allowed to push again.
+      //
+      // Tolerance: 2 seconds for clock skew between devices.
+      const lastLocalPushIso = window.localStorage.getItem(
+        getSyncAtKey(authed.workspaceId),
+      );
+      const lastLocalPushMs = parseTimestamp(lastLocalPushIso);
+      const remoteUpdatedMs = parseTimestamp(remote.updated_at ?? null);
+      if (
+        !Number.isNaN(lastLocalPushMs) &&
+        !Number.isNaN(remoteUpdatedMs) &&
+        remoteUpdatedMs > lastLocalPushMs + 2000
+      ) {
+        console.error(
+          `[Cloud Sync] REFUSED stale push. Cloud was updated by another device. remote_updated_at=${remote.updated_at} local_last_sync=${lastLocalPushIso}. Reload to pull newer data.`,
+        );
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("casemate:cloud-sync-blocked", {
+              detail: {
+                reason: "stale-local",
+                localSyncAt: lastLocalPushIso,
+                remoteUpdatedAt: remote.updated_at,
+              },
+            }),
+          );
+        }
+        return;
+      }
     }
 
     await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);

@@ -21,6 +21,7 @@ import {
 } from "@/lib/schedule-appointments";
 import { formatDurationMinutes } from "@/lib/schedule-appointment-types";
 import {
+  getNextBusinessDayIso,
   isAppointmentWithinOfficeHours,
   isStartTimeAlignedToInterval,
   weekdayLabels,
@@ -287,8 +288,38 @@ export function NewAppointmentModal({
     return map;
   }, [appointmentTypes]);
 
+  // When the modal is opened WITHOUT an explicit initialDate (e.g. "Schedule future
+   // appointments" from a patient case file), default to the next working business day
+   // instead of today. When the caller passes an explicit initialDate (e.g. clicked a
+   // day on the calendar), honor that date.
+  const closedDateSet = useMemo(() => {
+    const set = new Set<string>();
+    keyDates.forEach((row) => {
+      if (row.officeStatus !== "Closed") return;
+      // Expand date ranges into individual iso dates.
+      const start = row.startDate;
+      const end = row.endDate || row.startDate;
+      if (!start) return;
+      let cursor = start;
+      let safety = 0;
+      while (cursor <= end && safety < 400) {
+        set.add(cursor);
+        cursor = addDays(cursor, 1);
+        safety += 1;
+      }
+    });
+    return set;
+  }, [keyDates]);
+
+  const defaultStartDate = useMemo(() => {
+    if (initialDate) return initialDate;
+    return getNextBusinessDayIso(scheduleSettings, closedDateSet, getTodayIsoDate(), false);
+  }, [initialDate, scheduleSettings, closedDateSet]);
+
+  const [allowStartToday, setAllowStartToday] = useState(false);
+
   const [draft, setDraft] = useState<NewAppointmentDraft>(() =>
-    createInitialDraft(initialDate ?? getTodayIsoDate(), defaultAppointmentType),
+    createInitialDraft(defaultStartDate, defaultAppointmentType),
   );
   const [patientSearchDraft, setPatientSearchDraft] = useState("");
   const [showPatientSuggestions, setShowPatientSuggestions] = useState(false);
@@ -299,7 +330,9 @@ export function NewAppointmentModal({
     if (!open) {
       return;
     }
-    const baseDate = initialDate ?? getTodayIsoDate();
+    const baseDate = allowStartToday
+      ? (initialDate ?? getTodayIsoDate())
+      : defaultStartDate;
     const initial = createInitialDraft(baseDate, defaultAppointmentType);
     if (lockedPatientId) {
       const lockedPatient = patients.find((p) => p.id === lockedPatientId);
@@ -316,7 +349,7 @@ export function NewAppointmentModal({
     setDraft(initial);
     setShowPatientSuggestions(false);
     setError("");
-  }, [open, initialDate, lockedPatientId, defaultAppointmentType]);
+  }, [open, initialDate, lockedPatientId, defaultAppointmentType, defaultStartDate, allowStartToday]);
 
   const patientById = useMemo(() => {
     const map = new Map<string, (typeof patients)[number]>();
@@ -421,6 +454,12 @@ export function NewAppointmentModal({
     }
     if (!draft.startDate || !draft.startTime) {
       setError("Start date and start time are required.");
+      return;
+    }
+    if (!allowStartToday && draft.startDate < defaultStartDate) {
+      setError(
+        `Start date must be on or after ${formatUsDateFromIso(defaultStartDate)} (next business day). Enable "allow same-day scheduling" to override.`,
+      );
       return;
     }
     if (!isStartTimeAlignedToInterval(draft.startTime, scheduleSettings.appointmentIntervalMin)) {
@@ -762,6 +801,7 @@ export function NewAppointmentModal({
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Date *</span>
             <input
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+              min={allowStartToday ? undefined : defaultStartDate}
               onChange={(event) => {
                 const nextStartDate = event.target.value;
                 const nextStartDay = getDayOfWeek(nextStartDate);
@@ -781,6 +821,45 @@ export function NewAppointmentModal({
               type="date"
               value={draft.startDate}
             />
+            <label className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
+              <input
+                checked={allowStartToday}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setAllowStartToday(checked);
+                  if (checked) {
+                    const today = getTodayIsoDate();
+                    setDraft((current) => ({
+                      ...current,
+                      startDate: today,
+                      recurDays:
+                        current.isRecurring && current.recurUnit === "weeks"
+                          ? current.recurDays
+                          : [getDayOfWeek(today)],
+                      recurEndDate:
+                        current.recurrenceEndMode === "date" && current.recurEndDate < today
+                          ? addDays(today, 30)
+                          : current.recurEndDate,
+                    }));
+                  } else {
+                    setDraft((current) => ({
+                      ...current,
+                      startDate: defaultStartDate,
+                      recurDays:
+                        current.isRecurring && current.recurUnit === "weeks"
+                          ? current.recurDays
+                          : [getDayOfWeek(defaultStartDate)],
+                      recurEndDate:
+                        current.recurrenceEndMode === "date" && current.recurEndDate < defaultStartDate
+                          ? addDays(defaultStartDate, 30)
+                          : current.recurEndDate,
+                    }));
+                  }
+                }}
+                type="checkbox"
+              />
+              Override: allow same-day scheduling
+            </label>
           </label>
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time *</span>

@@ -19,6 +19,49 @@ import {
   isStartTimeAlignedToInterval,
 } from "@/lib/schedule-settings";
 
+function parseIso(dateIso: string): Date | null {
+  const parts = dateIso.split("-");
+  if (parts.length !== 3) return null;
+  const [y, m, d] = parts.map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function formatIso(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function daysBetweenIso(fromIso: string, toIso: string): number {
+  const a = parseIso(fromIso);
+  const b = parseIso(toIso);
+  if (!a || !b) return 0;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function addDaysIso(dateIso: string, amount: number): string {
+  const source = parseIso(dateIso);
+  if (!source) return dateIso;
+  source.setUTCDate(source.getUTCDate() + amount);
+  return formatIso(source);
+}
+
+function toMinutesOrZero(time: string): number {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+  if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function addMinutesToTime(time: string, deltaMinutes: number): string {
+  const base = toMinutesOrZero(time);
+  let total = base + deltaMinutes;
+  // Clamp within a single day; if the delta would roll off the edge, pin it.
+  if (total < 0) total = 0;
+  if (total > 23 * 60 + 59) total = 23 * 60 + 59;
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 export interface RescheduleAppointmentModalProps {
   open: boolean;
   appointment: ScheduleAppointmentRecord | null;
@@ -32,7 +75,8 @@ export function RescheduleAppointmentModal({
   onClose,
   onRescheduled,
 }: RescheduleAppointmentModalProps) {
-  const { scheduleAppointments, addAppointments, updateAppointment } = useScheduleAppointments();
+  const { scheduleAppointments, addAppointments, updateAppointment, updateManyAppointments } =
+    useScheduleAppointments();
   const { scheduleRooms } = useScheduleRooms();
   const { scheduleSettings } = useScheduleSettings();
   const { keyDates } = useKeyDates();
@@ -43,6 +87,7 @@ export function RescheduleAppointmentModal({
   const [newRoom, setNewRoom] = useState("");
   const [newNote, setNewNote] = useState("");
   const [overrideOfficeHours, setOverrideOfficeHours] = useState(false);
+  const [applyScope, setApplyScope] = useState<"single" | "future">("single");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -55,6 +100,7 @@ export function RescheduleAppointmentModal({
     setNewRoom(appointment.room);
     setNewNote(appointment.note);
     setOverrideOfficeHours(Boolean(appointment.overrideOfficeHours));
+    setApplyScope("single");
     setError("");
   }, [open, appointment]);
 
@@ -77,6 +123,23 @@ export function RescheduleAppointmentModal({
     });
     return Array.from(values).sort((left, right) => left.localeCompare(right));
   }, [configuredRooms, scheduleAppointments]);
+
+  // All STRICTLY FUTURE appointments for this same patient (after the one being
+  // rescheduled). Excludes cancelled/completed/no-show and the original itself.
+  const futureSiblings = useMemo(() => {
+    if (!appointment) return [];
+    const origKey = `${appointment.date} ${appointment.startTime}`;
+    return scheduleAppointments.filter((entry) => {
+      if (entry.id === appointment.id) return false;
+      if (entry.patientId !== appointment.patientId) return false;
+      // Only shift appointments that are still in the "Scheduled" state.
+      // Anything already checked in/out, cancelled, no-showed, or previously
+      // rescheduled should stay put.
+      if (entry.status !== "Scheduled") return false;
+      const key = `${entry.date} ${entry.startTime}`;
+      return key > origKey;
+    });
+  }, [scheduleAppointments, appointment]);
 
   if (!open || !appointment) {
     return null;
@@ -154,6 +217,28 @@ export function RescheduleAppointmentModal({
       overrideOfficeHours: Boolean(overrideOfficeHours),
     };
     addAppointments([newRecord]);
+
+    // 3. If requested, shift every FUTURE Scheduled appointment for this patient
+    //    by the same day-delta and time-delta so the whole remaining series
+    //    moves together.
+    if (applyScope === "future" && futureSiblings.length > 0) {
+      const dayDelta = daysBetweenIso(appointment.date, newDate);
+      const timeDelta =
+        (toMinutesOrZero(newTime) - toMinutesOrZero(appointment.startTime));
+      const futureIds = new Set(futureSiblings.map((entry) => entry.id));
+      updateManyAppointments(
+        (entry) => futureIds.has(entry.id),
+        (current) => {
+          const shiftedDate = addDaysIso(current.date, dayDelta);
+          const shiftedTime = addMinutesToTime(current.startTime, timeDelta);
+          return {
+            ...current,
+            date: shiftedDate,
+            startTime: shiftedTime,
+          };
+        },
+      );
+    }
 
     onRescheduled?.(appointment, newRecord);
     onClose();
@@ -239,6 +324,52 @@ export function RescheduleAppointmentModal({
             Override office hours for this booking
           </label>
         )}
+
+        <fieldset className="mt-4 rounded-xl border border-[var(--line-soft)] p-3">
+          <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Apply To
+          </legend>
+          <label className="flex items-start gap-2 py-1 text-sm">
+            <input
+              checked={applyScope === "single"}
+              className="mt-1"
+              name="reschedule-apply-scope"
+              onChange={() => setApplyScope("single")}
+              type="radio"
+            />
+            <span>
+              <span className="font-semibold">This appointment only</span>
+              <span className="block text-xs text-[var(--text-muted)]">
+                Reschedule just this one visit.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 py-1 text-sm">
+            <input
+              checked={applyScope === "future"}
+              className="mt-1"
+              disabled={futureSiblings.length === 0}
+              name="reschedule-apply-scope"
+              onChange={() => setApplyScope("future")}
+              type="radio"
+            />
+            <span>
+              <span className="font-semibold">
+                This and all future appointments
+                {futureSiblings.length > 0 && (
+                  <span className="ml-1 font-normal text-[var(--text-muted)]">
+                    ({futureSiblings.length} upcoming)
+                  </span>
+                )}
+              </span>
+              <span className="block text-xs text-[var(--text-muted)]">
+                {futureSiblings.length === 0
+                  ? "No remaining scheduled appointments for this patient."
+                  : `Every upcoming Scheduled visit for ${appointment.patientName} will be shifted by the same day/time delta so the whole remaining series moves together.`}
+              </span>
+            </span>
+          </label>
+        </fieldset>
 
         <label className="mt-3 grid gap-1">
           <span className="text-sm font-semibold text-[var(--text-muted)]">Note</span>

@@ -36,6 +36,7 @@ import {
 import { NewAppointmentModal } from "@/components/new-appointment-modal";
 import { RescheduleAppointmentModal } from "@/components/reschedule-appointment-modal";
 import { EditAppointmentModal } from "@/components/edit-appointment-modal";
+import { DocumentScannerModal } from "@/components/document-scanner-modal";
 import { forceSyncNow } from "@/lib/storage-sync-interceptor";
 import { buildFollowUpItems } from "@/lib/follow-up-queue";
 import { type TaskPriority } from "@/lib/tasks";
@@ -987,6 +988,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const narrativeEditableRef = useRef<HTMLDivElement | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const handlePatientFileUpload = useCallback(
     async (files: FileList | null) => {
@@ -4372,6 +4374,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 >
                   {fileUploading ? "Uploading..." : "Upload File"}
                 </button>
+                <button
+                  className="rounded-xl border border-[var(--brand-primary)] bg-white px-4 py-2 font-semibold text-[var(--brand-primary)]"
+                  disabled={fileUploading}
+                  onClick={() => setScannerOpen(true)}
+                  type="button"
+                >
+                  Scan Document
+                </button>
                 <input
                   ref={fileInputRef}
                   accept="*/*"
@@ -5584,6 +5594,16 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           );
         }}
         open={Boolean(editTargetAppointment)}
+      />
+
+      <DocumentScannerModal
+        onCapture={(file) => {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          handlePatientFileUpload(dt.files);
+        }}
+        onClose={() => setScannerOpen(false)}
+        open={scannerOpen}
       />
 
       {showDeleteModal && (

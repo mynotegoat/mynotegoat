@@ -23,7 +23,7 @@ const IGNORE_KEYS = new Set([
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let installed = false;
-let pendingSync = false;
+let inflightSync: Promise<void> | null = null;
 let lastSyncAt = 0;
 let syncErrorCount = 0;
 let paused = false;
@@ -60,24 +60,31 @@ function notifyStatus(status: "syncing" | "synced" | "error") {
   }
 }
 
-async function doSync() {
-  if (pendingSync) {
-    return;
+function doSync(): Promise<void> {
+  // If a sync is already running, return its promise so callers actually
+  // await it instead of resolving immediately. Critical for "Save & Close"
+  // flows that navigate away as soon as the await resolves — without this,
+  // the in-flight fetch gets aborted by the page unload and the cloud
+  // never receives the latest write.
+  if (inflightSync) {
+    return inflightSync;
   }
-  pendingSync = true;
   notifyStatus("syncing");
-  try {
-    await pushLocalStateToCloud();
-    lastSyncAt = Date.now();
-    syncErrorCount = 0;
-    notifyStatus("synced");
-  } catch (error) {
-    syncErrorCount += 1;
-    console.error("[Storage Sync] Cloud push failed:", error);
-    notifyStatus("error");
-  } finally {
-    pendingSync = false;
-  }
+  inflightSync = (async () => {
+    try {
+      await pushLocalStateToCloud();
+      lastSyncAt = Date.now();
+      syncErrorCount = 0;
+      notifyStatus("synced");
+    } catch (error) {
+      syncErrorCount += 1;
+      console.error("[Storage Sync] Cloud push failed:", error);
+      notifyStatus("error");
+    } finally {
+      inflightSync = null;
+    }
+  })();
+  return inflightSync;
 }
 
 function scheduleSyncNow() {
