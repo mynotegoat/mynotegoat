@@ -199,8 +199,12 @@ export function AppShell({
                         type="button"
                         onClick={handleSignOut}
                         disabled={signingOut}
-                        className="w-full rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/25 disabled:opacity-50"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/25 disabled:opacity-50"
+                        title="Sign Out"
                       >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                        </svg>
                         {signingOut ? "Signing out..." : "Sign Out"}
                       </button>
                     </div>
@@ -226,23 +230,6 @@ export function AppShell({
 
                 {sidebarCollapsed && (
                   <>
-                    {/* Expand chevron */}
-                    <button
-                      type="button"
-                      onClick={toggleSidebar}
-                      className="mb-3 flex w-full items-center justify-center rounded-lg bg-white/10 p-2 text-white/70 transition hover:bg-white/20 hover:text-white"
-                      title="Expand sidebar"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        className="h-5 w-5 rotate-180"
-                      >
-                        <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-
                     <nav className="space-y-2">
                       {navItems.map((item) => {
                         const active =
@@ -264,6 +251,38 @@ export function AppShell({
                         );
                       })}
                     </nav>
+
+                    {/* Sign out icon */}
+                    <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-1">
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        disabled={signingOut}
+                        className="flex h-10 w-10 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white disabled:opacity-50"
+                        title="Sign Out"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Expand chevron */}
+                    <button
+                      type="button"
+                      onClick={toggleSidebar}
+                      className="mt-3 flex w-full items-center justify-center rounded-lg bg-white/10 p-2 text-white/70 transition hover:bg-white/20 hover:text-white"
+                      title="Expand sidebar"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="h-5 w-5 rotate-180"
+                      >
+                        <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                      </svg>
+                    </button>
                   </>
                 )}
               </div>
