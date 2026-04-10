@@ -150,7 +150,7 @@ function formatSoapRollup(encounters: EncounterNoteRecord[], section: EncounterS
   }
 
   return rows
-    .map((entry) => `${entry.date} (${entry.appointmentType})\n${entry.value}`)
+    .map((entry) => `${toUsDate(entry.date)} (${entry.appointmentType})\n${entry.value}`)
     .join("\n\n");
 }
 
@@ -177,7 +177,7 @@ function formatChargeLine(encounterDate: string, charge: EncounterChargeEntry, i
   const unitPrice = Number.isFinite(charge.unitPrice) ? charge.unitPrice : 0;
   const units = Number.isFinite(charge.units) ? charge.units : 1;
   const total = unitPrice * units;
-  return `${index}. ${encounterDate} | ${charge.procedureCode} | ${charge.name} | ${formatCurrency(unitPrice)} x ${units} = ${formatCurrency(total)}`;
+  return `${index}. ${toUsDate(encounterDate)} | ${charge.procedureCode} | ${charge.name} | ${formatCurrency(unitPrice)} x ${units} = ${formatCurrency(total)}`;
 }
 
 function formatDiagnosisList(entries: NarrativeDiagnosisEntry[]) {
@@ -211,7 +211,7 @@ function formatImagingSummary(entries: NarrativeImagingEntry[], fallbackLabel: s
   return entries
     .map((entry, index) => {
       const modality = entry.modalityLabel || fallbackLabel;
-      const line = `${index + 1}. ${modality} | Completed: ${entry.doneDate || "-"} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)}`;
+      const line = `${index + 1}. ${modality} | Completed: ${toUsDate(entry.doneDate || "-")} | Center: ${entry.center || "-"} | Regions: ${formatImagingRegions(entry)}`;
       const findings = entry.findings?.trim();
       return findings ? `${line}\n   Findings: ${findings}` : line;
     })
@@ -224,7 +224,7 @@ function formatSpecialistSummary(entries: NarrativeSpecialistEntry[]) {
   }
   return entries
     .map((entry, index) => {
-      const line = `${index + 1}. ${entry.specialist || "-"} | Sent: ${entry.sentDate || "-"} | Completed: ${entry.completedDate || "-"}`;
+      const line = `${index + 1}. ${entry.specialist || "-"} | Sent: ${toUsDate(entry.sentDate || "-")} | Completed: ${toUsDate(entry.completedDate || "-")}`;
       const recs = entry.recommendations?.trim();
       return recs ? `${line}\n   Recommendations: ${recs}` : line;
     })
@@ -386,6 +386,17 @@ function buildDecompressionSummary(
   return sentences.join(" ");
 }
 
+/** Convert ISO YYYY-MM-DD to US MM/DD/YYYY; pass through if already US format or empty. */
+function toUsDate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [y, m, d] = trimmed.split("-");
+    return `${m}/${d}/${y}`;
+  }
+  return trimmed;
+}
+
 export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
   const encountersAsc = [...input.encounters].sort(
     (left, right) => toSortStamp(left.encounterDate) - toSortStamp(right.encounterDate),
@@ -421,7 +432,7 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     ? encountersAsc
         .map(
           (entry, index) =>
-            `${index + 1}. ${entry.encounterDate} | ${entry.appointmentType} | ${entry.provider} | ${
+            `${index + 1}. ${toUsDate(entry.encounterDate)} | ${entry.appointmentType} | ${entry.provider} | ${
               entry.signed ? "Closed" : "Open"
             }`,
         )
@@ -440,11 +451,11 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     PATIENT_FULL_NAME: input.patient.fullName,
     PATIENT_FIRST_NAME: input.patient.firstName,
     PATIENT_LAST_NAME: input.patient.lastName,
-    PATIENT_DOB: input.patient.dob,
+    PATIENT_DOB: toUsDate(input.patient.dob),
     PATIENT_PHONE: input.patient.phone,
     PATIENT_EMAIL: input.patient.email,
-    DATE_OF_INJURY: input.patient.dateOfLoss,
-    INITIAL_EXAM: input.patient.initialExam,
+    DATE_OF_INJURY: toUsDate(input.patient.dateOfLoss),
+    INITIAL_EXAM: toUsDate(input.patient.initialExam),
     CASE_NUMBER: input.patient.caseNumber,
     ATTORNEY_NAME: input.patient.attorney,
     ATTORNEY_PHONE: input.patient.attorneyPhone,
@@ -462,17 +473,17 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     HE_SHE: input.patient.heShe,
     HIS_HER: input.patient.hisHer,
 
-    DISCHARGE_DATE: input.additional.dischargeDate,
-    RB_SENT_DATE: input.additional.rbSentDate,
-    PAID_DATE: input.additional.paidDate,
+    DISCHARGE_DATE: toUsDate(input.additional.dischargeDate),
+    RB_SENT_DATE: toUsDate(input.additional.rbSentDate),
+    PAID_DATE: toUsDate(input.additional.paidDate),
     BILLED_AMOUNT: formatAmount(input.additional.billedAmount),
     PAID_AMOUNT: formatAmount(input.additional.paidAmount),
     REVIEW_STATUS: input.additional.reviewStatus,
     PERCENTAGE_PAID: percentagePaid,
 
     ENCOUNTER_COUNT: `${encountersAsc.length}`,
-    FIRST_ENCOUNTER_DATE: firstEncounter?.encounterDate ?? "-",
-    LATEST_ENCOUNTER_DATE: latestEncounter?.encounterDate ?? "-",
+    FIRST_ENCOUNTER_DATE: toUsDate(firstEncounter?.encounterDate ?? "-"),
+    LATEST_ENCOUNTER_DATE: toUsDate(latestEncounter?.encounterDate ?? "-"),
 
     FIRST_SUBJECTIVE: firstEncounter?.soap.subjective.trim() || "-",
     FIRST_OBJECTIVE: firstEncounter?.soap.objective.trim() || "-",
@@ -501,14 +512,14 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     TOTAL_CHARGE_AMOUNT: formatCurrency(totalChargeAmount),
 
     XRAY_SUMMARY: formatImagingSummary(input.xrayReferrals, "X-Ray"),
-    XRAY_SENT_DATE: input.xrayReferrals[0]?.sentDate || "-",
-    XRAY_COMPLETED_DATE: input.xrayReferrals[0]?.doneDate || "-",
-    XRAY_REVIEWED_DATE: input.xrayReferrals[0]?.reportReviewedDate || "-",
+    XRAY_SENT_DATE: toUsDate(input.xrayReferrals[0]?.sentDate || "-"),
+    XRAY_COMPLETED_DATE: toUsDate(input.xrayReferrals[0]?.doneDate || "-"),
+    XRAY_REVIEWED_DATE: toUsDate(input.xrayReferrals[0]?.reportReviewedDate || "-"),
     MRI_CT_SUMMARY: formatImagingSummary(input.mriReferrals, "MRI/CT"),
-    MRI_SENT_DATE: input.mriReferrals[0]?.sentDate || "-",
-    MRI_SCHEDULED_DATE: input.mriReferrals[0]?.scheduledDate || "-",
-    MRI_COMPLETED_DATE: input.mriReferrals[0]?.doneDate || "-",
-    MRI_REVIEWED_DATE: input.mriReferrals[0]?.reportReviewedDate || "-",
+    MRI_SENT_DATE: toUsDate(input.mriReferrals[0]?.sentDate || "-"),
+    MRI_SCHEDULED_DATE: toUsDate(input.mriReferrals[0]?.scheduledDate || "-"),
+    MRI_COMPLETED_DATE: toUsDate(input.mriReferrals[0]?.doneDate || "-"),
+    MRI_REVIEWED_DATE: toUsDate(input.mriReferrals[0]?.reportReviewedDate || "-"),
     IMAGING_SUMMARY: [
       "X-Ray:",
       formatImagingSummary(input.xrayReferrals, "X-Ray"),
@@ -524,8 +535,8 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     const n = i + 1;
     const sp = input.specialistReferrals[i] ?? null;
     context[`SPECIALIST_${n}_NAME`] = sp?.specialist || "-";
-    context[`SPECIALIST_${n}_SENT`] = sp?.sentDate || "-";
-    context[`SPECIALIST_${n}_COMPLETED`] = sp?.completedDate || "-";
+    context[`SPECIALIST_${n}_SENT`] = toUsDate(sp?.sentDate || "-");
+    context[`SPECIALIST_${n}_COMPLETED`] = toUsDate(sp?.completedDate || "-");
     context[`SPECIALIST_${n}_RECOMMENDATIONS`] = sp?.recommendations?.trim() || "-";
   }
 
@@ -537,7 +548,7 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     context[`ENCOUNTER_${n}_OBJECTIVE`] = enc?.soap.objective.trim() || "-";
     context[`ENCOUNTER_${n}_ASSESSMENT`] = enc?.soap.assessment.trim() || "-";
     context[`ENCOUNTER_${n}_PLAN`] = enc?.soap.plan.trim() || "-";
-    context[`ENCOUNTER_${n}_DATE`] = enc?.encounterDate ?? "-";
+    context[`ENCOUNTER_${n}_DATE`] = toUsDate(enc?.encounterDate ?? "-");
     context[`ENCOUNTER_${n}_TYPE`] = enc?.appointmentType ?? "-";
   }
 
@@ -558,7 +569,7 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
       context[`${typeKey}_${n}_OBJECTIVE`] = enc.soap.objective.trim() || "-";
       context[`${typeKey}_${n}_ASSESSMENT`] = enc.soap.assessment.trim() || "-";
       context[`${typeKey}_${n}_PLAN`] = enc.soap.plan.trim() || "-";
-      context[`${typeKey}_${n}_DATE`] = enc.encounterDate;
+      context[`${typeKey}_${n}_DATE`] = toUsDate(enc.encounterDate);
       context[`${typeKey}_${n}_TYPE`] = enc.appointmentType;
     }
   }

@@ -1664,8 +1664,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       PATIENT_FULL_NAME: patientFullName,
       PATIENT_FIRST_NAME: firstName,
       PATIENT_LAST_NAME: lastName,
-      PATIENT_DOB: patientDob,
-      DATE_OF_INJURY: dateOfLoss,
+      PATIENT_DOB: toUsDate(patientDob),
+      DATE_OF_INJURY: toUsDate(dateOfLoss),
       PATIENT_PHONE: patientPhone,
       PATIENT_EMAIL: patientEmail,
       CASE_NUMBER: caseNumber,
@@ -2022,11 +2022,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       SPECIALIST_FAX: specialistContact?.fax ?? "",
       SPECIALIST_EMAIL: specialistContact?.email ?? "",
       SPECIALIST_ADDRESS: specialistContact?.address ?? "",
-      REFERRAL_SENT_DATE: entry.sentDate,
-      REFERRAL_SCHEDULED_DATE: entry.scheduledDate,
-      REFERRAL_COMPLETED_DATE: entry.completedDate ?? "",
-      REFERRAL_RECEIVED_DATE: entry.reportReceivedDate,
-      REFERRAL_REVIEWED_DATE: entry.reportReviewedDate ?? "",
+      REFERRAL_SENT_DATE: toUsDate(entry.sentDate),
+      REFERRAL_SCHEDULED_DATE: toUsDate(entry.scheduledDate),
+      REFERRAL_COMPLETED_DATE: toUsDate(entry.completedDate ?? ""),
+      REFERRAL_RECEIVED_DATE: toUsDate(entry.reportReceivedDate),
+      REFERRAL_REVIEWED_DATE: toUsDate(entry.reportReviewedDate ?? ""),
     };
 
     const renderedHeader = documentTemplates.header.active
@@ -2078,11 +2078,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       IMAGING_TYPE: entry.modalityLabel,
       IMAGING_CENTER: entry.center,
       IMAGING_REGIONS: formatImagingRegionsSummary(entry, mode),
-      IMAGING_SENT_DATE: entry.sentDate,
-      IMAGING_DONE_DATE: entry.doneDate,
-      IMAGING_REPORT_RECEIVED_DATE: entry.reportReceivedDate,
-      IMAGING_REPORT_REVIEWED_DATE: entry.reportReviewedDate,
-      REFERRAL_SENT_DATE: entry.sentDate,
+      IMAGING_SENT_DATE: toUsDate(entry.sentDate),
+      IMAGING_DONE_DATE: toUsDate(entry.doneDate),
+      IMAGING_REPORT_RECEIVED_DATE: toUsDate(entry.reportReceivedDate),
+      IMAGING_REPORT_REVIEWED_DATE: toUsDate(entry.reportReviewedDate),
+      REFERRAL_SENT_DATE: toUsDate(entry.sentDate),
     };
 
     const renderedHeader = documentTemplates.header.active
