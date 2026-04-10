@@ -290,13 +290,23 @@ function toStr(val: string): string {
 /* ------------------------------------------------------------------ */
 
 function findInsertBlock(sql: string, table: string): string | null {
-  // Match only the main table, not backup copies like CM_patient_20250714
-  const regex = new RegExp(
-    `INSERT INTO \`${table}\` VALUES\\s*(.+?)(?:;\\s*\\/\\*|;\\s*$)`,
-    "s"
-  );
-  const match = sql.match(regex);
-  return match ? `VALUES ${match[1]};` : null;
+  // Search for the exact INSERT INTO `table` VALUES marker.
+  // Uses indexOf instead of regex to avoid backtick escaping issues
+  // across different JS runtimes / bundlers.
+  const marker = "INSERT INTO `" + table + "` VALUES ";
+  const start = sql.indexOf(marker);
+  if (start === -1) return null;
+
+  // Extract from VALUES to the next semicolon that ends the statement.
+  // The INSERT data may contain semicolons inside quoted strings, so we
+  // need to be aware of quoting — but MySQL dumps always end the INSERT
+  // on a single line with ");", so finding ");" is safe.
+  const valuesStart = start + marker.length;
+  const endMarker = ");";
+  const endIdx = sql.indexOf(endMarker, valuesStart);
+  if (endIdx === -1) return null;
+
+  return "VALUES " + sql.slice(valuesStart, endIdx + 1) + ";";
 }
 
 function parseChiros(sql: string): RawChiro[] {

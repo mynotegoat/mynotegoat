@@ -8,6 +8,7 @@ import {
   buildMigrationPayload,
   type CasemateData,
   type ChiroMigrationPreview,
+  type ChiroMigrationPayload,
 } from "@/lib/casemate-sql-parser";
 
 interface AccountRow {
@@ -15,13 +16,40 @@ interface AccountRow {
   email: string;
 }
 
+interface PreviewData {
+  chiroId: number;
+  payload: ChiroMigrationPayload;
+  newCount: number;
+  duplicateCount: number;
+  duplicates: { full_name: string; date_of_loss: string }[];
+  newContactCount: number;
+  duplicateContactCount: number;
+  existingCount: number;
+  existingContactCount: number;
+}
+
 interface MigrationResult {
   chiroId: number;
   chiroName: string;
   targetEmail: string;
   patientsInserted: number;
+  patientsSkipped: number;
   contactsInserted: number;
+  contactsSkipped: number;
   errors: string[];
+}
+
+async function getAuthHeaders() {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) throw new Error("No supabase client");
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  };
 }
 
 export default function MigrateCasematePage() {
@@ -29,11 +57,14 @@ export default function MigrateCasematePage() {
   const [parsedData, setParsedData] = useState<CasemateData | null>(null);
   const [previews, setPreviews] = useState<ChiroMigrationPreview[]>([]);
   const [mappings, setMappings] = useState<Record<number, string>>({});
+  const [previewData, setPreviewData] = useState<Record<number, PreviewData>>(
+    {}
+  );
+  const [loading, setLoading] = useState<number | null>(null);
   const [migrating, setMigrating] = useState<number | null>(null);
   const [results, setResults] = useState<MigrationResult[]>([]);
   const [parseError, setParseError] = useState("");
 
-  // Load all approved accounts for the mapping dropdown
   useEffect(() => {
     async function loadAccounts() {
       const supabase = getSupabaseBrowserClient();
@@ -56,6 +87,7 @@ export default function MigrateCasematePage() {
       setParsedData(null);
       setPreviews([]);
       setResults([]);
+      setPreviewData({});
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -66,7 +98,6 @@ export default function MigrateCasematePage() {
           const chiroList = getChiroPreviews(data);
           setPreviews(chiroList);
 
-          // Auto-map by matching chiro owner email to account email
           const autoMap: Record<number, string> = {};
           chiroList.forEach((preview) => {
             const match = accounts.find(
@@ -79,7 +110,9 @@ export default function MigrateCasematePage() {
           });
           setMappings(autoMap);
         } catch {
-          setParseError("Failed to parse SQL file. Make sure it is a valid MySQL dump.");
+          setParseError(
+            "Failed to parse SQL file. Make sure it is a valid MySQL dump."
+          );
         }
       };
       reader.readAsText(file);
@@ -87,39 +120,81 @@ export default function MigrateCasematePage() {
     [accounts]
   );
 
-  const handleMigrate = useCallback(
+  const handlePreview = useCallback(
     async (chiroId: number) => {
       if (!parsedData) return;
       const userId = mappings[chiroId];
       if (!userId) return;
 
-      const preview = previews.find((p) => p.chiro.chiro_id === chiroId);
-      if (!preview) return;
+      setLoading(chiroId);
+      try {
+        const payload = buildMigrationPayload(parsedData, chiroId);
+        const workspaceId = `${userId}:main-office`;
+        const headers = await getAuthHeaders();
 
+        const res = await fetch("/api/admin/migrate-casemate", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            workspaceId,
+            patients: payload.patients,
+            contacts: payload.contacts,
+            mode: "preview",
+          }),
+        });
+
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        setPreviewData((prev) => ({
+          ...prev,
+          [chiroId]: {
+            chiroId,
+            payload,
+            newCount: data.newCount,
+            duplicateCount: data.duplicateCount,
+            duplicates: data.duplicates ?? [],
+            newContactCount: data.newContactCount,
+            duplicateContactCount: data.duplicateContactCount,
+            existingCount: data.existingCount,
+            existingContactCount: data.existingContactCount,
+          },
+        }));
+      } catch (err) {
+        setParseError(err instanceof Error ? err.message : "Preview failed");
+      }
+      setLoading(null);
+    },
+    [parsedData, mappings]
+  );
+
+  const handleMigrate = useCallback(
+    async (chiroId: number) => {
+      const preview = previewData[chiroId];
+      if (!preview) return;
+      const userId = mappings[chiroId];
+      if (!userId) return;
+
+      const chiroPreview = previews.find(
+        (p) => p.chiro.chiro_id === chiroId
+      );
       const account = accounts.find((a) => a.user_id === userId);
-      if (!account) return;
+      if (!chiroPreview || !account) return;
 
       const workspaceId = `${userId}:main-office`;
 
       setMigrating(chiroId);
       try {
-        const payload = buildMigrationPayload(parsedData, chiroId);
-
-        const supabase = getSupabaseBrowserClient();
-        if (!supabase) throw new Error("No supabase client");
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
+        const headers = await getAuthHeaders();
 
         const res = await fetch("/api/admin/migrate-casemate", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
           body: JSON.stringify({
             workspaceId,
-            patients: payload.patients,
-            contacts: payload.contacts,
+            patients: preview.payload.patients,
+            contacts: preview.payload.contacts,
+            mode: "execute",
           }),
         });
 
@@ -129,10 +204,12 @@ export default function MigrateCasematePage() {
           ...prev,
           {
             chiroId,
-            chiroName: preview.chiro.chiro_name,
+            chiroName: chiroPreview.chiro.chiro_name,
             targetEmail: account.email,
             patientsInserted: result.patientsInserted ?? 0,
+            patientsSkipped: result.patientsSkipped ?? 0,
             contactsInserted: result.contactsInserted ?? 0,
+            contactsSkipped: result.contactsSkipped ?? 0,
             errors: result.errors ?? (result.error ? [result.error] : []),
           },
         ]);
@@ -141,27 +218,20 @@ export default function MigrateCasematePage() {
           ...prev,
           {
             chiroId,
-            chiroName: preview.chiro.chiro_name,
+            chiroName: chiroPreview.chiro.chiro_name,
             targetEmail: account.email,
             patientsInserted: 0,
+            patientsSkipped: 0,
             contactsInserted: 0,
+            contactsSkipped: 0,
             errors: [err instanceof Error ? err.message : "Unknown error"],
           },
         ]);
       }
       setMigrating(null);
     },
-    [parsedData, mappings, previews, accounts]
+    [previewData, mappings, previews, accounts]
   );
-
-  const handleMigrateAll = useCallback(async () => {
-    for (const preview of previews) {
-      const chiroId = preview.chiro.chiro_id;
-      if (!mappings[chiroId]) continue;
-      if (results.some((r) => r.chiroId === chiroId && r.errors.length === 0)) continue;
-      await handleMigrate(chiroId);
-    }
-  }, [previews, mappings, results, handleMigrate]);
 
   return (
     <div>
@@ -194,7 +264,9 @@ export default function MigrateCasematePage() {
           className="mt-3 block text-sm"
         />
         {parseError && (
-          <p className="mt-2 text-sm font-semibold text-red-600">{parseError}</p>
+          <p className="mt-2 text-sm font-semibold text-red-600">
+            {parseError}
+          </p>
         )}
         {parsedData && (
           <div className="mt-3 flex flex-wrap gap-3 text-sm">
@@ -217,92 +289,181 @@ export default function MigrateCasematePage() {
       {/* Step 2: Map offices to accounts */}
       {previews.length > 0 && (
         <section className="mt-6 rounded-2xl border border-[var(--line-soft)] bg-white p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">
-                Step 2: Map Offices to My Note Goat Accounts
-              </h3>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                For each Casemate office, select which My Note Goat user should
-                receive the data.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleMigrateAll}
-              disabled={migrating !== null || Object.keys(mappings).length === 0}
-              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Migrate All Mapped
-            </button>
-          </div>
+          <h3 className="text-lg font-semibold">
+            Step 2: Map Offices &amp; Preview
+          </h3>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Select the target account for each office, then click Preview to see
+            what will be imported vs skipped as a duplicate.
+          </p>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-4">
             {previews.map((preview) => {
               const chiroId = preview.chiro.chiro_id;
+              const pd = previewData[chiroId];
               const result = results.find((r) => r.chiroId === chiroId);
+              const isLoading = loading === chiroId;
               const isMigrating = migrating === chiroId;
 
               return (
                 <div
                   key={chiroId}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4"
+                  className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4"
                 >
-                  <div className="min-w-[200px] flex-1">
-                    <div className="font-semibold">
-                      {preview.chiro.chiro_name}
+                  {/* Header */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="min-w-[200px] flex-1">
+                      <div className="font-semibold">
+                        {preview.chiro.chiro_name}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {preview.chiro.chiro_city},{" "}
+                        {preview.chiro.chiro_state} | Owner:{" "}
+                        {preview.ownerEmail}
+                      </div>
+                      <div className="mt-1 flex gap-2 text-xs">
+                        <span className="rounded bg-white px-2 py-0.5 font-semibold">
+                          {preview.patientCount} patients in SQL
+                        </span>
+                        <span className="rounded bg-white px-2 py-0.5 font-semibold">
+                          {preview.contactCount} contacts in SQL
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {preview.chiro.chiro_city}, {preview.chiro.chiro_state}
-                      {" | "}Owner: {preview.ownerEmail}
-                    </div>
-                    <div className="mt-1 flex gap-2 text-xs">
-                      <span className="rounded bg-white px-2 py-0.5 font-semibold">
-                        {preview.patientCount} patients
-                      </span>
-                      <span className="rounded bg-white px-2 py-0.5 font-semibold">
-                        {preview.contactCount} contacts
-                      </span>
-                    </div>
+
+                    <select
+                      value={mappings[chiroId] ?? ""}
+                      onChange={(e) =>
+                        setMappings((prev) => ({
+                          ...prev,
+                          [chiroId]: e.target.value,
+                        }))
+                      }
+                      className="rounded-lg border border-[var(--line-soft)] px-3 py-2 text-sm"
+                    >
+                      <option value="">-- Select account --</option>
+                      {accounts.map((a) => (
+                        <option key={a.user_id} value={a.user_id}>
+                          {a.email}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePreview(chiroId)}
+                      disabled={!mappings[chiroId] || isLoading}
+                      className="rounded-xl border border-[var(--brand-primary)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-primary)] disabled:opacity-50"
+                    >
+                      {isLoading ? "Checking..." : "Preview"}
+                    </button>
                   </div>
 
-                  <select
-                    value={mappings[chiroId] ?? ""}
-                    onChange={(e) =>
-                      setMappings((prev) => ({
-                        ...prev,
-                        [chiroId]: e.target.value,
-                      }))
-                    }
-                    className="rounded-lg border border-[var(--line-soft)] px-3 py-2 text-sm"
-                  >
-                    <option value="">-- Select account --</option>
-                    {accounts.map((a) => (
-                      <option key={a.user_id} value={a.user_id}>
-                        {a.email}
-                      </option>
-                    ))}
-                  </select>
+                  {/* Preview results */}
+                  {pd && !result && (
+                    <div className="mt-4 rounded-lg border border-[var(--line-soft)] bg-white p-4">
+                      <div className="text-sm font-semibold">
+                        Migration Preview
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Already in workspace: {pd.existingCount} patients,{" "}
+                        {pd.existingContactCount} contacts
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleMigrate(chiroId)}
-                    disabled={!mappings[chiroId] || isMigrating}
-                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                  >
-                    {isMigrating ? "Migrating..." : "Migrate"}
-                  </button>
+                      <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                          {pd.newCount} new patients to import
+                        </span>
+                        <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-800">
+                          {pd.duplicateCount} duplicate patients (skipped)
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                          {pd.newContactCount} new contacts
+                        </span>
+                        <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-800">
+                          {pd.duplicateContactCount} duplicate contacts
+                          (skipped)
+                        </span>
+                      </div>
 
+                      {/* Duplicates list */}
+                      {pd.duplicates.length > 0 && (
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-sm font-semibold text-amber-700">
+                            Show {pd.duplicates.length} duplicate patients
+                            (will be skipped)
+                          </summary>
+                          <div className="mt-2 max-h-[200px] overflow-y-auto rounded border border-amber-200 bg-amber-50 p-2 text-xs">
+                            {pd.duplicates.map((d, i) => (
+                              <div key={i} className="py-0.5">
+                                {d.full_name}
+                                {d.date_of_loss
+                                  ? ` — DOL: ${d.date_of_loss}`
+                                  : ""}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleMigrate(chiroId)}
+                          disabled={
+                            isMigrating ||
+                            (pd.newCount === 0 && pd.newContactCount === 0)
+                          }
+                          className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {isMigrating
+                            ? "Migrating..."
+                            : pd.newCount === 0 && pd.newContactCount === 0
+                              ? "Nothing new to import"
+                              : `Import ${pd.newCount} patients + ${pd.newContactCount} contacts`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPreviewData((prev) => {
+                              const next = { ...prev };
+                              delete next[chiroId];
+                              return next;
+                            })
+                          }
+                          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 text-sm font-semibold"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Result */}
                   {result && (
-                    <div className="w-full">
+                    <div className="mt-3">
                       {result.errors.length === 0 ? (
-                        <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                          Migrated {result.patientsInserted} patients,{" "}
+                        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                          Imported {result.patientsInserted} patients,{" "}
                           {result.contactsInserted} contacts to{" "}
-                          {result.targetEmail}
+                          {result.targetEmail}.
+                          {result.patientsSkipped > 0 && (
+                            <span>
+                              {" "}
+                              Skipped {result.patientsSkipped} duplicate
+                              patients.
+                            </span>
+                          )}
+                          {result.contactsSkipped > 0 && (
+                            <span>
+                              {" "}
+                              Skipped {result.contactsSkipped} duplicate
+                              contacts.
+                            </span>
+                          )}
                         </div>
                       ) : (
-                        <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
                           {result.patientsInserted} patients,{" "}
                           {result.contactsInserted} contacts.
                           <br />
@@ -332,11 +493,14 @@ export default function MigrateCasematePage() {
                     : "bg-red-50 text-red-800"
                 }`}
               >
-                <span className="font-semibold">{r.chiroName}</span>{" "}
-                &rarr; {r.targetEmail}: {r.patientsInserted} patients,{" "}
-                {r.contactsInserted} contacts
+                <span className="font-semibold">{r.chiroName}</span> &rarr;{" "}
+                {r.targetEmail}: {r.patientsInserted} patients imported,{" "}
+                {r.patientsSkipped} skipped | {r.contactsInserted} contacts
+                imported, {r.contactsSkipped} skipped
                 {r.errors.length > 0 && (
-                  <span className="block text-xs">{r.errors.join("; ")}</span>
+                  <span className="block text-xs">
+                    {r.errors.join("; ")}
+                  </span>
                 )}
               </div>
             ))}

@@ -5,16 +5,50 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * POST /api/admin/migrate-casemate
  *
- * Accepts a workspace_id + arrays of mapped patients and contacts from the
- * old Casemate system and inserts them into the Supabase tables using the
- * service role key (bypasses RLS).
+ * Two modes:
+ *   mode: "preview"  — fetches existing patients for the workspace, compares
+ *                       by name+DOL, returns new vs duplicate lists.
+ *   mode: "execute"  — inserts only the non-duplicate patients + contacts.
  *
- * Only callable by admins — the admin layout already gates access, and we
- * verify the caller is authenticated + admin here too.
+ * Only callable by admins.
  */
+
+function dedupeKey(name: string, dateOfLoss: string): string {
+  return `${(name || "").trim().toLowerCase()}||${(dateOfLoss || "").trim()}`;
+}
+
+async function verifyAdmin(request: Request) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  if (!url || !anonKey) return { error: "Supabase config missing", status: 500 };
+
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader) return { error: "Unauthorized", status: 401 };
+
+  const userClient = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) return { error: "Unauthorized", status: 401 };
+
+  const admin = getSupabaseAdminClient();
+  if (!admin) return { error: "Service role key not configured", status: 500 };
+
+  const { data: account } = await admin
+    .from("accounts")
+    .select("is_admin")
+    .eq("user_id", user.id)
+    .single();
+  if (!account?.is_admin) return { error: "Admin only", status: 403 };
+
+  return { admin };
+}
+
 export async function POST(request: Request) {
   try {
-    const { workspaceId, patients, contacts } = await request.json();
+    const body = await request.json();
+    const { workspaceId, patients, contacts, mode = "execute" } = body;
 
     if (!workspaceId || typeof workspaceId !== "string") {
       return NextResponse.json(
@@ -23,53 +57,95 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify the caller is an authenticated admin
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-    if (!url || !anonKey) {
+    const auth = await verifyAdmin(request);
+    if ("error" in auth) {
       return NextResponse.json(
-        { error: "Supabase config missing" },
-        { status: 500 }
+        { error: auth.error },
+        { status: auth.status }
       );
     }
+    const admin = auth.admin;
 
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Fetch existing patients for this workspace
+    const { data: existingRows } = await admin
+      .from("patients")
+      .select("id, full_name, date_of_loss")
+      .eq("workspace_id", workspaceId);
 
-    const userClient = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: authHeader } },
+    const existingKeys = new Set<string>();
+    (existingRows ?? []).forEach((row: { full_name: string; date_of_loss: string }) => {
+      existingKeys.add(dedupeKey(row.full_name, row.date_of_loss));
     });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
-    // Check admin status
-    const admin = getSupabaseAdminClient();
-    if (!admin) {
-      return NextResponse.json(
-        { error: "Service role key not configured" },
-        { status: 500 }
+    // Split incoming patients into new vs duplicate
+    const incoming = Array.isArray(patients) ? patients : [];
+    const newPatients: Record<string, unknown>[] = [];
+    const duplicates: { full_name: string; date_of_loss: string }[] = [];
+
+    incoming.forEach((p: Record<string, unknown>) => {
+      const key = dedupeKey(
+        (p.full_name as string) ?? "",
+        (p.date_of_loss as string) ?? ""
       );
-    }
+      if (existingKeys.has(key)) {
+        duplicates.push({
+          full_name: (p.full_name as string) ?? "",
+          date_of_loss: (p.date_of_loss as string) ?? "",
+        });
+      } else {
+        newPatients.push(p);
+      }
+    });
 
-    const { data: account } = await admin
-      .from("accounts")
-      .select("is_admin")
-      .eq("user_id", user.id)
+    // Also check for existing contacts
+    const { data: existingKv } = await admin
+      .from("workspace_kv")
+      .select("value")
+      .eq("workspace_id", workspaceId)
+      .eq("key", "casemate.contact-directory.v1")
       .single();
-    if (!account?.is_admin) {
-      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+    const existingContacts: { name: string }[] = Array.isArray(existingKv?.value)
+      ? existingKv.value
+      : [];
+    const existingContactNames = new Set(
+      existingContacts.map((c) => (c.name || "").trim().toLowerCase())
+    );
+
+    const incomingContacts = Array.isArray(contacts) ? contacts : [];
+    const newContacts = incomingContacts.filter(
+      (c: Record<string, unknown>) =>
+        !existingContactNames.has(((c.name as string) || "").trim().toLowerCase())
+    );
+    const duplicateContacts = incomingContacts.filter(
+      (c: Record<string, unknown>) =>
+        existingContactNames.has(((c.name as string) || "").trim().toLowerCase())
+    );
+
+    // ---- PREVIEW MODE ----
+    if (mode === "preview") {
+      return NextResponse.json({
+        newCount: newPatients.length,
+        duplicateCount: duplicates.length,
+        duplicates,
+        newContactCount: newContacts.length,
+        duplicateContactCount: duplicateContacts.length,
+        existingCount: existingRows?.length ?? 0,
+        existingContactCount: existingContacts.length,
+      });
     }
 
-    const results = { patientsInserted: 0, contactsInserted: 0, errors: [] as string[] };
+    // ---- EXECUTE MODE ----
+    const results = {
+      patientsInserted: 0,
+      patientsSkipped: duplicates.length,
+      contactsInserted: 0,
+      contactsSkipped: duplicateContacts.length,
+      errors: [] as string[],
+    };
 
-    // Insert patients in batches
-    if (Array.isArray(patients) && patients.length > 0) {
-      const rows = patients.map((p: Record<string, unknown>) => ({
+    if (newPatients.length > 0) {
+      const rows = newPatients.map((p) => ({
         id: p.id,
         workspace_id: workspaceId,
         full_name: p.full_name ?? "",
@@ -92,7 +168,6 @@ export async function POST(request: Request) {
         alerts: p.alerts ?? null,
       }));
 
-      // Batch upsert in chunks of 50
       for (let i = 0; i < rows.length; i += 50) {
         const batch = rows.slice(i, i + 50);
         const { error } = await admin
@@ -106,20 +181,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Insert contacts as a workspace_kv entry
-    if (Array.isArray(contacts) && contacts.length > 0) {
+    // Merge new contacts with existing
+    if (newContacts.length > 0) {
+      const merged = [...existingContacts, ...newContacts];
       const { error } = await admin.from("workspace_kv").upsert(
         {
           workspace_id: workspaceId,
           key: "casemate.contact-directory.v1",
-          value: contacts,
+          value: merged,
         },
         { onConflict: "workspace_id,key" }
       );
       if (error) {
         results.errors.push(`Contacts: ${error.message}`);
       } else {
-        results.contactsInserted = contacts.length;
+        results.contactsInserted = newContacts.length;
       }
     }
 
