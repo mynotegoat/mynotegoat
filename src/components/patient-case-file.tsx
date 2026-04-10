@@ -1438,6 +1438,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const narrativePrintingRef = useRef(false);
   const [fileUploading, setFileUploading] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
 
   const handlePatientFileUpload = useCallback(
     async (files: FileList | null) => {
@@ -1521,15 +1522,16 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     try {
       const settings = loadEmailSettings();
       const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+      const [ptLastName = "", ptFirstName = ""] = patient.fullName.split(",").map((s) => s.trim());
       const ctx: Record<string, string> = {
         FILE_NAME: file.name,
         TODAY: today,
         OFFICE_NAME: loadOfficeSettings().officeName || "",
-        FIRST_NAME: patient.fullName.split(" ")[0] ?? "",
-        LAST_NAME: patient.fullName.split(" ").slice(1).join(" ") ?? "",
-        FULL_NAME: patient.fullName,
-        DOB: patient.dob ?? "",
-        INJURY_DATE: patient.dateOfLoss ?? "",
+        FIRST_NAME: ptFirstName,
+        LAST_NAME: ptLastName,
+        FULL_NAME: `${ptFirstName} ${ptLastName}`.trim(),
+        DOB: toUsDate(patient.dob ?? ""),
+        INJURY_DATE: toUsDate(patient.dateOfLoss ?? ""),
       };
       const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, ctx));
       const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, ctx));
@@ -4908,7 +4910,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           <span className="text-xl">{sectionPanelsOpen.patientFiles ? "−" : "+"}</span>
         </button>
         {sectionPanelsOpen.patientFiles && (
-          <>
+          <div
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setFileDragOver(true); }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setFileDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setFileDragOver(false); }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setFileDragOver(false); handlePatientFileUpload(e.dataTransfer.files); }}
+            className={`rounded-xl transition-colors ${fileDragOver ? "bg-blue-50 ring-2 ring-[var(--brand-primary)] ring-inset" : ""}`}
+          >
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -4950,8 +4958,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             )}
 
             {patientFiles.length === 0 ? (
-              <p className="mt-4 py-6 text-center text-sm text-[var(--text-muted)]">
-                No files uploaded for this patient yet.
+              <p className={`mt-4 rounded-xl border-2 border-dashed py-6 text-center text-sm transition-colors ${fileDragOver ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-transparent text-[var(--text-muted)]"}`}>
+                {fileDragOver ? "Drop files here to upload" : "No files yet — upload, scan, or drag & drop files here."}
               </p>
             ) : (
               <div className="mt-4 overflow-x-auto">
@@ -5078,7 +5086,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </table>
               </div>
             )}
-          </>
+          </div>
         )}
       </section>
 
