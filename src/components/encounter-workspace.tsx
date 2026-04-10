@@ -436,7 +436,7 @@ function buildSoapPrintHtml(config: {
       ${encounterMarkup || "<p>No encounters found for this patient.</p>"}
 
       <div class="print-footer">
-        ${escapeHtml(config.officeName)} &bull; Confidential Medical Record &bull; Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+        ${escapeHtml(config.officeName)} &bull; Confidential Medical Record
       </div>
     </main>
   </body>

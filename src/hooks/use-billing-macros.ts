@@ -39,31 +39,32 @@ export function useBillingMacros() {
         return false;
       }
 
-      updateLibrary((current) => {
-        const duplicate = current.treatments.some(
-          (entry) =>
-            entry.name.toLowerCase() === name.toLowerCase() ||
-            entry.procedureCode.toLowerCase() === procedureCode.toLowerCase(),
-        );
-        if (duplicate) {
-          return current;
-        }
-        return {
-          ...current,
-          treatments: [
-            ...current.treatments,
-            {
-              id: createId("tx"),
-              name,
-              procedureCode,
-              modifier: (draft.modifier ?? "").trim().toUpperCase(),
-              unitPrice: Math.max(0, draft.unitPrice),
-              defaultUnits: Math.max(1, Math.round(draft.defaultUnits)),
-              active: true,
-            },
-          ],
-        };
-      });
+      // Check for duplicates before updating
+      const current = loadBillingMacroLibrary();
+      const duplicate = current.treatments.some(
+        (entry) =>
+          entry.name.toLowerCase() === name.toLowerCase() ||
+          entry.procedureCode.toLowerCase() === procedureCode.toLowerCase(),
+      );
+      if (duplicate) {
+        return false;
+      }
+
+      updateLibrary((base) => ({
+        ...base,
+        treatments: [
+          ...base.treatments,
+          {
+            id: createId("tx"),
+            name,
+            procedureCode,
+            modifier: (draft.modifier ?? "").trim().toUpperCase(),
+            unitPrice: Math.max(0, draft.unitPrice),
+            defaultUnits: Math.max(1, Math.round(draft.defaultUnits)),
+            active: true,
+          },
+        ],
+      }));
 
       return true;
     },
