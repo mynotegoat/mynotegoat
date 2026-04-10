@@ -508,6 +508,12 @@ function buildCaseNumber(dateOfLoss: string, lastName: string, firstName: string
   return `${month}${day}${year}${cleanLast}${cleanFirst}`;
 }
 
+function buildDocumentTitle(caseNumber: string, lastName: string, firstName: string, docType: string) {
+  const nameStr = [lastName, firstName].filter(Boolean).join(", ");
+  const prefix = [caseNumber, nameStr].filter(Boolean).join(" ");
+  return prefix ? `${prefix} - ${docType}` : docType;
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -783,7 +789,6 @@ function buildSoapPrintHtmlForNarrative(config: {
   </div>
   <div class="encounter-meta">
     <span>Provider: <strong>${escapeHtml(encounter.provider)}</strong></span>
-    <span>Status: <strong>${encounter.signed ? "Signed / Closed" : "Open"}</strong></span>
   </div>
   <div class="soap-section">
     <div class="soap-label">Subjective</div>
@@ -1211,6 +1216,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   }, [fileManagerState, patientFolderId]);
 
   const narrativeEditableRef = useRef<HTMLDivElement | null>(null);
+  const narrativePrintingRef = useRef(false);
   const [fileUploading, setFileUploading] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
 
@@ -2171,8 +2177,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       ? renderDocumentTemplate(documentTemplates.header.body, context)
       : "";
     const renderedBody = renderDocumentTemplate(specialistReferralTemplate.body, context);
+    const docTitle = buildDocumentTitle(caseNumber, lastName, firstName, `${specialistReferralTemplate.name} - ${entry.specialist}`);
     const printableHtml = buildPrintableDocumentHtml({
-      title: specialistReferralTemplate.name,
+      title: docTitle,
       headerHtml: renderedHeader,
       bodyHtml: renderedBody,
       headerFontFamily: documentTemplates.header.fontFamily,
@@ -2219,8 +2226,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       ? renderDocumentTemplate(documentTemplates.header.body, context)
       : "";
     const renderedBody = renderDocumentTemplate(imagingRequestTemplate.body, context);
+    const imgDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, `${imagingRequestTemplate.name} - ${entry.modalityLabel}`);
     const printableHtml = buildPrintableDocumentHtml({
-      title: imagingRequestTemplate.name,
+      title: imgDocTitle,
       headerHtml: renderedHeader,
       bodyHtml: renderedBody,
       headerFontFamily: documentTemplates.header.fontFamily,
@@ -2258,8 +2266,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       ? renderDocumentTemplate(documentTemplates.header.body, context)
       : "";
     const renderedBody = renderDocumentTemplate(selectedLetterTemplate.body, context);
+    const letterDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, selectedLetterTemplate.name);
     const printableHtml = buildPrintableDocumentHtml({
-      title: selectedLetterTemplate.name,
+      title: letterDocTitle,
       headerHtml: renderedHeader,
       bodyHtml: renderedBody,
       headerFontFamily: documentTemplates.header.fontFamily,
@@ -2481,8 +2490,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       })),
     });
 
+    const narrativeDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, narrativePreview.title);
     const printableHtml = buildPrintableDocumentHtml({
-      title: narrativePreview.title,
+      title: narrativeDocTitle,
       headerHtml: "",
       bodyHtml: liveHtml,
       headerFontFamily: documentTemplates.header.fontFamily,
@@ -2494,8 +2504,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       encounterPagesHtml,
     });
 
+    narrativePrintingRef.current = true;
+    setTimeout(() => { narrativePrintingRef.current = false; }, 2000);
     const printStarted = printHtmlWithIframeFallback(printableHtml);
     if (!printStarted) {
+      narrativePrintingRef.current = false;
       setNarrativeMessage("Could not open print preview. Check popup/browser print settings and try again.");
       return;
     }
@@ -5173,6 +5186,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   suppressContentEditableWarning
                   style={{ fontFamily: narrativePreview.fontFamily, minHeight: "500px" }}
                   onBlur={(event) => {
+                    if (narrativePrintingRef.current) return;
                     const html = (event.currentTarget as HTMLDivElement).innerHTML;
                     setNarrativePreview((current) =>
                       current ? { ...current, headerHtml: "", bodyHtml: html } : current,

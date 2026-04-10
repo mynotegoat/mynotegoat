@@ -213,6 +213,7 @@ function buildSoapPrintHtml(config: {
   officeEmail: string;
   logoDataUrl: string;
   patientName: string;
+  documentTitle?: string;
   encounters: Array<{
     id: string;
     encounterDate: string;
@@ -242,7 +243,6 @@ function buildSoapPrintHtml(config: {
   </div>
   <div class="encounter-meta">
     <span>Provider: <strong>${escapeHtml(encounter.provider)}</strong></span>
-    <span>Status: <strong>${encounter.signed ? "Signed / Closed" : "Open"}</strong></span>
   </div>
   ${sections
     .map(
@@ -261,7 +261,7 @@ function buildSoapPrintHtml(config: {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>SOAP Notes - ${escapeHtml(config.patientName)}</title>
+    <title>${escapeHtml(config.documentTitle || `SOAP Notes - ${config.patientName}`)}</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -1461,6 +1461,15 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       return;
     }
     const selectedSet = new Set(selectedSoapPrintEncounterIds);
+    const patientRecord = patients.find((p) => p.id === filteredEncounterPatientId);
+    const { firstName: pFirst, lastName: pLast } = getNames(patientRecord?.fullName ?? filteredEncounterPatientName);
+    const dol = toUsDate(patientRecord?.dateOfLoss ?? "");
+    const dolMatch = dol.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const caseNum = dolMatch
+      ? `${dolMatch[1]}${dolMatch[2]}${dolMatch[3].slice(-2)}${pLast.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2)}${pFirst.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2)}`
+      : "";
+    const nameStr = [pLast, pFirst].filter(Boolean).join(", ");
+    const soapTitle = [caseNum, nameStr].filter(Boolean).join(" ");
     const printableHtml = buildSoapPrintHtml({
       officeName: officeSettings.officeName,
       officeAddress: officeSettings.address,
@@ -1469,6 +1478,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       officeEmail: officeSettings.email,
       logoDataUrl: officeSettings.logoDataUrl,
       patientName: filteredEncounterPatientName,
+      documentTitle: soapTitle ? `${soapTitle} - SOAP Notes` : undefined,
       encounters: filteredEncounterListByOldest
         .filter((entry) => selectedSet.has(entry.id))
         .map((entry) => ({
