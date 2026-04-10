@@ -527,8 +527,18 @@ type PrintableDocumentConfig = {
   logoDataUrl: string;
 };
 
+/** Strip leading whitespace from each line if the content contains HTML tags.
+ *  This prevents pre-wrap from indenting AI-generated narrative HTML,
+ *  while leaving plain-text templates with tabs intact. */
+function stripHtmlIndentation(html: string): string {
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html; // plain text — keep tabs
+  return html.replace(/^[ \t]+/gm, "");
+}
+
 function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
-  const { title, headerHtml, bodyHtml, headerFontFamily, fontFamily, includeLogo, logoDataUrl } = config;
+  const { title, headerHtml, fontFamily, includeLogo, logoDataUrl } = config;
+  const bodyHtml = stripHtmlIndentation(config.bodyHtml);
+  const headerFontFamily = config.headerFontFamily;
   const safeTitle = escapeHtml(title);
   const safeHeaderFontFamily = escapeHtml(headerFontFamily || "Georgia, 'Times New Roman', serif");
   const safeFontFamily = escapeHtml(fontFamily || "Georgia, 'Times New Roman', serif");
@@ -581,7 +591,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .content {
         margin: 0;
-        white-space: pre-line;
+        white-space: pre-wrap;
         word-break: break-word;
         font-family: ${safeFontFamily};
         font-size: 14px;
@@ -590,7 +600,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .header {
         flex: 1;
         text-align: left;
-        white-space: pre-line;
+        white-space: pre-wrap;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
         font-size: 13px;
@@ -1148,50 +1158,16 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     async (html: string, fileName: string) => {
       setSavingToFile(true);
       try {
-        // Render to PDF using hidden iframe + html2pdf.js
-        const container = document.createElement("div");
-        container.style.cssText = "position:fixed;left:-9999px;top:0;width:8.5in;opacity:0;pointer-events:none;";
-        container.innerHTML = html;
-        // Strip <html>/<head>/<body> wrappers — extract just the body + inject styles
-        const parser = new DOMParser();
-        const parsed = parser.parseFromString(html, "text/html");
-        const styles = parsed.querySelectorAll("style");
-        container.innerHTML = "";
-        styles.forEach((s) => container.appendChild(s.cloneNode(true)));
-        const bodyContent = parsed.body.innerHTML;
-        const bodyDiv = document.createElement("div");
-        bodyDiv.innerHTML = bodyContent;
-        container.appendChild(bodyDiv);
-        document.body.appendChild(container);
-
-        // Let images/fonts load
-        await new Promise((r) => setTimeout(r, 300));
-
-        const html2pdf = (await import("html2pdf.js")).default;
-        const pdfBlob: Blob = await html2pdf()
-          .from(container)
-          .set({
-            margin: [0.55, 0.55, 0.55, 0.55],
-            filename: "doc.pdf",
-            image: { type: "jpeg", quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-            jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          })
-          .outputPdf("blob");
-
-        container.remove();
-
-        const pdfFileName = fileName.replace(/\.html$/i, ".pdf");
-        const blob = new Blob([pdfBlob], { type: "application/pdf" });
-        const file = new File([blob], pdfFileName, { type: "application/pdf" });
+        const blob = new Blob([html], { type: "text/html" });
+        const file = new File([blob], fileName, { type: "text/html" });
         const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
         if (!error && storagePath) {
           setFileManagerState((current) => {
             const next = addFileRecord(current, {
               folderId: patientFolderId,
-              name: pdfFileName,
+              name: fileName,
               storagePath,
-              mimeType: "application/pdf",
+              mimeType: "text/html",
               sizeBytes: blob.size,
             });
             saveFileManagerState(next);
