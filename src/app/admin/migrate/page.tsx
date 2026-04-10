@@ -93,7 +93,17 @@ export default function MigrateCasematePage() {
       reader.onload = (e) => {
         try {
           const sql = e.target?.result as string;
+          console.log("[migrate] SQL file length:", sql.length);
+          console.log("[migrate] First 200 chars:", sql.substring(0, 200));
+          console.log("[migrate] Contains CM_patient INSERT:", sql.includes("INSERT INTO `CM_patient` VALUES"));
+          console.log("[migrate] Contains CM_chiro INSERT:", sql.includes("INSERT INTO `CM_chiro` VALUES"));
           const data = parseCasemateSql(sql);
+          console.log("[migrate] Parsed:", {
+            patients: data.patients.length,
+            chiros: data.chiros.length,
+            lawyers: data.lawyers.length,
+            rolodex: data.rolodex.length,
+          });
           setParsedData(data);
           const chiroList = getChiroPreviews(data);
           setPreviews(chiroList);
