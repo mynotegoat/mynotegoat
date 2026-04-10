@@ -204,9 +204,15 @@ export interface CasemateData {
  */
 function parseInsertValues(sql: string): string[][] {
   // Find the VALUES portion
-  const valuesIdx = sql.indexOf(" VALUES ");
+  // Accept both " VALUES " and "VALUES " (findInsertBlock omits leading space)
+  let valuesIdx = sql.indexOf(" VALUES ");
+  let offset = 8; // length of " VALUES "
+  if (valuesIdx === -1) {
+    valuesIdx = sql.indexOf("VALUES ");
+    offset = 7; // length of "VALUES "
+  }
   if (valuesIdx === -1) return [];
-  const body = sql.slice(valuesIdx + 8).replace(/;\s*$/, "");
+  const body = sql.slice(valuesIdx + offset).replace(/;\s*$/, "");
 
   const rows: string[][] = [];
   let i = 0;
