@@ -19,7 +19,7 @@
 
 export const cloudEntityFlags: Record<CloudEntityFlag, boolean> = {
   /** Phase 1: patients table-backed cloud entity. */
-  patients: false,
+  patients: true,
   /** Phase 2: schedule appointments. */
   scheduleAppointments: false,
   /** Phase 3: encounter notes. */
