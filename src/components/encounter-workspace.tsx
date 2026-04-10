@@ -237,8 +237,7 @@ function buildSoapPrintHtml(config: {
         { label: "Plan", content: formatSoapText(encounter.soap.plan) },
       ];
 
-      return `${idx > 0 ? '<div class="page-break"></div>' : ""}
-<section class="encounter">
+      return `<section class="encounter">
   <div class="encounter-header">
     <div class="encounter-date">${escapeHtml(encounter.encounterDate)}</div>
     <div class="encounter-type">${escapeHtml(encounter.appointmentType)}</div>
@@ -266,34 +265,28 @@ function buildSoapPrintHtml(config: {
     <meta charset="utf-8" />
     <title>SOAP Notes - ${escapeHtml(config.patientName)}</title>
     <style>
-      * { box-sizing: border-box; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
-        margin: 0;
-        padding: 0;
         background: #fff;
         color: #1a1a1a;
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-      .wrapper {
-        max-width: 100%;
-        padding: 0;
+        font-size: 12px;
+        line-height: 1.4;
       }
 
       /* ── Letterhead ── */
       .letterhead {
         display: flex;
         align-items: flex-start;
-        gap: 24px;
-        padding-bottom: 16px;
-        border-bottom: 3px solid #0d79bf;
-        margin-bottom: 20px;
+        gap: 16px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #0d79bf;
+        margin-bottom: 10px;
       }
       .logo {
-        height: 120px;
+        height: 70px;
         width: auto;
-        max-width: 320px;
+        max-width: 200px;
         object-fit: contain;
         flex-shrink: 0;
       }
@@ -302,44 +295,40 @@ function buildSoapPrintHtml(config: {
         text-align: right;
       }
       .office-name {
-        font-size: 20px;
+        font-size: 15px;
         font-weight: 700;
         color: #0d79bf;
-        margin: 0 0 4px 0;
       }
       .office-detail {
-        margin: 0;
-        font-size: 12px;
+        font-size: 11px;
         color: #444;
-        line-height: 1.6;
+        line-height: 1.5;
       }
 
       /* ── Patient banner ── */
       .patient-banner {
         background: #f0f6fb;
         border: 1px solid #d0dfe9;
-        border-radius: 6px;
-        padding: 12px 16px;
-        margin-bottom: 24px;
+        border-radius: 4px;
+        padding: 6px 10px;
+        margin-bottom: 10px;
         display: flex;
         justify-content: space-between;
         align-items: center;
       }
       .patient-banner .label {
-        font-size: 11px;
+        font-size: 9px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: #5a7a8f;
-        margin: 0;
       }
       .patient-banner .name {
-        font-size: 18px;
+        font-size: 14px;
         font-weight: 700;
         color: #13293d;
-        margin: 2px 0 0 0;
       }
       .patient-banner .doc-title {
-        font-size: 14px;
+        font-size: 11px;
         font-weight: 600;
         color: #0d79bf;
       }
@@ -347,87 +336,77 @@ function buildSoapPrintHtml(config: {
       /* ── Encounter card ── */
       .encounter {
         border: 1px solid #d0dfe9;
-        border-radius: 8px;
-        margin-bottom: 24px;
+        border-radius: 4px;
+        margin-bottom: 8px;
         overflow: hidden;
-        break-inside: avoid;
       }
       .encounter-header {
         background: #0d79bf;
         color: #fff;
-        padding: 10px 16px;
+        padding: 4px 10px;
         display: flex;
         justify-content: space-between;
         align-items: center;
       }
       .encounter-date {
-        font-size: 16px;
+        font-size: 12px;
         font-weight: 700;
       }
       .encounter-type {
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 11px;
         opacity: 0.9;
       }
       .encounter-meta {
         background: #f7fafc;
-        padding: 8px 16px;
+        padding: 3px 10px;
         border-bottom: 1px solid #e2eaf0;
-        font-size: 12px;
+        font-size: 10px;
         color: #5a7a8f;
         display: flex;
-        gap: 24px;
+        gap: 16px;
       }
 
       /* ── SOAP sections ── */
       .soap-section {
-        padding: 12px 16px;
+        padding: 4px 10px;
         border-bottom: 1px solid #eef2f6;
       }
       .soap-section:last-child {
         border-bottom: none;
       }
       .soap-label {
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
         color: #0d79bf;
-        margin-bottom: 6px;
-        padding-bottom: 4px;
-        border-bottom: 1px solid #e8eff5;
+        margin-bottom: 2px;
       }
       .soap-content {
-        font-size: 13px;
-        line-height: 1.65;
+        font-size: 12px;
+        line-height: 1.45;
         color: #1a1a1a;
         word-break: break-word;
       }
-      .soap-content p { margin: 0 0 6px 0; }
+      .soap-content p { margin: 0 0 3px 0; }
       .soap-content b, .soap-content strong { font-weight: 700; }
       .soap-content span { font-size: inherit; color: inherit; }
 
       /* ── Footer ── */
       .print-footer {
-        margin-top: 30px;
-        padding-top: 12px;
+        margin-top: 14px;
+        padding-top: 6px;
         border-top: 1px solid #d0dfe9;
-        font-size: 10px;
+        font-size: 9px;
         color: #8899a6;
         text-align: center;
       }
 
-      .page-break {
-        break-before: page;
-        height: 0;
-      }
-
       @page {
         size: Letter;
-        margin: 0.6in 0.7in;
+        margin: 0.5in;
       }
       @media print {
-        body { padding: 0; }
         .encounter { break-inside: avoid; }
       }
     </style>
