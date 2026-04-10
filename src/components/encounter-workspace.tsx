@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/components/rich-text-template-editor";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
@@ -701,6 +701,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   // change just that one answer without re-running the whole macro.
   const [editingMacroPromptId, setEditingMacroPromptId] = useState<string | null>(null);
   const [saltSourceEncounterIdDraft, setSaltSourceEncounterIdDraft] = useState("");
+  const [autoSalt, setAutoSalt] = useState(false);
 
   const selectedEncounterPatientId = useMemo(() => {
     if (!selectedEncounterId) {
@@ -874,6 +875,65 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       ) ?? null,
     [priorPatientEncounters, resolvedSaltSourceEncounterId],
   );
+
+  // Track which encounter we last auto-salted into so we don't repeat
+  const autoSaltedRef = useRef<string | null>(null);
+
+  // Auto-Salt: when enabled and a new encounter is selected that has empty SOAP,
+  // automatically copy all SOAP sections from the most recent prior encounter.
+  useEffect(() => {
+    if (!autoSalt) return;
+    if (!selectedEncounter) return;
+    if (selectedEncounter.signed) return;
+    if (!saltSourceEncounter) return;
+    // Don't re-salt the same encounter
+    if (autoSaltedRef.current === selectedEncounter.id) return;
+
+    // Only auto-salt if all SOAP sections are empty
+    const allEmpty = encounterSections.every(
+      (section) => selectedEncounter.soap[section].trim().length === 0,
+    );
+    if (!allEmpty) {
+      // Mark as "already handled" so switching away and back doesn't re-check
+      autoSaltedRef.current = selectedEncounter.id;
+      return;
+    }
+
+    // Copy all SOAP from the most recent prior encounter
+    autoSaltedRef.current = selectedEncounter.id;
+    const sectionsWithText = encounterSections.filter(
+      (section) => saltSourceEncounter.soap[section].trim().length > 0,
+    );
+    if (sectionsWithText.length === 0) return;
+
+    let totalMacros = 0;
+    sectionsWithText.forEach((section) => {
+      const sourceText = saltSourceEncounter.soap[section].trim();
+      const { html: rewrittenText, idMap } = rewriteMacroRunIds(sourceText);
+      setSoapSection(selectedEncounter.id, section, rewrittenText);
+      idMap.forEach((newId, oldId) => {
+        const sourceRun = saltSourceEncounter.macroRuns.find((entry) => entry.id === oldId);
+        if (!sourceRun) return;
+        addMacroRun(selectedEncounter.id, {
+          id: newId,
+          section,
+          macroId: sourceRun.macroId,
+          macroName: sourceRun.macroName,
+          body: sourceRun.body,
+          answers: { ...sourceRun.answers },
+          generatedText: sourceRun.generatedText.replace(
+            new RegExp(`data-macro-run-id=["']${oldId}["']`, "g"),
+            `data-macro-run-id="${newId}"`,
+          ),
+        });
+        totalMacros += 1;
+      });
+    });
+    const macroSuffix = totalMacros > 0 ? ` (with ${totalMacros} editable macro${totalMacros === 1 ? "" : "s"})` : "";
+    setMessage(
+      `Auto-Salted ${sectionsWithText.length} SOAP section${sectionsWithText.length === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`,
+    );
+  }, [autoSalt, selectedEncounter, saltSourceEncounter, setSoapSection, addMacroRun]);
 
   const sectionMacros = useMemo(
     () =>
@@ -1729,14 +1789,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={() => setMessage("Encounter saved.")}
                       type="button"
                     >
                       Save Now
                     </button>
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={() => setSigned(selectedEncounter.id, !selectedEncounter.signed)}
                       type="button"
                     >
@@ -1744,7 +1804,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </button>
                     {!selectedEncounter.signed && (
                       <button
-                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
+                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
                         disabled={!linkedAppointmentForStatus}
                         onClick={() => {
                           setSigned(selectedEncounter.id, true);
@@ -1771,7 +1831,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       </button>
                     )}
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={handleDeleteEncounter}
                       type="button"
                     >
@@ -1911,7 +1971,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       )}
                     </select>
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       disabled={
                         selectedEncounter.signed ||
                         priorPatientEncounters.length === 0 ||
@@ -1923,7 +1983,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       Copy ({sectionLabels[activeSection]})
                     </button>
                     <button
-                      className="rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-3 py-2 text-sm font-semibold text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                      className="rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-3 py-1.5 text-sm font-semibold text-[var(--brand-primary)] transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
                       disabled={
                         selectedEncounter.signed ||
                         priorPatientEncounters.length === 0 ||
@@ -1940,9 +2000,26 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       Copy SOAP
                     </button>
                   </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">
-                    Choose a prior encounter only when you want to compare or copy this tab&apos;s SOAP section.
-                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Choose a prior encounter only when you want to compare or copy this tab&apos;s SOAP section.
+                    </p>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5 text-xs font-semibold select-none hover:bg-[var(--bg-soft)]">
+                      <input
+                        checked={autoSalt}
+                        className="accent-[var(--brand-primary)]"
+                        onChange={(e) => {
+                          setAutoSalt(e.target.checked);
+                          if (e.target.checked) {
+                            // Reset tracker so current encounter gets auto-salted if eligible
+                            autoSaltedRef.current = null;
+                          }
+                        }}
+                        type="checkbox"
+                      />
+                      Auto-Salt
+                    </label>
+                  </div>
                 </div>
 
                 <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
@@ -2035,10 +2112,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   {encounterSections.map((section) => (
                     <button
                       key={section}
-                      className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                      className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] ${
                         activeSection === section
-                          ? "bg-[var(--brand-primary)] text-white"
-                          : "bg-[var(--bg-soft)] text-[var(--text-main)]"
+                          ? "bg-[var(--brand-primary)] text-white active:brightness-90"
+                          : "bg-[var(--bg-soft)] text-[var(--text-main)] active:shadow-inner"
                       }`}
                       onClick={() => setActiveSection(section)}
                       type="button"
@@ -2185,7 +2262,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold"
+                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                         onClick={() => setOpenChargesPanel((previous) => !previous)}
                         type="button"
                       >
@@ -2591,7 +2668,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setRunMacroId(null);
                   setEditingMacroRunId(null);
@@ -2602,7 +2679,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleConfirmMacroRun}
                 type="button"
               >

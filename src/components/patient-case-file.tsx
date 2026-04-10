@@ -525,6 +525,7 @@ type PrintableDocumentConfig = {
   fontFamily: string;
   includeLogo: boolean;
   logoDataUrl: string;
+  encounterPagesHtml?: string;
 };
 
 /** Strip leading whitespace from each line if the content contains HTML tags.
@@ -538,6 +539,7 @@ function stripHtmlIndentation(html: string): string {
 function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
   const { title, headerHtml, fontFamily, includeLogo, logoDataUrl } = config;
   const bodyHtml = stripHtmlIndentation(config.bodyHtml);
+  const encounterPagesHtml = config.encounterPagesHtml ?? "";
   const headerFontFamily = config.headerFontFamily;
   const safeTitle = escapeHtml(title);
   const safeHeaderFontFamily = escapeHtml(headerFontFamily || "Georgia, 'Times New Roman', serif");
@@ -622,13 +624,47 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         object-fit: contain;
         display: block;
       }
+
+      /* ── Attached encounter pages ── */
+      .encounter-page {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .enc-banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f0f6fb;
+        border: 1px solid #d0dfe9;
+        border-radius: 4px;
+        padding: 6px 10px;
+        margin-bottom: 8px;
+      }
+      .enc-banner-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a7a8f; }
+      .enc-banner-name { font-size: 14px; font-weight: 700; color: #13293d; }
+      .enc-banner-date { font-size: 13px; font-weight: 700; color: #0d79bf; }
+      .enc-banner-type { font-size: 11px; color: #5a7a8f; }
+      .enc-provider { font-size: 10px; color: #5a7a8f; margin-bottom: 6px; }
+      .enc-soap { border: 1px solid #d0dfe9; border-radius: 4px; }
+      .enc-soap-section { padding: 5px 10px; border-bottom: 1px solid #eef2f6; }
+      .enc-soap-section:last-child { border-bottom: none; }
+      .enc-soap-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d79bf; margin-bottom: 2px; }
+      .enc-soap-content { font-size: 12px; line-height: 1.45; color: #1a1a1a; word-break: break-word; white-space: pre-wrap; }
+      .enc-soap-content p { margin: 0 0 3px 0; }
+      .enc-soap-content b, .enc-soap-content strong { font-weight: 700; }
+
       @page {
         size: Letter;
         margin: 0.55in;
       }
+      @media print {
+        .encounter-page { break-inside: auto; }
+      }
     </style>
   </head>
   <body>
+    ${encounterPagesHtml}
     <main class="wrapper">
       ${headerTopMarkup}
       ${headerMarkup}
@@ -636,6 +672,66 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
     </main>
   </body>
 </html>`;
+}
+
+function buildEncounterPagesHtml(config: {
+  officeName: string;
+  officeAddress: string;
+  officePhone: string;
+  officeFax: string;
+  officeEmail: string;
+  patientName: string;
+  encounters: Array<{
+    encounterDate: string;
+    provider: string;
+    appointmentType: string;
+    signed: boolean;
+    soap: Record<string, string>;
+  }>;
+}) {
+  if (!config.encounters.length) return "";
+
+  const formatSoapText = (text: string) => {
+    const trimmed = text.trim();
+    return trimmed || "-";
+  };
+
+  return config.encounters
+    .map(
+      (encounter) => `
+<div class="encounter-page" style="page-break-after: always;">
+  <div class="enc-banner">
+    <div>
+      <div class="enc-banner-label">Patient</div>
+      <div class="enc-banner-name">${escapeHtml(config.patientName)}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="enc-banner-date">${escapeHtml(encounter.encounterDate)}</div>
+      <div class="enc-banner-type">${escapeHtml(encounter.appointmentType)}${encounter.signed ? " • Signed" : " • Open"}</div>
+    </div>
+  </div>
+  <div class="enc-provider">Provider: <strong>${escapeHtml(encounter.provider)}</strong></div>
+  <div class="enc-soap">
+    <div class="enc-soap-section">
+      <div class="enc-soap-label">Subjective</div>
+      <div class="enc-soap-content">${formatSoapText(encounter.soap.subjective ?? "")}</div>
+    </div>
+    <div class="enc-soap-section">
+      <div class="enc-soap-label">Objective</div>
+      <div class="enc-soap-content">${formatSoapText(encounter.soap.objective ?? "")}</div>
+    </div>
+    <div class="enc-soap-section">
+      <div class="enc-soap-label">Assessment</div>
+      <div class="enc-soap-content">${formatSoapText(encounter.soap.assessment ?? "")}</div>
+    </div>
+    <div class="enc-soap-section">
+      <div class="enc-soap-label">Plan</div>
+      <div class="enc-soap-content">${formatSoapText(encounter.soap.plan ?? "")}</div>
+    </div>
+  </div>
+</div>`,
+    )
+    .join("");
 }
 
 function printHtmlWithIframeFallback(printableHtml: string) {
@@ -955,6 +1051,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [narrativePromptError, setNarrativePromptError] = useState("");
   const [narrativePreview, setNarrativePreview] = useState<NarrativePreviewState | null>(null);
   const [showNarrativePreviewModal, setShowNarrativePreviewModal] = useState(false);
+  const [narrativeAttachedEncounterIds, setNarrativeAttachedEncounterIds] = useState<Set<string>>(new Set());
   const [encounterMessage, setEncounterMessage] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
@@ -2262,6 +2359,30 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     const liveHtml = narrativeEditableRef.current?.innerHTML ?? narrativePreview.bodyHtml;
 
+    // Build encounter pages for attached encounters (sorted oldest first)
+    const attachedEncounters = patientEncounterRecords
+      .filter((entry) => narrativeAttachedEncounterIds.has(entry.id))
+      .sort(
+        (a, b) =>
+          toSortStampFromUsDate(a.encounterDate) - toSortStampFromUsDate(b.encounterDate),
+      );
+
+    const encounterPagesHtml = buildEncounterPagesHtml({
+      officeName: officeSettings.officeName,
+      officeAddress: officeSettings.address,
+      officePhone: officeSettings.phone,
+      officeFax: officeSettings.fax,
+      officeEmail: officeSettings.email,
+      patientName: `${firstName} ${lastName}`.trim(),
+      encounters: attachedEncounters.map((entry) => ({
+        encounterDate: entry.encounterDate,
+        provider: entry.provider,
+        appointmentType: entry.appointmentType,
+        signed: entry.signed,
+        soap: entry.soap,
+      })),
+    });
+
     const printableHtml = buildPrintableDocumentHtml({
       title: narrativePreview.title,
       headerHtml: "",
@@ -2272,6 +2393,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         ? documentTemplates.header.showOfficeLogo
         : true,
       logoDataUrl: officeSettings.logoDataUrl,
+      encounterPagesHtml,
     });
 
     const printStarted = printHtmlWithIframeFallback(printableHtml);
@@ -2280,14 +2402,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
+    const encounterSuffix = attachedEncounters.length > 0
+      ? ` with ${attachedEncounters.length} encounter${attachedEncounters.length === 1 ? "" : "s"} attached`
+      : "";
     setNarrativeMessage(
-      `Generated ${narrativePreview.title}. Use Save as PDF in the print dialog.`,
+      `Generated ${narrativePreview.title}${encounterSuffix}. Use Save as PDF in the print dialog.`,
     );
   };
 
   const closeNarrativePreviewModal = () => {
     setShowNarrativePreviewModal(false);
     setNarrativePreview(null);
+    setNarrativeAttachedEncounterIds(new Set());
   };
 
   const addReExam = () => {
@@ -3713,7 +3839,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   )}
                 </div>
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={addRelatedCase}
                   type="button"
                 >
@@ -4311,7 +4437,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </label>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={generateLetterPdf}
                 type="button"
               >
@@ -4319,7 +4445,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => openTemplateSettings("generalLetter")}
                 type="button"
               >
@@ -4377,7 +4503,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </label>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={startNarrativeGeneration}
                 type="button"
               >
@@ -4385,7 +4511,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={openReportTemplateSettings}
                 type="button"
               >
@@ -4422,7 +4548,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   disabled={fileUploading}
                   onClick={() => setScannerOpen(true)}
                   type="button"
@@ -4706,7 +4832,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       <div className="panel-card flex flex-wrap items-center justify-between gap-2 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+            className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.97] active:shadow-inner"
             onClick={() => { setShowDeleteModal(true); setDeletePasswordInput(""); setDeleteError(""); }}
             type="button"
           >
@@ -4823,14 +4949,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeNarrativePromptModal}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   onClick={continueNarrativeGeneration}
                   type="button"
                 >
@@ -4851,14 +4977,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                    className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                     onClick={printNarrativePreview}
                     type="button"
                   >
                     Print / Save PDF
                   </button>
                   <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                     onClick={closeNarrativePreviewModal}
                     type="button"
                   >
@@ -4866,6 +4992,80 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   </button>
                 </div>
               </div>
+
+              {/* Attach encounters selector */}
+              {patientEncounterRecords.length > 0 && (
+                <div className="mb-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">
+                      Attach Encounters
+                      {narrativeAttachedEncounterIds.size > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-[var(--text-muted)]">
+                          ({narrativeAttachedEncounterIds.size} selected — will print before narrative, oldest first)
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                        onClick={() =>
+                          setNarrativeAttachedEncounterIds(
+                            new Set(patientEncounterRecords.map((e) => e.id)),
+                          )
+                        }
+                        type="button"
+                      >
+                        All
+                      </button>
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                        onClick={() => setNarrativeAttachedEncounterIds(new Set())}
+                        type="button"
+                      >
+                        None
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto">
+                    {[...patientEncounterRecords]
+                      .sort(
+                        (a, b) =>
+                          toSortStampFromUsDate(a.encounterDate) -
+                          toSortStampFromUsDate(b.encounterDate),
+                      )
+                      .map((enc) => (
+                        <label
+                          key={enc.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-white/60 select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-[var(--brand-primary)]"
+                            checked={narrativeAttachedEncounterIds.has(enc.id)}
+                            onChange={(e) => {
+                              setNarrativeAttachedEncounterIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) {
+                                  next.add(enc.id);
+                                } else {
+                                  next.delete(enc.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="font-medium">{enc.encounterDate}</span>
+                          {enc.appointmentType && (
+                            <span className="text-xs text-[var(--text-muted)]">• {enc.appointmentType}</span>
+                          )}
+                          <span className={`text-xs ${enc.signed ? "text-emerald-600" : "text-amber-600"}`}>
+                            {enc.signed ? "Signed" : "Open"}
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               <article className="rounded-xl border border-[var(--line-soft)] bg-white p-6">
                 <div
@@ -5118,14 +5318,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeQuickTaskModal}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   type="submit"
                 >
                   Add To Do
@@ -5146,14 +5346,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={dismissAttorneyPrompt}
                 type="button"
               >
                 No
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={(event) => openAttorneyForm(event)}
                 type="button"
               >
@@ -5253,7 +5453,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setShowAddAttorneyForm(false);
                   setAttorneyModalError("");
@@ -5264,7 +5464,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save Attorney
@@ -5416,7 +5616,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setEditingSpecialist(null);
                   setSpecialistEditorAnchor(null);
@@ -5426,7 +5626,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save Specialist
@@ -5572,7 +5772,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setEditingImagingReferral(null);
                   setImagingEditorAnchor(null);
@@ -5582,7 +5782,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save {editingImagingReferral.modalityLabel}
@@ -5603,14 +5803,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeRelatedCaseNavigatePrompt}
                   type="button"
                 >
                   No
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   onClick={confirmRelatedCaseNavigation}
                   type="button"
                 >
@@ -5703,14 +5903,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             )}
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => { setShowDeleteModal(false); setDeletePasswordInput(""); setDeleteError(""); }}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleDeletePatient}
                 type="button"
               >
