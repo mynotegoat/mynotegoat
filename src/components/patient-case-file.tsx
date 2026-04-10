@@ -551,14 +551,15 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       body {
         margin: 0;
-        padding: 36px;
+        padding: 0;
         background: #ffffff;
         color: #13293d;
         font-family: ${safeFontFamily};
       }
       .wrapper {
-        max-width: 860px;
-        margin: 0 auto;
+        width: 100%;
+        margin: 0;
+        padding: 0;
       }
       .content {
         margin: 0;
