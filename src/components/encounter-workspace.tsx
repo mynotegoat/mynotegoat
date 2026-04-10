@@ -1789,14 +1789,14 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={() => setMessage("Encounter saved.")}
                       type="button"
                     >
                       Save Now
                     </button>
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={() => setSigned(selectedEncounter.id, !selectedEncounter.signed)}
                       type="button"
                     >
@@ -1804,7 +1804,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </button>
                     {!selectedEncounter.signed && (
                       <button
-                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
                         disabled={!linkedAppointmentForStatus}
                         onClick={() => {
                           setSigned(selectedEncounter.id, true);
@@ -1831,7 +1831,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       </button>
                     )}
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       onClick={handleDeleteEncounter}
                       type="button"
                     >
@@ -1971,7 +1971,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       )}
                     </select>
                     <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                       disabled={
                         selectedEncounter.signed ||
                         priorPatientEncounters.length === 0 ||
@@ -1983,7 +1983,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       Copy ({sectionLabels[activeSection]})
                     </button>
                     <button
-                      className="rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-3 py-1.5 text-sm font-semibold text-[var(--brand-primary)] transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                      className="rounded-lg border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-2.5 py-1 text-xs font-semibold text-[var(--brand-primary)] transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
                       disabled={
                         selectedEncounter.signed ||
                         priorPatientEncounters.length === 0 ||
@@ -2112,7 +2112,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   {encounterSections.map((section) => (
                     <button
                       key={section}
-                      className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] ${
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] ${
                         activeSection === section
                           ? "bg-[var(--brand-primary)] text-white active:brightness-90"
                           : "bg-[var(--bg-soft)] text-[var(--text-main)] active:shadow-inner"
@@ -2262,7 +2262,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   <div className="mt-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                         onClick={() => setOpenChargesPanel((previous) => !previous)}
                         type="button"
                       >
@@ -2668,7 +2668,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setRunMacroId(null);
                   setEditingMacroRunId(null);
@@ -2679,7 +2679,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleConfirmMacroRun}
                 type="button"
               >

@@ -3839,7 +3839,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   )}
                 </div>
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={addRelatedCase}
                   type="button"
                 >
@@ -4437,7 +4437,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </label>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={generateLetterPdf}
                 type="button"
               >
@@ -4445,7 +4445,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => openTemplateSettings("generalLetter")}
                 type="button"
               >
@@ -4503,7 +4503,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </label>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={startNarrativeGeneration}
                 type="button"
               >
@@ -4511,7 +4511,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </button>
 
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={openReportTemplateSettings}
                 type="button"
               >
@@ -4548,7 +4548,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                  className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   disabled={fileUploading}
                   onClick={() => setScannerOpen(true)}
                   type="button"
@@ -4832,7 +4832,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       <div className="panel-card flex flex-wrap items-center justify-between gap-2 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="rounded-xl border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.97] active:shadow-inner"
+            className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.97] active:shadow-inner"
             onClick={() => { setShowDeleteModal(true); setDeletePasswordInput(""); setDeleteError(""); }}
             type="button"
           >
@@ -4949,14 +4949,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeNarrativePromptModal}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                  className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   onClick={continueNarrativeGeneration}
                   type="button"
                 >
@@ -4977,14 +4977,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                    className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                     onClick={printNarrativePreview}
                     type="button"
                   >
                     Print / Save PDF
                   </button>
                   <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                     onClick={closeNarrativePreviewModal}
                     type="button"
                   >
@@ -5318,14 +5318,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeQuickTaskModal}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                  className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   type="submit"
                 >
                   Add To Do
@@ -5346,14 +5346,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={dismissAttorneyPrompt}
                 type="button"
               >
                 No
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={(event) => openAttorneyForm(event)}
                 type="button"
               >
@@ -5453,7 +5453,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setShowAddAttorneyForm(false);
                   setAttorneyModalError("");
@@ -5464,7 +5464,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save Attorney
@@ -5616,7 +5616,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setEditingSpecialist(null);
                   setSpecialistEditorAnchor(null);
@@ -5626,7 +5626,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save Specialist
@@ -5772,7 +5772,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setEditingImagingReferral(null);
                   setImagingEditorAnchor(null);
@@ -5782,7 +5782,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 type="submit"
               >
                 Save {editingImagingReferral.modalityLabel}
@@ -5803,14 +5803,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeRelatedCaseNavigatePrompt}
                   type="button"
                 >
                   No
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                  className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   onClick={confirmRelatedCaseNavigation}
                   type="button"
                 >
@@ -5903,14 +5903,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             )}
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => { setShowDeleteModal(false); setDeletePasswordInput(""); setDeleteError(""); }}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
+                className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleDeletePatient}
                 type="button"
               >
