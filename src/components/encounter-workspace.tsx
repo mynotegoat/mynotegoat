@@ -1790,6 +1790,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                           {priorPatientEncounters.map((entry) => (
                             <option key={entry.id} value={entry.id}>
                               {entry.encounterDate}
+                              {entry.appointmentType ? ` • ${entry.appointmentType}` : ""}
                               {entry.signed ? " • Closed" : " • Open"}
                             </option>
                           ))}
