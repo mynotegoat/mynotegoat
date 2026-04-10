@@ -39,12 +39,10 @@ export function useBillingMacros() {
         return false;
       }
 
-      // Check for duplicates before updating
+      // Check for duplicate names before updating
       const current = loadBillingMacroLibrary();
       const duplicate = current.treatments.some(
-        (entry) =>
-          entry.name.toLowerCase() === name.toLowerCase() ||
-          entry.procedureCode.toLowerCase() === procedureCode.toLowerCase(),
+        (entry) => entry.name.toLowerCase() === name.toLowerCase(),
       );
       if (duplicate) {
         return false;

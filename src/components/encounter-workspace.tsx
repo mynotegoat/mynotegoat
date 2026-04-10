@@ -289,20 +289,29 @@ function buildSoapPrintHtml(config: {
         max-width: 200px;
         object-fit: contain;
         flex-shrink: 0;
+        display: block;
+        margin: 0;
+        padding: 0;
       }
       .office-info {
         flex: 1;
         text-align: right;
+        margin: 0;
+        padding: 0;
       }
       .office-name {
         font-size: 15px;
         font-weight: 700;
         color: #0d79bf;
+        margin: 0;
+        padding: 0;
+        line-height: 1.2;
       }
       .office-detail {
         font-size: 11px;
         color: #444;
         line-height: 1.5;
+        margin: 0;
       }
 
       /* ── Patient banner ── */
@@ -338,7 +347,6 @@ function buildSoapPrintHtml(config: {
         border: 1px solid #d0dfe9;
         border-radius: 4px;
         margin-bottom: 8px;
-        overflow: hidden;
       }
       .encounter-header {
         background: #0d79bf;
@@ -407,7 +415,8 @@ function buildSoapPrintHtml(config: {
         margin: 0.5in;
       }
       @media print {
-        .encounter { break-inside: avoid; }
+        * { break-inside: auto !important; break-before: auto !important; break-after: auto !important; }
+        .encounter { page-break-inside: auto !important; page-break-before: auto !important; }
       }
     </style>
   </head>

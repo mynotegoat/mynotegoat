@@ -562,7 +562,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .content {
         margin: 0;
-        white-space: pre-wrap;
+        white-space: normal;
         word-break: break-word;
         font-family: ${safeFontFamily};
         font-size: 14px;
@@ -570,7 +570,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .header {
         margin: 0 0 20px 0;
-        white-space: pre-wrap;
+        white-space: normal;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
         font-size: 13px;
