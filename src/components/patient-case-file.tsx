@@ -546,16 +546,24 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
     <meta charset="utf-8" />
     <title>${safeTitle}</title>
     <style>
-      :root {
-        color-scheme: light;
-      }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      :root { color-scheme: light; }
       body {
         margin: 0;
         padding: 0;
-        background: #ffffff;
+        background: #fff;
         color: #13293d;
         font-family: ${safeFontFamily};
+        font-size: 14px;
+        line-height: 1.6;
       }
+      h1, h2, h3, h4, h5, h6 { margin: 14px 0 4px 0; }
+      p { margin: 0 0 6px 0; }
+      ul, ol { margin: 0 0 6px 0; padding-left: 20px; }
+      li { margin: 0 0 2px 0; }
+      blockquote { margin: 0 0 6px 0; padding-left: 12px; border-left: 3px solid #ccc; }
+      table { border-collapse: collapse; width: 100%; margin: 0 0 8px 0; }
+      td, th { padding: 3px 6px; border: 1px solid #ccc; text-align: left; font-size: 13px; }
       .wrapper {
         width: 100%;
         margin: 0;
@@ -570,7 +578,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         line-height: 1.6;
       }
       .header {
-        margin: 0 0 20px 0;
+        margin: 0 0 16px 0;
         white-space: normal;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
@@ -581,7 +589,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         display: flex;
         justify-content: flex-end;
         align-items: flex-start;
-        margin: 0 0 24px 0;
+        margin: 0 0 16px 0;
       }
       .office-logo {
         max-height: 100px;
