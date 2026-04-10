@@ -189,6 +189,19 @@ export function removeFileRecord(
   };
 }
 
+export function renameFileRecord(
+  state: FileManagerState,
+  fileId: string,
+  newName: string,
+): FileManagerState {
+  return {
+    ...state,
+    files: state.files.map((f) =>
+      f.id === fileId ? { ...f, name: newName, updatedAt: new Date().toISOString() } : f,
+    ),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Query helpers
 // ---------------------------------------------------------------------------

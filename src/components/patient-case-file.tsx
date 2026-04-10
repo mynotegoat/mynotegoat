@@ -58,6 +58,7 @@ import {
   saveFileManagerState,
   addFileRecord,
   removeFileRecord,
+  renameFileRecord,
   syncPatientFolders,
 } from "@/lib/file-manager";
 import {
@@ -67,6 +68,7 @@ import {
   uploadFileToStorage,
   deleteFileFromStorage,
 } from "@/lib/file-storage";
+import { loadEmailSettings, renderEmailTemplate } from "@/lib/email-settings";
 import { loadOfficeSettings } from "@/lib/office-settings";
 import { usePlanTier } from "@/lib/plan-context";
 
@@ -1060,58 +1062,102 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     }
   }, []);
 
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  const startRenameFile = useCallback((file: FileRecord) => {
+    setRenamingFileId(file.id);
+    setRenameDraft(file.name);
+  }, []);
+
+  const commitRenameFile = useCallback(() => {
+    const trimmed = renameDraft.trim();
+    if (!renamingFileId || !trimmed) {
+      setRenamingFileId(null);
+      return;
+    }
+    setFileManagerState((current) => {
+      const next = renameFileRecord(current, renamingFileId, trimmed);
+      saveFileManagerState(next);
+      return next;
+    });
+    setRenamingFileId(null);
+  }, [renamingFileId, renameDraft]);
+
+  const [emailingFileId, setEmailingFileId] = useState<string | null>(null);
+  const [emailToast, setEmailToast] = useState("");
+
+  const handleEmailPatientFile = useCallback(async (file: FileRecord) => {
+    setEmailingFileId(file.id);
+    try {
+      const settings = loadEmailSettings();
+      const today = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+      const ctx: Record<string, string> = {
+        FILE_NAME: file.name,
+        TODAY: today,
+        OFFICE_NAME: loadOfficeSettings().officeName || "",
+        FIRST_NAME: patient.fullName.split(" ")[0] ?? "",
+        LAST_NAME: patient.fullName.split(" ").slice(1).join(" ") ?? "",
+        FULL_NAME: patient.fullName,
+        DOB: patient.dob ?? "",
+        INJURY_DATE: patient.dateOfLoss ?? "",
+      };
+      const subject = encodeURIComponent(renderEmailTemplate(settings.subjectTemplate, ctx));
+      const body = encodeURIComponent(renderEmailTemplate(settings.bodyTemplate, ctx));
+
+      await downloadFile(file.storagePath, file.name);
+
+      setEmailToast(`"${file.name}" downloaded — check your Downloads folder to attach it.`);
+      setTimeout(() => setEmailToast(""), 6000);
+
+      setTimeout(() => {
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      }, 600);
+    } finally {
+      setTimeout(() => setEmailingFileId(null), 1500);
+    }
+  }, [patient]);
+
+  const canShare = typeof navigator !== "undefined" && !!navigator.share;
+  const [sharingFileId, setSharingFileId] = useState<string | null>(null);
+
+  const handleSharePatientFile = useCallback(async (file: FileRecord) => {
+    setSharingFileId(file.id);
+    try {
+      const { url, error } = await getSignedUrl(file.storagePath);
+      if (error || !url) return;
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const shareFile = new File([blob], file.name, { type: file.mimeType });
+      const shareData: ShareData = { title: file.name, files: [shareFile] };
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.share({ title: file.name, text: `File: ${file.name}`, url });
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
+    } finally {
+      setSharingFileId(null);
+    }
+  }, []);
+
   const [savingToFile, setSavingToFile] = useState(false);
 
   const saveHtmlToPatientFiles = useCallback(
     async (html: string, fileName: string) => {
       setSavingToFile(true);
       try {
-        // Render HTML to PDF via hidden iframe
-        const iframe = document.createElement("iframe");
-        iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;height:1056px;border:0;opacity:0;pointer-events:none;";
-        document.body.appendChild(iframe);
-        const iframeDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
-        if (!iframeDoc) {
-          iframe.remove();
-          return false;
-        }
-        iframeDoc.open();
-        iframeDoc.write(html);
-        iframeDoc.close();
-
-        await new Promise<void>((resolve) => {
-          if (iframeDoc.readyState === "complete") {
-            setTimeout(resolve, 200);
-          } else {
-            iframe.onload = () => setTimeout(resolve, 200);
-          }
-        });
-
-        const html2pdf = (await import("html2pdf.js")).default;
-        const pdfBlob: Blob = await html2pdf()
-          .from(iframeDoc.body)
-          .set({
-            margin: 0,
-            filename: "doc.pdf",
-            image: { type: "jpeg", quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, width: 816, windowWidth: 816 },
-            jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          })
-          .outputPdf("blob");
-
-        iframe.remove();
-
-        const pdfFileName = fileName.replace(/\.html$/i, ".pdf");
-        const blob = new Blob([pdfBlob], { type: "application/pdf" });
-        const file = new File([blob], pdfFileName, { type: "application/pdf" });
+        const blob = new Blob([html], { type: "text/html" });
+        const file = new File([blob], fileName, { type: "text/html" });
         const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
         if (!error && storagePath) {
           setFileManagerState((current) => {
             const next = addFileRecord(current, {
               folderId: patientFolderId,
-              name: pdfFileName,
+              name: fileName,
               storagePath,
-              mimeType: "application/pdf",
+              mimeType: "text/html",
               sizeBytes: blob.size,
             });
             saveFileManagerState(next);
@@ -1973,7 +2019,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     const date = new Date().toISOString().slice(0, 10);
     const safeName = entry.specialist.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `Specialist-Referral-${safeName}-${date}.pdf`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `Specialist-Referral-${safeName}-${date}.html`).then((saved) => {
       setSpecialistMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -2028,7 +2074,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     }
 
     const date = new Date().toISOString().slice(0, 10);
-    void saveHtmlToPatientFiles(printableHtml, `${mode === "xray" ? "XRay" : "MRI"}-Request-${date}.pdf`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `${mode === "xray" ? "XRay" : "MRI"}-Request-${date}.html`).then((saved) => {
       setMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -2075,7 +2121,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     const date = new Date().toISOString().slice(0, 10);
     const safeName = selectedLetterTemplate.name.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `${safeName}-${date}.pdf`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `${safeName}-${date}.html`).then((saved) => {
       setLetterMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -4437,6 +4483,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </Link>
             </div>
 
+            {emailToast && (
+              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                {emailToast}
+              </div>
+            )}
+
             {patientFiles.length === 0 ? (
               <p className="mt-4 py-6 text-center text-sm text-[var(--text-muted)]">
                 No files uploaded for this patient yet.
@@ -4458,8 +4510,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         className="border-b border-[var(--line-soft)] last:border-0"
                         key={file.id}
                       >
-                        <td className="max-w-[260px] truncate py-2.5 pr-3 font-medium">
-                          {file.name}
+                        <td className="max-w-[260px] py-2.5 pr-3 font-medium">
+                          {renamingFileId === file.id ? (
+                            <input
+                              autoFocus
+                              className="w-full rounded border border-[var(--brand-primary)] px-1.5 py-0.5 text-sm focus:outline-none"
+                              value={renameDraft}
+                              onChange={(e) => setRenameDraft(e.target.value)}
+                              onBlur={commitRenameFile}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitRenameFile();
+                                if (e.key === "Escape") setRenamingFileId(null);
+                              }}
+                            />
+                          ) : (
+                            <span className="truncate block">{file.name}</span>
+                          )}
                         </td>
                         <td className="whitespace-nowrap py-2.5 pr-3 text-[var(--text-muted)]">
                           {formatFileSize(file.sizeBytes)}
@@ -4471,31 +4537,71 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                           <div className="inline-flex items-center gap-1">
                             {/* Preview */}
                             <button
-                              className="rounded-lg border border-[var(--line-soft)] bg-white p-1.5 hover:bg-[var(--bg-soft)]"
+                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                               onClick={() => handlePatientFilePreview(file)}
                               title="Preview"
                               type="button"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <circle cx="11" cy="11" r="7" />
-                                <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+                                <circle cx="11" cy="11" r="8" />
+                                <path d="m21 21-4.35-4.35" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                            {/* Rename */}
+                            <button
+                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
+                              onClick={() => startRenameFile(file)}
+                              title="Rename"
+                              type="button"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
                             {/* Download */}
                             <button
-                              className="rounded-lg border border-[var(--line-soft)] bg-white p-1.5 hover:bg-[var(--bg-soft)]"
+                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
                               onClick={() => downloadFile(file.storagePath, file.name)}
                               title="Download"
                               type="button"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path d="M12 5v10m0 0-3.5-3.5M12 15l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
-                                <path d="M5 19h14" strokeLinecap="round" />
+                                <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </button>
+                            {/* Email */}
+                            <button
+                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
+                              disabled={emailingFileId === file.id}
+                              onClick={() => handleEmailPatientFile(file)}
+                              title="Email (download + open email)"
+                              type="button"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <rect height="16" rx="2" width="20" x="2" y="4" />
+                                <path d="m22 7-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </button>
+                            {/* Share (mobile only) */}
+                            {canShare && (
+                              <button
+                                className="rounded-lg p-1.5 text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-40"
+                                disabled={sharingFileId === file.id}
+                                onClick={() => handleSharePatientFile(file)}
+                                title="Share"
+                                type="button"
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                  <circle cx="18" cy="5" r="3" />
+                                  <circle cx="6" cy="12" r="3" />
+                                  <circle cx="18" cy="19" r="3" />
+                                  <path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" strokeLinecap="round" />
+                                </svg>
+                              </button>
+                            )}
                             {/* Delete */}
                             <button
-                              className="rounded-lg border border-red-200 bg-white p-1.5 text-red-500 hover:bg-red-50"
+                              className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 transition-colors"
                               onClick={() => handlePatientFileDelete(file)}
                               title="Delete"
                               type="button"
@@ -4812,7 +4918,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       });
                       const date = new Date().toISOString().slice(0, 10);
                       const safeName = narrativePreview.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-                      const fileName = `${safeName}-${date}.pdf`;
+                      const fileName = `${safeName}-${date}.html`;
                       const saved = await saveHtmlToPatientFiles(printableHtml, fileName);
                       if (saved) {
                         setNarrativeMessage(`Saved "${fileName}" to Patient Files.`);

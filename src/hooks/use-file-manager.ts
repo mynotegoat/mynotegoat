@@ -10,6 +10,7 @@ import {
   deleteFolder as deleteFolderOp,
   addFileRecord,
   removeFileRecord,
+  renameFileRecord,
   loadFileManagerState,
   saveFileManagerState,
   syncPatientFolders,
@@ -125,6 +126,17 @@ export function useFileManager(patients: PatientRecord[]) {
     [],
   );
 
+  const renameFile = useCallback(
+    (fileId: string, newName: string) => {
+      setState((current) => {
+        const next = renameFileRecord(current, fileId, newName);
+        saveFileManagerState(next);
+        return next;
+      });
+    },
+    [],
+  );
+
   const deleteFile = useCallback(
     async (fileId: string) => {
       let pathToDelete: string | null = null;
@@ -147,6 +159,7 @@ export function useFileManager(patients: PatientRecord[]) {
     updateFolderName,
     deleteUserFolder,
     uploadFile,
+    renameFile,
     deleteFile,
   };
 }

@@ -105,6 +105,7 @@ export default function MyFilesPage() {
     updateFolderName,
     deleteUserFolder,
     uploadFile,
+    renameFile,
     deleteFile,
   } = useFileManager(patients);
 
@@ -271,6 +272,27 @@ export default function MyFilesPage() {
   };
 
   // ---------------------------------------------------------------------------
+  // Rename file
+  // ---------------------------------------------------------------------------
+
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  const startRenameFile = (file: FileRecord) => {
+    setRenamingFileId(file.id);
+    setRenameDraft(file.name);
+  };
+
+  const commitRenameFile = () => {
+    const trimmed = renameDraft.trim();
+    if (!renamingFileId || !trimmed) {
+      setRenamingFileId(null);
+      return;
+    }
+    renameFile(renamingFileId, trimmed);
+    setRenamingFileId(null);
+  };
+
   // Email file (download + open mailto) — desktop approach
   // ---------------------------------------------------------------------------
 
@@ -888,9 +910,23 @@ export default function MyFilesPage() {
                         <div className="flex items-center gap-2">
                           <span>{getFileIcon(file.mimeType)}</span>
                           <div className="min-w-0">
-                            <span className="block font-medium text-[var(--text-heading)] truncate max-w-[200px] sm:max-w-[300px]">
-                              {file.name}
-                            </span>
+                            {renamingFileId === file.id ? (
+                              <input
+                                autoFocus
+                                className="w-full rounded border border-[var(--brand-primary)] px-1.5 py-0.5 text-sm font-medium focus:outline-none"
+                                value={renameDraft}
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onBlur={commitRenameFile}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") commitRenameFile();
+                                  if (e.key === "Escape") setRenamingFileId(null);
+                                }}
+                              />
+                            ) : (
+                              <span className="block font-medium text-[var(--text-heading)] truncate max-w-[200px] sm:max-w-[300px]">
+                                {file.name}
+                              </span>
+                            )}
                             {isSearching && (() => {
                               const parentFolder = state.folders.find((f) => f.id === file.folderId);
                               const path = parentFolder ? getFolderPath(state, parentFolder.id).map((f) => f.name).join(" / ") : "";
@@ -926,6 +962,15 @@ export default function MyFilesPage() {
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" /></svg>
                             </button>
                           )}
+                          {/* Rename — pencil */}
+                          <button
+                            className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
+                            onClick={() => startRenameFile(file)}
+                            title="Rename"
+                            type="button"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          </button>
                           {/* Download — arrow-down-tray */}
                           <button
                             className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
