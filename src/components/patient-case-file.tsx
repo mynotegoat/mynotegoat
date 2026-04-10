@@ -853,15 +853,16 @@ function buildSoapPrintHtmlForNarrative(config: {
   const formatSoapText = (text: string) => {
     let cleaned = text.trim();
     if (!cleaned) return "-";
-    // Strip tab characters, problematic inline styles, HTML entities for tabs/spaces,
-    // and leading whitespace per line — prevents paragraph indent markers in attached view
+    // Nuclear fix: strip ALL inline style attributes from the HTML.
+    // The editor saves style="..." on <p>, <div>, <span> etc. with
+    // text-indent, padding, margins, white-space that cause visible
+    // tab/indent artefacts when embedded inside the narrative document.
+    // The print CSS handles all visual styling — inline styles only hurt.
     cleaned = cleaned
+      .replace(/\s*style\s*=\s*"[^"]*"/gi, "")
+      .replace(/\s*style\s*=\s*'[^']*'/gi, "")
       .replace(/\t/g, "")
       .replace(/&(emsp|ensp|Tab|#9|#x9);/gi, "")
-      .replace(/text-indent\s*:\s*[^;"']+(;|(?=["']))/gi, "")
-      .replace(/white-space\s*:\s*[^;"']+(;|(?=["']))/gi, "")
-      .replace(/margin-left\s*:\s*[^;"']+(;|(?=["']))/gi, "")
-      .replace(/padding-left\s*:\s*[^;"']+(;|(?=["']))/gi, "")
       .replace(/^[ \t]+/gm, "");
     return cleaned;
   };
