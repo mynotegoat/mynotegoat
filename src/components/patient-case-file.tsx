@@ -532,6 +532,7 @@ type PrintableDocumentConfig = {
   includeLogo: boolean;
   logoDataUrl: string;
   encounterPagesHtml?: string;
+  billingPagesHtml?: string;
 };
 
 /** Strip leading whitespace from each line if the content contains HTML tags.
@@ -546,6 +547,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
   const { title, headerHtml, fontFamily, includeLogo, logoDataUrl } = config;
   const bodyHtml = stripHtmlIndentation(config.bodyHtml);
   const encounterPagesHtml = config.encounterPagesHtml ?? "";
+  const billingPagesHtml = config.billingPagesHtml ?? "";
   const headerFontFamily = config.headerFontFamily;
   const safeTitle = escapeHtml(title);
   const safeHeaderFontFamily = escapeHtml(headerFontFamily || "Georgia, 'Times New Roman', serif");
@@ -639,11 +641,16 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         color: #1a1a1a;
         white-space: normal;
       }
-      .soap-pages p { margin: 0 0 3px 0; }
+      .soap-pages, .soap-pages * { white-space: normal !important; }
+      .soap-pages p { margin: 0 0 3px 0 !important; padding: 0 !important; text-indent: 0 !important; }
       .soap-pages h1, .soap-pages h2, .soap-pages h3,
-      .soap-pages h4, .soap-pages h5, .soap-pages h6 { margin: 0; }
-      .soap-pages ul, .soap-pages ol { margin: 0; padding-left: 16px; }
-      .soap-pages li { margin: 0; }
+      .soap-pages h4, .soap-pages h5, .soap-pages h6 { margin: 0 !important; }
+      .soap-pages ul, .soap-pages ol { margin: 0 !important; padding-left: 16px !important; }
+      .soap-pages li { margin: 0 !important; }
+      .soap-content div, .soap-content p, .soap-content span {
+        margin: 0 !important; padding: 0 !important; text-indent: 0 !important;
+        border: 0 !important; white-space: normal !important;
+      }
       .letterhead {
         display: flex;
         align-items: flex-start;
@@ -733,6 +740,71 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         text-align: center;
       }
 
+      /* ── Attached Billing Statement pages ── */
+      .billing-pages {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 11px;
+        line-height: 1.4;
+        color: #121a27;
+        white-space: normal !important;
+      }
+      .billing-pages, .billing-pages * { white-space: normal !important; }
+      .billing-pages .bill-letterhead {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #0d79bf;
+        margin-bottom: 8px;
+      }
+      .billing-pages .bill-logo {
+        height: 60px;
+        width: auto;
+        max-width: 160px;
+        object-fit: contain;
+        flex-shrink: 0;
+      }
+      .billing-pages .bill-office-info { flex: 1; text-align: right; }
+      .billing-pages .bill-office-name { font-size: 14px; font-weight: 700; color: #0d79bf; margin: 0; line-height: 1.2; }
+      .billing-pages .bill-office-detail { font-size: 10px; color: #444; line-height: 1.4; margin: 0; }
+      .billing-pages .bill-title { text-align: center; font-size: 16px; font-weight: 700; margin: 10px 0 8px 0; color: #0d79bf; }
+      .billing-pages .bill-meta-row {
+        border-top: 1px solid #d0dfe9;
+        padding-top: 6px;
+        margin-bottom: 8px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        font-size: 10px;
+      }
+      .billing-pages .bill-section { margin-top: 8px; }
+      .billing-pages .bill-section h3 { margin: 0 0 4px 0; font-size: 12px; font-weight: 700; color: #0d79bf; }
+      .billing-pages table { width: 100%; border-collapse: collapse; }
+      .billing-pages th, .billing-pages td {
+        border: 1px solid #d0dfe9;
+        padding: 3px 6px;
+        font-size: 10px;
+        vertical-align: top;
+        text-align: left;
+      }
+      .billing-pages th {
+        background: #f0f6fb;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #5a7a8f;
+      }
+      .billing-pages .bill-totals { margin-top: 8px; display: flex; justify-content: flex-end; }
+      .billing-pages .bill-total-box {
+        background: #0d79bf;
+        color: #fff;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        border-radius: 3px;
+      }
+
       @page {
         size: Letter;
         margin: 0.55in;
@@ -750,6 +822,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       ${headerMarkup}
       <div class="content">${bodyHtml}</div>
     </main>
+    ${billingPagesHtml}
   </body>
 </html>`;
 }
@@ -778,8 +851,19 @@ function buildSoapPrintHtmlForNarrative(config: {
   if (!config.encounters.length) return "";
 
   const formatSoapText = (text: string) => {
-    const trimmed = text.trim();
-    return trimmed || "-";
+    let cleaned = text.trim();
+    if (!cleaned) return "-";
+    // Strip tab characters, problematic inline styles, HTML entities for tabs/spaces,
+    // and leading whitespace per line — prevents paragraph indent markers in attached view
+    cleaned = cleaned
+      .replace(/\t/g, "")
+      .replace(/&(emsp|ensp|Tab|#9|#x9);/gi, "")
+      .replace(/text-indent\s*:\s*[^;"']+(;|(?=["']))/gi, "")
+      .replace(/white-space\s*:\s*[^;"']+(;|(?=["']))/gi, "")
+      .replace(/margin-left\s*:\s*[^;"']+(;|(?=["']))/gi, "")
+      .replace(/padding-left\s*:\s*[^;"']+(;|(?=["']))/gi, "")
+      .replace(/^[ \t]+/gm, "");
+    return cleaned;
   };
 
   const logoMarkup = config.logoDataUrl.trim()
@@ -838,6 +922,110 @@ function buildSoapPrintHtmlForNarrative(config: {
     ${encounterMarkup}
     <div class="print-footer">
       ${escapeHtml(config.officeName)} &bull; Confidential Medical Record
+    </div>
+  </div>`;
+}
+
+/**
+ * Build a billing statement HTML fragment for attaching to the narrative PDF.
+ * Uses the same compact professional layout as the billing page print.
+ */
+function buildBillingStatementHtmlForNarrative(config: {
+  officeName: string;
+  officeAddress: string;
+  officePhone: string;
+  officeFax: string;
+  officeEmail: string;
+  logoDataUrl: string;
+  patientName: string;
+  patientDob: string;
+  patientDoi: string;
+  caseNumber: string;
+  attorneyName: string;
+  attorneyPhone: string;
+  providerName: string;
+  diagnoses: Array<{ code: string; description: string }>;
+  charges: Array<{
+    encounterDate: string;
+    procedureCode: string;
+    description: string;
+    units: number;
+    lineTotal: number;
+  }>;
+  total: number;
+}): string {
+  if (!config.charges.length) return "";
+
+  const fmtMoney = (v: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(v);
+
+  const logoMarkup = config.logoDataUrl.trim()
+    ? `<img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" class="bill-logo" />`
+    : "";
+
+  const diagnosisRows = config.diagnoses
+    .map(
+      (d, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(d.code)}</td><td>${escapeHtml(d.description)}</td></tr>`,
+    )
+    .join("");
+
+  const diagnosisSection = config.diagnoses.length
+    ? `<section class="bill-section">
+        <h3>Diagnoses</h3>
+        <table><thead><tr><th>#</th><th>Code</th><th>Description</th></tr></thead>
+        <tbody>${diagnosisRows}</tbody></table>
+      </section>`
+    : "";
+
+  const chargeRows = config.charges
+    .map(
+      (c, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(c.encounterDate)}</td>
+        <td>${escapeHtml(`${c.procedureCode} - ${c.description}`)}</td>
+        <td>11</td>
+        <td>${c.units}</td>
+        <td>${escapeHtml(fmtMoney(c.lineTotal))}</td>
+        <td>${escapeHtml(fmtMoney(0))}</td>
+      </tr>`,
+    )
+    .join("");
+
+  return `<div class="billing-pages" style="page-break-before: always;">
+    <header class="bill-letterhead">
+      ${logoMarkup}
+      <div class="bill-office-info">
+        <p class="bill-office-name">${escapeHtml(config.officeName)}</p>
+        <p class="bill-office-detail">
+          ${escapeHtml(config.officeAddress)}<br />
+          T: ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` | F: ${escapeHtml(config.officeFax)}` : ""}<br />
+          ${escapeHtml(config.officeEmail)}
+        </p>
+      </div>
+    </header>
+    <div class="bill-title">Statement for Reimbursement</div>
+    <div class="bill-meta-row">
+      <div>
+        <strong>Patient:</strong> ${escapeHtml(config.patientName)}${config.caseNumber ? ` (${escapeHtml(config.caseNumber)})` : ""}<br />
+        <strong>DOB:</strong> ${escapeHtml(config.patientDob || "-")}<br />
+        <strong>Date of Injury:</strong> ${escapeHtml(config.patientDoi || "-")}
+      </div>
+      <div style="text-align:right">
+        <strong>Attorney:</strong> ${escapeHtml(config.attorneyName || "-")}<br />
+        <strong>Attorney Phone:</strong> ${escapeHtml(config.attorneyPhone || "-")}<br />
+        <strong>Provider:</strong> ${escapeHtml(config.providerName || "-")}
+      </div>
+    </div>
+    ${diagnosisSection}
+    <section class="bill-section">
+      <h3>Procedures</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Date</th><th>Service</th><th>POS</th><th>Un</th><th>Charge</th><th>Tax</th></tr></thead>
+        <tbody>${chargeRows}</tbody>
+      </table>
+    </section>
+    <div class="bill-totals">
+      <div class="bill-total-box">Total: ${escapeHtml(fmtMoney(config.total))}</div>
     </div>
   </div>`;
 }
@@ -1160,6 +1348,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [narrativePreview, setNarrativePreview] = useState<NarrativePreviewState | null>(null);
   const [showNarrativePreviewModal, setShowNarrativePreviewModal] = useState(false);
   const [narrativeAttachedEncounterIds, setNarrativeAttachedEncounterIds] = useState<Set<string>>(new Set());
+  const [narrativeAttachBilling, setNarrativeAttachBilling] = useState(false);
   const [encounterMessage, setEncounterMessage] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
@@ -2496,6 +2685,41 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       })),
     });
 
+    // Build billing statement if attached
+    let billingPagesHtml = "";
+    if (narrativeAttachBilling) {
+      // Collect all encounter charge lines
+      const allCharges = patientEncounterRecords.flatMap((enc) =>
+        enc.charges.map((ch) => ({
+          encounterDate: enc.encounterDate,
+          procedureCode: ch.procedureCode,
+          description: ch.name,
+          units: ch.units,
+          lineTotal: ch.unitPrice * ch.units,
+        })),
+      );
+      if (allCharges.length > 0) {
+        billingPagesHtml = buildBillingStatementHtmlForNarrative({
+          officeName: officeSettings.officeName,
+          officeAddress: officeSettings.address,
+          officePhone: officeSettings.phone,
+          officeFax: officeSettings.fax,
+          officeEmail: officeSettings.email,
+          logoDataUrl: officeSettings.logoDataUrl,
+          patientName: `${lastName}, ${firstName}`.trim(),
+          patientDob: patientDob,
+          patientDoi: dateOfLoss,
+          caseNumber,
+          attorneyName: attorney,
+          attorneyPhone: matchedAttorneyContact?.phone ?? "",
+          providerName: officeSettings.doctorName,
+          diagnoses: patientDiagnoses.map((d) => ({ code: d.code, description: d.description })),
+          charges: allCharges,
+          total: currentBillTotal,
+        });
+      }
+    }
+
     const narrativeDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, narrativePreview.title);
     const printableHtml = buildPrintableDocumentHtml({
       title: narrativeDocTitle,
@@ -2508,6 +2732,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         : true,
       logoDataUrl: officeSettings.logoDataUrl,
       encounterPagesHtml,
+      billingPagesHtml,
     });
 
     narrativePrintingRef.current = true;
@@ -2522,8 +2747,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const encounterSuffix = attachedEncounters.length > 0
       ? ` with ${attachedEncounters.length} encounter${attachedEncounters.length === 1 ? "" : "s"} attached`
       : "";
+    const billingSuffix = narrativeAttachBilling && billingPagesHtml ? " + billing statement" : "";
     setNarrativeMessage(
-      `Generated ${narrativePreview.title}${encounterSuffix}. Use Save as PDF in the print dialog.`,
+      `Generated ${narrativePreview.title}${encounterSuffix}${billingSuffix}. Use Save as PDF in the print dialog.`,
     );
   };
 
@@ -2531,6 +2757,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setShowNarrativePreviewModal(false);
     setNarrativePreview(null);
     setNarrativeAttachedEncounterIds(new Set());
+    setNarrativeAttachBilling(false);
   };
 
   const addReExam = () => {
@@ -5166,6 +5393,26 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                         </label>
                       ))}
                   </div>
+                </div>
+              )}
+
+              {/* Attach billing statement checkbox */}
+              {currentBillTotal > 0 && (
+                <div className="mb-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                  <label className="flex cursor-pointer items-center gap-2 select-none text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      className="accent-[var(--brand-primary)]"
+                      checked={narrativeAttachBilling}
+                      onChange={(e) => setNarrativeAttachBilling(e.target.checked)}
+                    />
+                    Attach Billing Statement
+                    {narrativeAttachBilling && (
+                      <span className="ml-1 text-xs font-normal text-[var(--text-muted)]">
+                        (will print after narrative)
+                      </span>
+                    )}
+                  </label>
                 </div>
               )}
 

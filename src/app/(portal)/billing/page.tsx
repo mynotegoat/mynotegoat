@@ -142,14 +142,9 @@ function buildPrintHtml(config: {
   attorneyName: string;
   attorneyPhone: string;
   providerName: string;
-  statementDate: string;
   diagnoses: PatientDiagnosisEntry[];
   rows: EncounterChargeLine[];
   total: number;
-  totalPaid: number;
-  totalAdjustments: number;
-  remainingBalance: number;
-  settlementAdjustments: SettlementAdjustmentLine[];
 }) {
   const diagnosisMarkup = config.diagnoses
     .map(
@@ -175,17 +170,8 @@ function buildPrintHtml(config: {
     )
     .join("");
 
-  const settlementRows = config.settlementAdjustments
-    .map(
-      (row) => `<tr>
-      <td>${escapeHtml(row.label)}</td>
-      <td>${escapeHtml(formatMoney(row.amount))}</td>
-    </tr>`,
-    )
-    .join("");
-
   const logoMarkup = config.logoDataUrl.trim()
-    ? `<div class="logo-wrap"><img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" /></div>`
+    ? `<img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" class="logo" />`
     : "";
 
   const diagnosisSection = config.diagnoses.length
@@ -216,108 +202,73 @@ function buildPrintHtml(config: {
     <style>
       body {
         margin: 0;
-        padding: 24px;
+        padding: 0;
         color: #121a27;
         background: #fff;
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-      }
-      .wrapper {
-        max-width: 980px;
-        margin: 0 auto;
-      }
-      .header-grid {
-        display: grid;
-        grid-template-columns: 170px minmax(0, 1fr);
-        gap: 16px;
-        align-items: start;
-      }
-      .statement-date {
-        border: 1px solid #222;
-      }
-      .statement-date .label {
-        border-bottom: 1px solid #222;
-        padding: 8px;
-        font-size: 14px;
-        text-align: center;
-      }
-      .statement-date .value {
-        padding: 12px 8px;
-        font-size: 30px;
-        font-weight: 700;
-        text-align: center;
-      }
-      .office {
-        text-align: center;
-      }
-      .office h1 {
-        margin: 0;
-        font-size: 42px;
-        font-weight: 800;
-      }
-      .office p {
-        margin: 4px 0;
-        font-size: 14px;
-      }
-      .logo-wrap {
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: flex-end;
-      }
-      .logo-wrap img {
-        max-height: 160px;
-        width: auto;
-        object-fit: contain;
-      }
-      .patient-mail {
-        margin-top: 18px;
-        font-size: 18px;
+        font-size: 11px;
         line-height: 1.4;
       }
+      .wrapper {
+        width: 100%;
+        margin: 0;
+      }
+      .letterhead {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #0d79bf;
+        margin-bottom: 8px;
+      }
+      .logo {
+        height: 60px;
+        width: auto;
+        max-width: 160px;
+        object-fit: contain;
+        flex-shrink: 0;
+      }
+      .office-info {
+        flex: 1;
+        text-align: right;
+      }
+      .office-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: #0d79bf;
+        margin: 0;
+        line-height: 1.2;
+      }
+      .office-detail {
+        font-size: 10px;
+        color: #444;
+        line-height: 1.4;
+        margin: 0;
+      }
       .title {
-        margin-top: 30px;
         text-align: center;
-        font-size: 46px;
+        font-size: 16px;
+        font-weight: 700;
+        margin: 10px 0 8px 0;
+        color: #0d79bf;
       }
       .meta-row {
-        margin-top: 14px;
-        border-top: 3px solid #111;
-        padding-top: 10px;
+        border-top: 1px solid #d0dfe9;
+        padding-top: 6px;
+        margin-bottom: 8px;
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 10px;
-        font-size: 14px;
+        gap: 8px;
+        font-size: 10px;
       }
       .section {
-        margin-top: 14px;
+        margin-top: 8px;
       }
       .section h3 {
-        margin: 0 0 8px 0;
-        font-size: 30px;
-      }
-      .settlement-grid {
-        margin-top: 12px;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 280px);
-        gap: 12px;
-        align-items: start;
-      }
-      .settlement-box {
-        border: 1px solid #222;
-        padding: 10px;
-      }
-      .settlement-box h4 {
-        margin: 0 0 8px 0;
-        font-size: 18px;
-      }
-      .settlement-box dl {
-        margin: 0;
-        display: grid;
-        gap: 4px;
-      }
-      .settlement-box .row {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
+        margin: 0 0 4px 0;
+        font-size: 12px;
+        font-weight: 700;
+        color: #0d79bf;
       }
       table {
         width: 100%;
@@ -325,25 +276,32 @@ function buildPrintHtml(config: {
       }
       th,
       td {
-        border: 1px solid #222;
-        padding: 6px 8px;
-        font-size: 13px;
+        border: 1px solid #d0dfe9;
+        padding: 3px 6px;
+        font-size: 10px;
         vertical-align: top;
         text-align: left;
       }
       th {
-        background: #f7f7f7;
+        background: #f0f6fb;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #5a7a8f;
       }
       .totals {
-        margin-top: 12px;
+        margin-top: 8px;
         display: flex;
         justify-content: flex-end;
       }
       .total-box {
-        border: 1px solid #222;
-        padding: 10px 14px;
-        font-size: 16px;
+        background: #0d79bf;
+        color: #fff;
+        padding: 6px 14px;
+        font-size: 12px;
         font-weight: 700;
+        border-radius: 3px;
       }
       @page {
         size: Letter;
@@ -353,37 +311,29 @@ function buildPrintHtml(config: {
   </head>
   <body>
     <main class="wrapper">
-      <div class="header-grid">
-        <div class="statement-date">
-          <div class="label">Statement Date</div>
-          <div class="value">${escapeHtml(config.statementDate)}</div>
+      <header class="letterhead">
+        ${logoMarkup}
+        <div class="office-info">
+          <p class="office-name">${escapeHtml(config.officeName)}</p>
+          <p class="office-detail">
+            ${escapeHtml(config.officeAddress)}<br />
+            T: ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` | F: ${escapeHtml(config.officeFax)}` : ""}<br />
+            ${escapeHtml(config.officeEmail)}
+          </p>
         </div>
-        <div class="office">
-          ${logoMarkup}
-          <h1>${escapeHtml(config.officeName)}</h1>
-          <p>${escapeHtml(config.officeAddress)}</p>
-          <p>(${escapeHtml(config.officePhone)})</p>
-          ${config.officeFax.trim() ? `<p>Fax: ${escapeHtml(config.officeFax)}</p>` : ""}
-          ${config.officeEmail.trim() ? `<p>${escapeHtml(config.officeEmail)}</p>` : ""}
-        </div>
-      </div>
-
-      <div class="patient-mail">
-        <strong>${escapeHtml(config.patientName)}</strong><br />
-        ${config.patientPhone ? `Phone: ${escapeHtml(config.patientPhone)}<br />` : ""}
-      </div>
+      </header>
 
       <div class="title">Statement for Reimbursement</div>
 
       <div class="meta-row">
         <div>
-          <strong>Patient:</strong> ${escapeHtml(config.patientName)}${config.caseNumber ? ` - ${escapeHtml(config.caseNumber)}` : ""}<br />
+          <strong>Patient:</strong> ${escapeHtml(config.patientName)}${config.caseNumber ? ` (${escapeHtml(config.caseNumber)})` : ""}<br />
           <strong>DOB:</strong> ${escapeHtml(config.patientDob || "-")}<br />
-          <strong>Date of Injury:</strong> ${escapeHtml(config.patientDoi || "-")}<br />
-          <strong>Attorney:</strong> ${escapeHtml(config.attorneyName || "-")}<br />
-          <strong>Attorney Phone:</strong> ${escapeHtml(config.attorneyPhone || "-")}
+          <strong>Date of Injury:</strong> ${escapeHtml(config.patientDoi || "-")}
         </div>
         <div style="text-align:right">
+          <strong>Attorney:</strong> ${escapeHtml(config.attorneyName || "-")}<br />
+          <strong>Attorney Phone:</strong> ${escapeHtml(config.attorneyPhone || "-")}<br />
           <strong>Provider:</strong> ${escapeHtml(config.providerName || "-")}
         </div>
       </div>
@@ -413,34 +363,6 @@ function buildPrintHtml(config: {
       <div class="totals">
         <div class="total-box">Total: ${escapeHtml(formatMoney(config.total))}</div>
       </div>
-
-      <section class="settlement-grid">
-        ${
-          config.settlementAdjustments.length > 0
-            ? `<div class="settlement-box">
-          <h4>Close-Out Adjustments</h4>
-          <table>
-            <thead>
-              <tr>
-                <th>Adjustment</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${settlementRows}
-            </tbody>
-          </table>
-        </div>`
-            : "<div></div>"
-        }
-        <div class="settlement-box">
-          <dl>
-            <div class="row"><dt>Total Billed:</dt><dd>${escapeHtml(formatMoney(config.total))}</dd></div>
-            <div class="row"><dt>Total Paid:</dt><dd>${escapeHtml(formatMoney(config.totalPaid))}</dd></div>
-            <div class="row"><dt>Balance Due:</dt><dd>${escapeHtml(formatMoney(config.remainingBalance))}</dd></div>
-          </dl>
-        </div>
-      </section>
     </main>
   </body>
 </html>`;
@@ -516,19 +438,11 @@ export default function BillingPage() {
   const { encountersByNewest } = useEncounterNotes();
   const { officeSettings } = useOfficeSettings();
   const { contacts } = useContactDirectory();
-  const {
-    getRecord: getPatientBillingRecord,
-    setCoreFields: setPatientBillingCoreFields,
-    addAdjustment: addPatientBillingAdjustment,
-    updateAdjustment: updatePatientBillingAdjustment,
-    removeAdjustment: removePatientBillingAdjustment,
-  } = usePatientBilling();
+  const { getRecord: getPatientBillingRecord } = usePatientBilling();
 
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [message, setMessage] = useState("");
-  const [adjustmentLabelDraft, setAdjustmentLabelDraft] = useState("");
-  const [adjustmentAmountDraft, setAdjustmentAmountDraft] = useState("");
 
   const diagnosisMap = useMemo(() => loadPatientDiagnosesMap(), []);
 
@@ -634,15 +548,10 @@ export default function BillingPage() {
     [encounterChargeLines],
   );
   const patientBillingRecord = activePatientId ? getPatientBillingRecord(activePatientId) : null;
-  const billedAmount = patientBillingRecord ? patientBillingRecord.billedAmount : totalBilled;
+  const billedAmount = totalBilled;
   const paidAmount = patientBillingRecord?.paidAmount ?? 0;
   const paidDate = patientBillingRecord?.paidDate ?? "";
-  const settlementAdjustments = patientBillingRecord?.adjustments ?? [];
-  const totalAdjustments = useMemo(
-    () => settlementAdjustments.reduce((sum, entry) => sum + entry.amount, 0),
-    [settlementAdjustments],
-  );
-  const remainingBalance = billedAmount - paidAmount - totalAdjustments;
+  const remainingBalance = billedAmount - paidAmount;
 
   const diagnoses = useMemo(() => {
     if (!activePatientId) {
@@ -665,75 +574,6 @@ export default function BillingPage() {
   }, [contacts, selectedPatient]);
 
   const providerName = encounterChargeLines[0]?.provider ?? officeSettings.doctorName;
-
-  const handleSetBilledAmount = (value: string) => {
-    if (!activePatientId) {
-      return;
-    }
-    const parsed = Number.parseFloat(value);
-    setPatientBillingCoreFields(activePatientId, {
-      billedAmount: Number.isFinite(parsed) ? parsed : 0,
-    });
-  };
-
-  const handleSetPaidAmount = (value: string) => {
-    if (!activePatientId) {
-      return;
-    }
-    const parsed = Number.parseFloat(value);
-    setPatientBillingCoreFields(activePatientId, {
-      paidAmount: Number.isFinite(parsed) ? parsed : 0,
-    });
-  };
-
-  const handleSetPaidDate = (value: string) => {
-    if (!activePatientId) {
-      return;
-    }
-    setPatientBillingCoreFields(activePatientId, {
-      paidDate: formatUsDateInput(value),
-    });
-  };
-
-  const handleAddAdjustment = () => {
-    if (!activePatientId) {
-      setMessage("Select a patient first.");
-      return;
-    }
-    const normalizedLabel = adjustmentLabelDraft.trim();
-    const parsedAmount = Number.parseFloat(adjustmentAmountDraft);
-    if (!normalizedLabel || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setMessage("Enter an adjustment name and amount.");
-      return;
-    }
-    const added = addPatientBillingAdjustment(activePatientId, {
-      label: normalizedLabel,
-      amount: parsedAmount,
-    });
-    if (!added) {
-      setMessage("Could not add adjustment.");
-      return;
-    }
-    setAdjustmentLabelDraft("");
-    setAdjustmentAmountDraft("");
-    setMessage("Adjustment added.");
-  };
-
-  const handleApplyBalanceAdjustment = () => {
-    if (!activePatientId) {
-      setMessage("Select a patient first.");
-      return;
-    }
-    if (remainingBalance <= 0) {
-      setMessage("No remaining balance to adjust.");
-      return;
-    }
-    addPatientBillingAdjustment(activePatientId, {
-      label: "Settlement Discount",
-      amount: Math.round(remainingBalance * 100) / 100,
-    });
-    setMessage("Settlement discount added to zero out balance.");
-  };
 
   const handlePrintBill = () => {
     if (!selectedPatient) {
@@ -760,18 +600,9 @@ export default function BillingPage() {
       attorneyName: selectedPatient.attorney,
       attorneyPhone: attorneyContact?.phone ?? "",
       providerName,
-      statementDate: new Date().toLocaleDateString("en-US"),
       diagnoses,
       rows: encounterChargeLines,
       total: billedAmount,
-      totalPaid: paidAmount,
-      totalAdjustments,
-      remainingBalance,
-      settlementAdjustments: settlementAdjustments.map((entry) => ({
-        id: entry.id,
-        label: entry.label,
-        amount: entry.amount,
-      })),
     });
 
     const opened = printHtmlWithIframeFallback(printableHtml);
