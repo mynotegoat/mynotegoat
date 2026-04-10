@@ -633,25 +633,38 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         display: block;
       }
 
-      /* ── Attached SOAP encounter pages (same styling as encounter print) ── */
+      /* ── Attached SOAP encounter pages ──
+         Use "all: initial" to completely isolate from the narrative
+         document's CSS (its global p, *, body rules were leaking in
+         and causing visible paragraph-indent / tab artefacts).
+         After the reset we re-declare every style the encounter print
+         needs — this is an EXACT copy of the standalone encounter
+         print CSS from encounter-workspace.tsx.                       */
       .soap-pages {
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        font-size: 12px;
-        line-height: 1.4;
-        color: #1a1a1a;
-        white-space: normal;
+        all: initial !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+        color: #1a1a1a !important;
+        white-space: normal !important;
+        background: #fff !important;
       }
-      .soap-pages, .soap-pages * { white-space: normal !important; }
-      .soap-pages p { margin: 0 0 3px 0 !important; padding: 0 !important; text-indent: 0 !important; }
-      .soap-pages h1, .soap-pages h2, .soap-pages h3,
-      .soap-pages h4, .soap-pages h5, .soap-pages h6 { margin: 0 !important; }
-      .soap-pages ul, .soap-pages ol { margin: 0 !important; padding-left: 16px !important; }
-      .soap-pages li { margin: 0 !important; }
-      .soap-content div, .soap-content p, .soap-content span {
-        margin: 0 !important; padding: 0 !important; text-indent: 0 !important;
-        border: 0 !important; white-space: normal !important;
+      /* Reset every child element to inherit from .soap-pages, not from body/global */
+      .soap-pages * {
+        all: unset;
+        display: revert;
+        box-sizing: border-box;
+        white-space: normal !important;
+        text-indent: 0 !important;
+        font-family: inherit;
+        font-size: inherit;
+        line-height: inherit;
+        color: inherit;
       }
-      .letterhead {
+      /* Re-declare every style exactly matching the standalone encounter print */
+      .soap-pages .letterhead {
         display: flex;
         align-items: flex-start;
         gap: 16px;
@@ -659,7 +672,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         border-bottom: 2px solid #0d79bf;
         margin-bottom: 10px;
       }
-      .logo {
+      .soap-pages .logo {
         height: 70px;
         width: auto;
         max-width: 200px;
@@ -669,10 +682,14 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         margin: 0;
         padding: 0;
       }
-      .office-info { flex: 1; text-align: right; margin: 0; padding: 0; }
-      .office-name-lh { font-size: 15px; font-weight: 700; color: #0d79bf; margin: 0; padding: 0; line-height: 1.2; }
-      .office-detail { font-size: 11px; color: #444; line-height: 1.5; margin: 0; }
-      .patient-banner {
+      .soap-pages .office-info { flex: 1; text-align: right; margin: 0; padding: 0; }
+      .soap-pages .office-name-lh { font-size: 15px; font-weight: 700; color: #0d79bf; margin: 0; padding: 0; line-height: 1.2; }
+      .soap-pages .office-detail { font-size: 11px; color: #444; line-height: 1.5; margin: 0; }
+      .soap-pages p { display: block; margin: 0 0 3px 0; padding: 0; text-indent: 0 !important; }
+      .soap-pages strong, .soap-pages b { font-weight: 700; }
+      .soap-pages br { display: block; }
+      .soap-pages img { display: inline; }
+      .soap-pages .patient-banner {
         background: #f0f6fb;
         border: 1px solid #d0dfe9;
         border-radius: 4px;
@@ -682,15 +699,16 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         justify-content: space-between;
         align-items: center;
       }
-      .patient-banner .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a7a8f; }
-      .patient-banner .name { font-size: 14px; font-weight: 700; color: #13293d; }
-      .patient-banner .doc-title { font-size: 11px; font-weight: 600; color: #0d79bf; }
-      .encounter {
+      .soap-pages .patient-banner .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a7a8f; }
+      .soap-pages .patient-banner .name { font-size: 14px; font-weight: 700; color: #13293d; }
+      .soap-pages .patient-banner .doc-title { font-size: 11px; font-weight: 600; color: #0d79bf; }
+      .soap-pages .encounter {
         border: 1px solid #d0dfe9;
         border-radius: 4px;
         margin-bottom: 8px;
+        display: block;
       }
-      .encounter-header {
+      .soap-pages .encounter-header {
         background: #0d79bf;
         color: #fff;
         padding: 4px 10px;
@@ -698,9 +716,9 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         justify-content: space-between;
         align-items: center;
       }
-      .encounter-date { font-size: 12px; font-weight: 700; }
-      .encounter-type { font-size: 11px; opacity: 0.9; }
-      .encounter-meta {
+      .soap-pages .encounter-date { font-size: 12px; font-weight: 700; color: #fff; }
+      .soap-pages .encounter-type { font-size: 11px; opacity: 0.9; color: #fff; }
+      .soap-pages .encounter-meta {
         background: #f7fafc;
         padding: 3px 10px;
         border-bottom: 1px solid #e2eaf0;
@@ -709,35 +727,40 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         display: flex;
         gap: 16px;
       }
-      .soap-section {
+      .soap-pages .soap-section {
         padding: 4px 10px;
         border-bottom: 1px solid #eef2f6;
+        display: block;
       }
-      .soap-section:last-child { border-bottom: none; }
-      .soap-label {
+      .soap-pages .soap-section:last-child { border-bottom: none; }
+      .soap-pages .soap-label {
         font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: #0d79bf;
         margin-bottom: 2px;
+        display: block;
       }
-      .soap-content {
+      .soap-pages .soap-content {
         font-size: 12px;
         line-height: 1.45;
         color: #1a1a1a;
         word-break: break-word;
+        display: block;
       }
-      .soap-content p { margin: 0 0 3px 0; }
-      .soap-content b, .soap-content strong { font-weight: 700; }
-      .soap-content span { font-size: inherit; color: inherit; }
-      .print-footer {
+      .soap-pages .soap-content p { margin: 0 0 3px 0; padding: 0; text-indent: 0 !important; display: block; }
+      .soap-pages .soap-content div { margin: 0; padding: 0; text-indent: 0 !important; display: block; }
+      .soap-pages .soap-content span { font-size: inherit; color: inherit; }
+      .soap-pages .soap-content b, .soap-pages .soap-content strong { font-weight: 700; }
+      .soap-pages .print-footer {
         margin-top: 14px;
         padding-top: 6px;
         border-top: 1px solid #d0dfe9;
         font-size: 9px;
         color: #8899a6;
         text-align: center;
+        display: block;
       }
 
       /* ── Attached Billing Statement pages ── */
