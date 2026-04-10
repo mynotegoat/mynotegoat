@@ -557,8 +557,10 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         font-size: 14px;
         line-height: 1.6;
       }
-      div, section, article, aside, details, summary, figure, figcaption,
-      dl, dt, dd, blockquote, pre, fieldset, legend, nav, main, footer, header {
+      .content div, .content section, .content article, .content aside,
+      .content details, .content summary, .content figure, .content figcaption,
+      .content dl, .content dt, .content dd, .content blockquote, .content pre,
+      .content fieldset, .content legend, .content nav, .content footer, .content header {
         margin: 0 !important; padding: 0 !important; border: 0 !important; text-indent: 0 !important;
         margin-left: 0 !important; padding-left: 0 !important;
       }
@@ -593,11 +595,11 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         line-height: 1.5;
       }
       .header-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin: 0 0 12px 0;
-        gap: 16px;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+        margin: 0 0 12px 0 !important;
+        gap: 16px !important;
       }
       .office-logo {
         max-height: 100px;
