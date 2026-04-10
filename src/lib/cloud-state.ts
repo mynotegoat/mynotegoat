@@ -462,15 +462,6 @@ export async function prepareCloudStateBeforeMount() {
       await upsertRemoteSnapshot(authed.workspaceId, localSnapshot);
     }
 
-    // Phase-1 cloud-as-truth pull for table-backed entities. Runs AFTER the
-    // legacy blob bootstrap has settled localStorage, so the table read is
-    // the FINAL word on those entities for this session. Wrapped so a
-    // Phase-1 hiccup never tears down the legacy load path.
-    try {
-      await bootstrapTableBackedEntities();
-    } catch (entityErr) {
-      console.error("[Cloud Sync] Phase-1 entity bootstrap failed:", entityErr);
-    }
   } catch (error) {
     // Re-throw bootstrap errors so the layout can show a hard error screen.
     // Only swallow truly unexpected, non-fatal errors.
@@ -484,6 +475,16 @@ export async function prepareCloudStateBeforeMount() {
     );
   } finally {
     clearTimeout(timeout);
+
+    // Phase-1 cloud-as-truth pull for table-backed entities. MUST be in
+    // finally so it runs regardless of which early-return path the legacy
+    // blob bootstrap took (local-newer, remote-newer, first-time push).
+    // Wrapped in try so a Phase-1 hiccup never blocks the legacy load.
+    try {
+      await bootstrapTableBackedEntities();
+    } catch (entityErr) {
+      console.error("[Cloud Sync] Phase-1 entity bootstrap failed:", entityErr);
+    }
   }
 }
 
