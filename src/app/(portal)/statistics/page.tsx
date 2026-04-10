@@ -504,7 +504,7 @@ export default function StatisticsPage() {
                 <span className="font-bold">{formatMoney(billingData.billedTotal)}</span>
               </p>
               <p className="flex items-center justify-between">
-                <span className="text-[var(--text-muted)]">Collected</span>
+                <span className="text-[var(--text-muted)]">Paid</span>
                 <span className="font-bold">{formatMoney(billingData.paidTotal)}</span>
               </p>
               <p className="flex items-center justify-between">

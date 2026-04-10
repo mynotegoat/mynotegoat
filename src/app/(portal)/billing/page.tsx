@@ -434,12 +434,10 @@ function buildPrintHtml(config: {
             : "<div></div>"
         }
         <div class="settlement-box">
-          <h4>Close-Out Summary</h4>
           <dl>
-            <div class="row"><dt>Billed:</dt><dd>${escapeHtml(formatMoney(config.total))}</dd></div>
-            <div class="row"><dt>Paid:</dt><dd>${escapeHtml(formatMoney(config.totalPaid))}</dd></div>
-            <div class="row"><dt>Adjustments:</dt><dd>${escapeHtml(formatMoney(config.totalAdjustments))}</dd></div>
-            <div class="row"><dt>Balance:</dt><dd>${escapeHtml(formatMoney(config.remainingBalance))}</dd></div>
+            <div class="row"><dt>Total Billed:</dt><dd>${escapeHtml(formatMoney(config.total))}</dd></div>
+            <div class="row"><dt>Total Paid:</dt><dd>${escapeHtml(formatMoney(config.totalPaid))}</dd></div>
+            <div class="row"><dt>Balance Due:</dt><dd>${escapeHtml(formatMoney(config.remainingBalance))}</dd></div>
           </dl>
         </div>
       </section>
@@ -905,152 +903,6 @@ export default function BillingPage() {
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-            <h3 className="text-lg font-semibold">Close-Out Settlement</h3>
-            <p className="text-sm text-[var(--text-muted)]">
-              Track billed amount, attorney payment, and named adjustments (negotiation, patient discount, etc.).
-            </p>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Billed Amount</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => handleSetBilledAmount(event.target.value)}
-                  placeholder="0.00"
-                  step="0.01"
-                  type="number"
-                  value={Number.isFinite(billedAmount) ? billedAmount : 0}
-                />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Paid Amount</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => handleSetPaidAmount(event.target.value)}
-                  placeholder="0.00"
-                  step="0.01"
-                  type="number"
-                  value={Number.isFinite(paidAmount) ? paidAmount : 0}
-                />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Paid Date</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) => handleSetPaidDate(event.target.value)}
-                  placeholder="MM/DD/YYYY"
-                  value={paidDate}
-                />
-              </label>
-            </div>
-
-            <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-white p-3">
-              <h4 className="text-base font-semibold">Adjustments / Discounts</h4>
-              <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_160px_auto_auto] md:items-end">
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold text-[var(--text-muted)]">Name</span>
-                  <input
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                    onChange={(event) => setAdjustmentLabelDraft(event.target.value)}
-                    placeholder="Negotiation Discount"
-                    value={adjustmentLabelDraft}
-                  />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold text-[var(--text-muted)]">Amount</span>
-                  <input
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                    onChange={(event) => setAdjustmentAmountDraft(event.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    type="number"
-                    value={adjustmentAmountDraft}
-                  />
-                </label>
-                <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                  onClick={handleAddAdjustment}
-                  type="button"
-                >
-                  Add Adjustment
-                </button>
-                <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                  onClick={handleApplyBalanceAdjustment}
-                  type="button"
-                >
-                  Zero-Out Balance
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-2">
-                {settlementAdjustments.map((entry) => (
-                  <div
-                    className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 md:grid-cols-[minmax(0,1fr)_140px_110px]"
-                    key={entry.id}
-                  >
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      onChange={(event) =>
-                        activePatientId
-                          ? updatePatientBillingAdjustment(activePatientId, entry.id, {
-                              label: event.target.value,
-                            })
-                          : null
-                      }
-                      value={entry.label}
-                    />
-                    <input
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      onChange={(event) =>
-                        activePatientId
-                          ? updatePatientBillingAdjustment(activePatientId, entry.id, {
-                              amount: Number.parseFloat(event.target.value) || 0,
-                            })
-                          : null
-                      }
-                      step="0.01"
-                      type="number"
-                      value={entry.amount}
-                    />
-                    <button
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
-                      onClick={() => {
-                        if (!activePatientId) {
-                          return;
-                        }
-                        removePatientBillingAdjustment(activePatientId, entry.id);
-                      }}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                {settlementAdjustments.length === 0 && (
-                  <p className="text-sm text-[var(--text-muted)]">No adjustments yet.</p>
-                )}
-              </div>
-
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <p className="text-sm">
-                  <span className="font-semibold">Paid:</span> {formatMoney(paidAmount)}
-                </p>
-                <p className="text-sm">
-                  <span className="font-semibold">Adjustments:</span> {formatMoney(totalAdjustments)}
-                </p>
-                <p className="text-sm">
-                  <span className="font-semibold">Balance:</span>{" "}
-                  <span className={remainingBalance <= 0 ? "text-[#196d3a] font-semibold" : "text-[#b43b34] font-semibold"}>
-                    {formatMoney(remainingBalance)}
-                  </span>
-                </p>
-              </div>
-            </div>
-          </div>
 
           {message && <p className="mt-3 text-sm font-semibold text-[var(--brand-primary)]">{message}</p>}
         </section>

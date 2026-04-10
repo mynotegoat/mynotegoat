@@ -2344,7 +2344,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         dischargeDate,
         rbSentDate,
         paidDate,
-        billedAmount,
+        billedAmount: currentBillTotal.toFixed(2),
         paidAmount,
         reviewStatus,
       },
@@ -2850,10 +2850,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   };
 
   const savePatientFile = () => {
-    const billedValue = Number.parseFloat(billedAmount);
     const paidValue = Number.parseFloat(paidAmount);
     setPatientBillingCoreFields(patient.id, {
-      billedAmount: Number.isFinite(billedValue) ? billedValue : 0,
+      billedAmount: currentBillTotal,
       paidAmount: Number.isFinite(paidValue) ? paidValue : 0,
       paidDate,
     });
@@ -2892,6 +2891,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         notes: patientNotes.trim(),
         discharge: toIsoDateFromUsDate(dischargeDate),
         rbSent: toIsoDateFromUsDate(rbSentDate),
+        billed: currentBillTotal.toString(),
+        paidAmount: paidAmount || "0",
+        paidDate: toIsoDateFromUsDate(paidDate),
       },
     });
 
@@ -3003,24 +3005,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const rbToPaid = formatMonthDayDiff(
     rbSentDateValue && paidDateValue ? getMonthDayDiff(rbSentDateValue, paidDateValue) : null,
   );
-  const billedAmountValue = Number.parseFloat(billedAmount);
+  const billedAmountValue = currentBillTotal;
   const paidAmountValue = Number.parseFloat(paidAmount);
-  const closeoutAdjustmentTotal = (patientBillingRecord?.adjustments ?? []).reduce(
-    (sum, entry) => sum + entry.amount,
-    0,
-  );
   const percentagePaid =
-    Number.isFinite(billedAmountValue) &&
     billedAmountValue > 0 &&
     Number.isFinite(paidAmountValue) &&
     paidAmountValue >= 0
       ? (paidAmountValue / billedAmountValue) * 100
       : null;
   const balanceDue =
-    Number.isFinite(billedAmountValue) && billedAmountValue >= 0
+    billedAmountValue >= 0
       ? billedAmountValue -
-        (Number.isFinite(paidAmountValue) && paidAmountValue >= 0 ? paidAmountValue : 0) -
-        closeoutAdjustmentTotal
+        (Number.isFinite(paidAmountValue) && paidAmountValue >= 0 ? paidAmountValue : 0)
       : null;
 
   return (
@@ -4856,13 +4852,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </label>
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">$ Billed</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => setBilledAmount(event.target.value)}
-                  placeholder="0.00"
-                  type="number"
-                  value={billedAmount}
-                />
+                <div className="flex items-center rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 font-semibold tabular-nums text-[var(--text-main)]">
+                  {formatUsdCurrency(currentBillTotal)}
+                </div>
               </label>
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Paid Date</span>
@@ -4908,22 +4900,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       {formatPercentage(percentagePaid)}
                     </dd>
                   </div>
+                </dl>
+                <div className="mt-3 border-t border-[var(--line-soft)] pt-3">
                   <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-4">
-                    <dt className="font-medium text-[var(--text-muted)]">Adjustments:</dt>
-                    <dd className="font-medium tabular-nums text-[var(--text-main)]">
-                      {formatUsdCurrency(closeoutAdjustmentTotal)}
-                    </dd>
-                  </div>
-                  <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-4">
-                    <dt className="font-medium text-[var(--text-muted)]">Balance Due:</dt>
-                    <dd className="font-medium tabular-nums text-[var(--text-main)]">
+                    <dt className="font-semibold text-[var(--text-muted)]">Balance Due:</dt>
+                    <dd className={`font-bold tabular-nums ${balanceDue !== null && balanceDue > 0 ? "text-[#b43b34]" : "text-[#196d3a]"}`}>
                       {balanceDue === null ? "-" : formatUsdCurrency(balanceDue)}
                     </dd>
                   </div>
-                </dl>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  Close-out adjustments are managed in the Billing tab and included in balance due.
-                </p>
+                </div>
               </div>
 
               <label className="grid gap-1">
