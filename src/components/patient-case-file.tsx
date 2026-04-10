@@ -535,10 +535,10 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
     includeLogo && safeLogoDataUrl
       ? `<img alt="Office Logo" src="${safeLogoDataUrl}" class="office-logo" />`
       : "";
-  const headerTopMarkup = logoMarkup ? `<div class="header-top">${logoMarkup}</div>` : "";
-  const headerMarkup = headerHtml.trim()
-    ? `<div class="header">${headerHtml}</div>`
+  const headerTopMarkup = (logoMarkup || headerHtml.trim())
+    ? `<div class="header-top">${logoMarkup}${headerHtml.trim() ? `<div class="header">${headerHtml}</div>` : ""}</div>`
     : "";
+  const headerMarkup = "";
 
   return `<!doctype html>
 <html lang="en">
@@ -557,13 +557,19 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         font-size: 14px;
         line-height: 1.6;
       }
-      h1, h2, h3, h4, h5, h6 { margin: 14px 0 4px 0; }
-      p { margin: 0 0 6px 0; }
-      ul, ol { margin: 0 0 6px 0; padding-left: 20px; }
-      li { margin: 0 0 2px 0; }
+      div, section, article, aside, details, summary, figure, figcaption,
+      dl, dt, dd, blockquote, pre, fieldset, legend, nav, main, footer, header {
+        margin: 0 !important; padding: 0 !important; border: 0 !important; text-indent: 0 !important;
+        margin-left: 0 !important; padding-left: 0 !important;
+      }
+      h1, h2, h3, h4, h5, h6 { margin: 14px 0 4px 0; text-indent: 0; }
+      p { margin: 0 0 6px 0; text-indent: 0; }
+      ul, ol { margin: 0 0 6px 0; padding-left: 20px; text-indent: 0; }
+      li { margin: 0 0 2px 0; text-indent: 0; }
+      dd { margin-left: 0; }
       blockquote { margin: 0 0 6px 0; padding-left: 12px; border-left: 3px solid #ccc; }
       table { border-collapse: collapse; width: 100%; margin: 0 0 8px 0; }
-      td, th { padding: 3px 6px; border: 1px solid #ccc; text-align: left; font-size: 13px; }
+      td, th { padding: 3px 6px; text-align: left; font-size: 13px; }
       .wrapper {
         width: 100%;
         margin: 0;
@@ -578,7 +584,8 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         line-height: 1.6;
       }
       .header {
-        margin: 0 0 16px 0;
+        flex: 1;
+        text-align: right;
         white-space: normal;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
@@ -587,9 +594,10 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .header-top {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
         align-items: flex-start;
-        margin: 0 0 16px 0;
+        margin: 0 0 12px 0;
+        gap: 16px;
       }
       .office-logo {
         max-height: 100px;
