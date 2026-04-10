@@ -227,19 +227,35 @@ function buildSoapPrintHtml(config: {
   const logoMarkup = config.logoDataUrl.trim()
     ? `<img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" class="logo" />`
     : "";
+
   const encounterMarkup = config.encounters
-    .map((encounter) => {
-      return `<section class="encounter">
-  <h2>${escapeHtml(encounter.encounterDate)} • ${escapeHtml(encounter.appointmentType)}</h2>
-  <p class="meta">Provider: ${escapeHtml(encounter.provider)} • Status: ${
-        encounter.signed ? "Closed" : "Open"
-      }</p>
-  <div class="soap-grid">
-    <article><h3>Subjective</h3><p>${formatSoapText(encounter.soap.subjective)}</p></article>
-    <article><h3>Objective</h3><p>${formatSoapText(encounter.soap.objective)}</p></article>
-    <article><h3>Assessment</h3><p>${formatSoapText(encounter.soap.assessment)}</p></article>
-    <article><h3>Plan</h3><p>${formatSoapText(encounter.soap.plan)}</p></article>
+    .map((encounter, idx) => {
+      const sections = [
+        { label: "Subjective", content: formatSoapText(encounter.soap.subjective) },
+        { label: "Objective", content: formatSoapText(encounter.soap.objective) },
+        { label: "Assessment", content: formatSoapText(encounter.soap.assessment) },
+        { label: "Plan", content: formatSoapText(encounter.soap.plan) },
+      ];
+
+      return `${idx > 0 ? '<div class="page-break"></div>' : ""}
+<section class="encounter">
+  <div class="encounter-header">
+    <div class="encounter-date">${escapeHtml(encounter.encounterDate)}</div>
+    <div class="encounter-type">${escapeHtml(encounter.appointmentType)}</div>
   </div>
+  <div class="encounter-meta">
+    <span>Provider: <strong>${escapeHtml(encounter.provider)}</strong></span>
+    <span>Status: <strong>${encounter.signed ? "Signed / Closed" : "Open"}</strong></span>
+  </div>
+  ${sections
+    .map(
+      (s) => `
+  <div class="soap-section">
+    <div class="soap-label">${s.label}</div>
+    <div class="soap-content">${s.content}</div>
+  </div>`,
+    )
+    .join("")}
 </section>`;
     })
     .join("");
@@ -250,101 +266,199 @@ function buildSoapPrintHtml(config: {
     <meta charset="utf-8" />
     <title>SOAP Notes - ${escapeHtml(config.patientName)}</title>
     <style>
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 28px;
+        padding: 0;
         background: #fff;
-        color: #13293d;
-        font-family: "Georgia", "Times New Roman", serif;
+        color: #1a1a1a;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
       }
       .wrapper {
-        max-width: 980px;
-        margin: 0 auto;
+        max-width: 100%;
+        padding: 0;
       }
-      .header {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: start;
-        gap: 16px;
-        margin-bottom: 18px;
+
+      /* ── Letterhead ── */
+      .letterhead {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        padding-bottom: 16px;
+        border-bottom: 3px solid #0d79bf;
+        margin-bottom: 20px;
       }
       .logo {
-        max-height: 160px;
+        height: 100px;
         width: auto;
+        max-width: 280px;
         object-fit: contain;
-        display: block;
+        flex-shrink: 0;
       }
-      .office p {
+      .office-info {
+        flex: 1;
+        text-align: right;
+      }
+      .office-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: #0d79bf;
         margin: 0 0 4px 0;
       }
-      .title {
-        margin: 14px 0 4px 0;
-        font-size: 26px;
+      .office-detail {
+        margin: 0;
+        font-size: 12px;
+        color: #444;
+        line-height: 1.6;
       }
-      .subtitle {
-        margin: 0 0 14px 0;
-        color: #45617a;
+
+      /* ── Patient banner ── */
+      .patient-banner {
+        background: #f0f6fb;
+        border: 1px solid #d0dfe9;
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
+      .patient-banner .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #5a7a8f;
+        margin: 0;
+      }
+      .patient-banner .name {
+        font-size: 18px;
+        font-weight: 700;
+        color: #13293d;
+        margin: 2px 0 0 0;
+      }
+      .patient-banner .doc-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #0d79bf;
+      }
+
+      /* ── Encounter card ── */
       .encounter {
-        border: 1px solid #d4e1ed;
-        border-radius: 12px;
-        padding: 12px;
-        margin-bottom: 14px;
+        border: 1px solid #d0dfe9;
+        border-radius: 8px;
+        margin-bottom: 24px;
+        overflow: hidden;
         break-inside: avoid;
       }
-      .encounter h2 {
-        margin: 0 0 2px 0;
-        font-size: 19px;
+      .encounter-header {
+        background: #0d79bf;
+        color: #fff;
+        padding: 10px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
-      .meta {
-        margin: 0 0 10px 0;
-        color: #45617a;
+      .encounter-date {
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .encounter-type {
         font-size: 13px;
+        font-weight: 500;
+        opacity: 0.9;
       }
-      .soap-grid {
-        display: grid;
-        gap: 10px;
+      .encounter-meta {
+        background: #f7fafc;
+        padding: 8px 16px;
+        border-bottom: 1px solid #e2eaf0;
+        font-size: 12px;
+        color: #5a7a8f;
+        display: flex;
+        gap: 24px;
       }
-      .soap-grid article {
-        border: 1px solid #e4edf5;
-        border-radius: 10px;
-        padding: 8px 10px;
+
+      /* ── SOAP sections ── */
+      .soap-section {
+        padding: 12px 16px;
+        border-bottom: 1px solid #eef2f6;
       }
-      .soap-grid h3 {
-        margin: 0 0 4px 0;
-        font-size: 14px;
+      .soap-section:last-child {
+        border-bottom: none;
       }
-      .soap-grid p, .soap-grid div {
-        margin: 0;
-        white-space: normal;
+      .soap-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #0d79bf;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #e8eff5;
+      }
+      .soap-content {
+        font-size: 13px;
+        line-height: 1.65;
+        color: #1a1a1a;
         word-break: break-word;
-        line-height: 1.45;
-        font-size: 14px;
       }
-      .soap-grid span {
-        font-size: inherit;
-        color: inherit;
+      .soap-content p { margin: 0 0 6px 0; }
+      .soap-content b, .soap-content strong { font-weight: 700; }
+      .soap-content span { font-size: inherit; color: inherit; }
+
+      /* ── Footer ── */
+      .print-footer {
+        margin-top: 30px;
+        padding-top: 12px;
+        border-top: 1px solid #d0dfe9;
+        font-size: 10px;
+        color: #8899a6;
+        text-align: center;
       }
+
+      .page-break {
+        break-before: page;
+        height: 0;
+      }
+
       @page {
         size: Letter;
-        margin: 0.55in;
+        margin: 0.6in 0.7in;
+      }
+      @media print {
+        body { padding: 0; }
+        .encounter { break-inside: avoid; }
       }
     </style>
   </head>
   <body>
     <main class="wrapper">
-      <header class="header">
-        <div class="office">
-          <p><strong>${escapeHtml(config.officeName)}</strong></p>
-          <p>${escapeHtml(config.officeAddress)}</p>
-          <p>T. ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` &nbsp; F. ${escapeHtml(config.officeFax)}` : ""}</p>
-          <p>${escapeHtml(config.officeEmail)}</p>
-        </div>
+      <header class="letterhead">
         ${logoMarkup}
+        <div class="office-info">
+          <p class="office-name">${escapeHtml(config.officeName)}</p>
+          <p class="office-detail">
+            ${escapeHtml(config.officeAddress)}<br />
+            T: ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` &nbsp;|&nbsp; F: ${escapeHtml(config.officeFax)}` : ""}<br />
+            ${escapeHtml(config.officeEmail)}
+          </p>
+        </div>
       </header>
-      <h1 class="title">SOAP Notes</h1>
-      <p class="subtitle">Patient: ${escapeHtml(config.patientName)}</p>
+
+      <div class="patient-banner">
+        <div>
+          <p class="label">Patient</p>
+          <p class="name">${escapeHtml(config.patientName)}</p>
+        </div>
+        <div class="doc-title">Clinical SOAP Notes</div>
+      </div>
+
       ${encounterMarkup || "<p>No encounters found for this patient.</p>"}
+
+      <div class="print-footer">
+        ${escapeHtml(config.officeName)} &bull; Confidential Medical Record &bull; Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+      </div>
     </main>
   </body>
 </html>`;
