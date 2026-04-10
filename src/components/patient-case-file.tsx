@@ -637,7 +637,13 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         font-size: 12px;
         line-height: 1.4;
         color: #1a1a1a;
+        white-space: normal;
       }
+      .soap-pages p { margin: 0 0 3px 0; }
+      .soap-pages h1, .soap-pages h2, .soap-pages h3,
+      .soap-pages h4, .soap-pages h5, .soap-pages h6 { margin: 0; }
+      .soap-pages ul, .soap-pages ol { margin: 0; padding-left: 16px; }
+      .soap-pages li { margin: 0; }
       .letterhead {
         display: flex;
         align-items: flex-start;
