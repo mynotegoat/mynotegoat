@@ -26,6 +26,8 @@ import {
 } from "@/lib/macro-templates";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { patients } from "@/lib/mock-data";
+import { uploadFileToStorage } from "@/lib/file-storage";
+import { addFileRecord, saveFileManagerState, loadFileManagerState } from "@/lib/file-manager";
 import {
   appointmentStatusOptions,
   formatAppointmentStatusLabel,
@@ -196,8 +198,13 @@ function escapeHtml(value: string) {
 }
 
 function formatSoapText(text: string) {
-  const safe = escapeHtml(text.trim() || "-");
-  return safe.replace(/\n/g, "<br />");
+  const trimmed = text.trim();
+  if (!trimmed) return "-";
+  // The SOAP sections are stored as HTML from the rich-text editor.
+  // Render the HTML directly for print but strip any interactive elements
+  // (inline-prompt spans, editable macro pills). Keep basic formatting
+  // like <b>, <u>, <br>, <p>, <div>, <span>.
+  return trimmed;
 }
 
 function buildSoapPrintHtml(config: {
@@ -307,12 +314,16 @@ function buildSoapPrintHtml(config: {
         margin: 0 0 4px 0;
         font-size: 14px;
       }
-      .soap-grid p {
+      .soap-grid p, .soap-grid div {
         margin: 0;
         white-space: normal;
         word-break: break-word;
         line-height: 1.45;
         font-size: 14px;
+      }
+      .soap-grid span {
+        font-size: inherit;
+        color: inherit;
       }
       @page {
         size: Letter;
@@ -1317,6 +1328,66 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setMessage("SOAP print view opened in oldest-to-newest order. Use Save as PDF in the print dialog.");
   };
 
+  const [savingToPatientFile, setSavingToPatientFile] = useState(false);
+
+  const handleSaveToPatientFile = async () => {
+    if (!filteredEncounterPatientId || !selectedSoapPrintEncounterIds.length) {
+      setMessage("Select at least one encounter first.");
+      return;
+    }
+    setSavingToPatientFile(true);
+    try {
+      const selectedSet = new Set(selectedSoapPrintEncounterIds);
+      const printableHtml = buildSoapPrintHtml({
+        officeName: officeSettings.officeName,
+        officeAddress: officeSettings.address,
+        officePhone: officeSettings.phone,
+        officeFax: officeSettings.fax,
+        officeEmail: officeSettings.email,
+        logoDataUrl: officeSettings.logoDataUrl,
+        patientName: filteredEncounterPatientName,
+        encounters: filteredEncounterListByOldest
+          .filter((entry) => selectedSet.has(entry.id))
+          .map((entry) => ({
+            id: entry.id,
+            encounterDate: entry.encounterDate,
+            provider: entry.provider,
+            appointmentType: entry.appointmentType,
+            signed: entry.signed,
+            soap: entry.soap,
+          })),
+      });
+
+      const folderId = `SYSTEM-PATIENT-${filteredEncounterPatientId}`;
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const fileName = `SOAP_Notes_${filteredEncounterPatientName.replace(/\s+/g, "_")}_${dateStamp}.html`;
+      const blob = new Blob([printableHtml], { type: "text/html" });
+      const file = new File([blob], fileName, { type: "text/html" });
+
+      const { storagePath, error } = await uploadFileToStorage(folderId, file);
+      if (error || !storagePath) {
+        setMessage(`Failed to save: ${error ?? "unknown error"}`);
+        setSavingToPatientFile(false);
+        return;
+      }
+
+      const currentState = loadFileManagerState();
+      const nextState = addFileRecord(currentState, {
+        folderId,
+        name: fileName,
+        storagePath,
+        mimeType: "text/html",
+        sizeBytes: blob.size,
+      });
+      saveFileManagerState(nextState);
+
+      setMessage(`SOAP notes saved to ${filteredEncounterPatientName}'s patient file.`);
+    } catch (err) {
+      setMessage(`Save failed: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+    setSavingToPatientFile(false);
+  };
+
   const handleEncounterScheduleStatusChange = (nextStatus: AppointmentStatus) => {
     if (!selectedEncounter) {
       return;
@@ -1491,14 +1562,24 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               )}
             </div>
 
-            <button
-              className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
-              disabled={!filteredEncounterListByOldest.length || !selectedSoapPrintEncounterIds.length}
-              onClick={handlePrintSelectedSoapNotes}
-              type="button"
-            >
-              Print Selected SOAP Notes
-            </button>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
+                disabled={!filteredEncounterListByOldest.length || !selectedSoapPrintEncounterIds.length}
+                onClick={handlePrintSelectedSoapNotes}
+                type="button"
+              >
+                Print Selected SOAP Notes
+              </button>
+              <button
+                className="w-full rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-3 py-2 font-semibold text-[var(--brand-primary)] disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                disabled={!filteredEncounterListByOldest.length || !selectedSoapPrintEncounterIds.length || savingToPatientFile}
+                onClick={handleSaveToPatientFile}
+                type="button"
+              >
+                {savingToPatientFile ? "Saving..." : "Save to Patient File"}
+              </button>
+            </div>
           </article>
 
           {filteredEncounterPatientId && patientAppointments.length > 0 && (
