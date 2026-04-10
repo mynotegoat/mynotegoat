@@ -536,7 +536,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       ? `<img alt="Office Logo" src="${safeLogoDataUrl}" class="office-logo" />`
       : "";
   const headerTopMarkup = (logoMarkup || headerHtml.trim())
-    ? `<div class="header-top">${logoMarkup}${headerHtml.trim() ? `<div class="header">${headerHtml}</div>` : ""}</div>`
+    ? `<div class="header-top">${headerHtml.trim() ? `<div class="header">${headerHtml}</div>` : ""}${logoMarkup}</div>`
     : "";
   const headerMarkup = "";
 
@@ -585,7 +585,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .header {
         flex: 1;
-        text-align: right;
+        text-align: left;
         white-space: normal;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
