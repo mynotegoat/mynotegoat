@@ -70,7 +70,7 @@ export default function MigrateCasematePage() {
       const supabase = getSupabaseBrowserClient();
       if (!supabase) return;
       const { data } = await supabase
-        .from("accounts")
+        .from("account_profiles")
         .select("user_id, email")
         .eq("approval_status", "approved")
         .order("email");
