@@ -186,7 +186,7 @@ export function BillingMacroSettingsPanel() {
           Default Units are auto-filled when you add this treatment to Billing. Most services are set to 1.
         </p>
 
-        <div className="mt-3 grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 md:grid-cols-[1.4fr_120px_60px_100px_56px_auto]">
+        <div className="mt-3 grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 md:grid-cols-[1fr_90px_46px_80px_40px_auto]">
           <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-muted)] md:col-span-6">
             Add New Treatment Macro
           </p>
@@ -277,7 +277,7 @@ export function BillingMacroSettingsPanel() {
         </div>
 
         <div className="mt-3 space-y-2">
-          <div className="hidden rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:grid md:grid-cols-[1.4fr_120px_60px_100px_56px_80px_90px]">
+          <div className="hidden rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:grid md:grid-cols-[1fr_90px_46px_80px_40px_60px_70px]">
             <button type="button" className="text-left hover:text-[var(--brand-primary)]" onClick={() => toggleTreatmentSort("name")}>
               Treatment Name {treatmentSortKey === "name" ? (treatmentSortDir === "asc" ? "▲" : "▼") : ""}
             </button>
@@ -295,7 +295,7 @@ export function BillingMacroSettingsPanel() {
           {sortedTreatments.map((entry) => (
             <div
               key={entry.id}
-              className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 md:grid-cols-[1.4fr_120px_60px_100px_56px_80px_90px]"
+              className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 md:grid-cols-[1fr_90px_46px_80px_40px_60px_70px]"
             >
               <label className="grid gap-1">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
