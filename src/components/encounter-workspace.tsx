@@ -1460,11 +1460,49 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           })),
       });
 
+      // Render HTML to PDF via hidden iframe
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;height:1056px;border:0;opacity:0;pointer-events:none;";
+      document.body.appendChild(iframe);
+      const iframeDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
+      if (!iframeDoc) {
+        iframe.remove();
+        setMessage("Could not create PDF renderer.");
+        setSavingToPatientFile(false);
+        return;
+      }
+      iframeDoc.open();
+      iframeDoc.write(printableHtml);
+      iframeDoc.close();
+
+      // Wait for content (including images) to load
+      await new Promise<void>((resolve) => {
+        if (iframeDoc.readyState === "complete") {
+          setTimeout(resolve, 200);
+        } else {
+          iframe.onload = () => setTimeout(resolve, 200);
+        }
+      });
+
+      const html2pdf = (await import("html2pdf.js")).default;
+      const pdfBlob: Blob = await html2pdf()
+        .from(iframeDoc.body)
+        .set({
+          margin: 0,
+          filename: "soap.pdf",
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, width: 816, windowWidth: 816 },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+        })
+        .outputPdf("blob");
+
+      iframe.remove();
+
       const folderId = `SYSTEM-PATIENT-${filteredEncounterPatientId}`;
       const dateStamp = new Date().toISOString().slice(0, 10);
-      const fileName = `SOAP_Notes_${filteredEncounterPatientName.replace(/\s+/g, "_")}_${dateStamp}.html`;
-      const blob = new Blob([printableHtml], { type: "text/html" });
-      const file = new File([blob], fileName, { type: "text/html" });
+      const fileName = `SOAP_Notes_${filteredEncounterPatientName.replace(/\s+/g, "_")}_${dateStamp}.pdf`;
+      const blob = new Blob([pdfBlob], { type: "application/pdf" });
+      const file = new File([blob], fileName, { type: "application/pdf" });
 
       const { storagePath, error } = await uploadFileToStorage(folderId, file);
       if (error || !storagePath) {
@@ -1478,7 +1516,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         folderId,
         name: fileName,
         storagePath,
-        mimeType: "text/html",
+        mimeType: "application/pdf",
         sizeBytes: blob.size,
       });
       saveFileManagerState(nextState);

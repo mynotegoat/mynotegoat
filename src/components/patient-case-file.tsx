@@ -579,7 +579,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .content {
         margin: 0;
-        white-space: normal;
+        white-space: pre-line;
         word-break: break-word;
         font-family: ${safeFontFamily};
         font-size: 14px;
@@ -588,7 +588,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .header {
         flex: 1;
         text-align: left;
-        white-space: normal;
+        white-space: pre-line;
         word-break: break-word;
         font-family: ${safeHeaderFontFamily};
         font-size: 13px;
