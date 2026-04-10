@@ -1152,38 +1152,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     }
   }, []);
 
-  const [savingToFile, setSavingToFile] = useState(false);
-
-  const saveHtmlToPatientFiles = useCallback(
-    async (html: string, fileName: string) => {
-      setSavingToFile(true);
-      try {
-        const blob = new Blob([html], { type: "text/html" });
-        const file = new File([blob], fileName, { type: "text/html" });
-        const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
-        if (!error && storagePath) {
-          setFileManagerState((current) => {
-            const next = addFileRecord(current, {
-              folderId: patientFolderId,
-              name: fileName,
-              storagePath,
-              mimeType: "text/html",
-              sizeBytes: blob.size,
-            });
-            saveFileManagerState(next);
-            return next;
-          });
-          return true;
-        }
-        return false;
-      } catch {
-        return false;
-      } finally {
-        setSavingToFile(false);
-      }
-    },
-    [patientFolderId],
-  );
 
   const availableImagingRegions = useMemo(() => {
     if (!activeRegionModal) {
@@ -2027,15 +1995,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
-    const date = new Date().toISOString().slice(0, 10);
-    const safeName = entry.specialist.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `Specialist-Referral-${safeName}-${date}.html`).then((saved) => {
-      setSpecialistMessage(
-        saved
-          ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
-          : `Generated ${specialistReferralTemplate.name} for ${entry.specialist}. Use Save as PDF in the print dialog.`,
-      );
-    });
+    setSpecialistMessage(`Generated ${specialistReferralTemplate.name} for ${entry.specialist}. Use Save as PDF in the print dialog.`);
   };
 
   const generateImagingRequestPdf = (mode: ImagingMode, entry: ImagingReferral) => {
@@ -2083,14 +2043,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
-    const date = new Date().toISOString().slice(0, 10);
-    void saveHtmlToPatientFiles(printableHtml, `${mode === "xray" ? "XRay" : "MRI"}-Request-${date}.html`).then((saved) => {
-      setMessage(
-        saved
-          ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
-          : `Generated ${imagingRequestTemplate.name} for ${entry.modalityLabel}. Use Save as PDF in the print dialog.`,
-      );
-    });
+    setMessage(`Generated ${imagingRequestTemplate.name} for ${entry.modalityLabel}. Use Save as PDF in the print dialog.`);
   };
 
   const generateLetterPdf = () => {
@@ -2129,15 +2082,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
-    const date = new Date().toISOString().slice(0, 10);
-    const safeName = selectedLetterTemplate.name.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `${safeName}-${date}.html`).then((saved) => {
-      setLetterMessage(
-        saved
-          ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
-          : `Generated ${selectedLetterTemplate.name}. Use Save as PDF in the print dialog.`,
-      );
-    });
+    setLetterMessage(`Generated ${selectedLetterTemplate.name}. Use Save as PDF in the print dialog.`);
   };
 
   const buildNarrativePreview = (
@@ -4911,34 +4856,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     type="button"
                   >
                     Print / Save PDF
-                  </button>
-                  <button
-                    className="rounded-xl border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-4 py-2 font-semibold text-[var(--brand-primary)] disabled:opacity-50"
-                    disabled={savingToFile}
-                    onClick={async () => {
-                      const liveHtml = narrativeEditableRef.current?.innerHTML ?? narrativePreview.bodyHtml;
-                      const printableHtml = buildPrintableDocumentHtml({
-                        title: narrativePreview.title,
-                        headerHtml: "",
-                        bodyHtml: liveHtml,
-                        headerFontFamily: documentTemplates.header.fontFamily,
-                        fontFamily: narrativePreview.fontFamily,
-                        includeLogo: documentTemplates.header.active ? documentTemplates.header.showOfficeLogo : true,
-                        logoDataUrl: officeSettings.logoDataUrl,
-                      });
-                      const date = new Date().toISOString().slice(0, 10);
-                      const safeName = narrativePreview.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-                      const fileName = `${safeName}-${date}.html`;
-                      const saved = await saveHtmlToPatientFiles(printableHtml, fileName);
-                      if (saved) {
-                        setNarrativeMessage(`Saved "${fileName}" to Patient Files.`);
-                      } else {
-                        setNarrativeMessage("Could not save to Patient Files. Check your connection.");
-                      }
-                    }}
-                    type="button"
-                  >
-                    {savingToFile ? "Saving..." : "Save to Patient Files"}
                   </button>
                   <button
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
