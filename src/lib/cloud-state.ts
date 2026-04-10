@@ -603,6 +603,51 @@ async function bootstrapTableBackedEntities() {
       }
     }
   }
+
+  // ── Phase 3: encounter notes ──
+  if (isCloudEntityEnabled("encounterNotes")) {
+    const {
+      fetchAllEncounterNotesFromTable,
+      isEncounterNotesTableReady,
+      bulkUpsertEncounterNotesToTable,
+    } = await import("@/lib/encounter-notes-cloud");
+    const {
+      loadEncounterNoteRecords,
+      replaceEncounterNotesFromCloud,
+    } = await import("@/lib/encounter-notes");
+
+    const notesReady = await isEncounterNotesTableReady();
+    if (!notesReady) {
+      console.warn(
+        "[Cloud Sync] encounterNotes flag is on but table isn't ready. " +
+        "Run supabase/encounter_notes_table.sql in the SQL editor.",
+      );
+    } else {
+      const notesRows = await fetchAllEncounterNotesFromTable();
+      if (notesRows !== null) {
+        const localNotes = loadEncounterNoteRecords();
+        if (notesRows.length === 0 && localNotes.length > 0) {
+          console.info(
+            `[Cloud Sync] Migrating ${localNotes.length} encounter note(s) to table...`,
+          );
+          const result = await bulkUpsertEncounterNotesToTable(localNotes);
+          if (result.ok) {
+            console.info(`[Cloud Sync] Migrated ${result.count} encounter note(s).`);
+          } else {
+            console.error("[Cloud Sync] Encounter notes migration failed:", result.error);
+          }
+        } else if (notesRows.length > 0) {
+          pauseSync();
+          try {
+            replaceEncounterNotesFromCloud(notesRows);
+          } finally {
+            resumeSync();
+          }
+          console.info(`[Cloud Sync] Loaded ${notesRows.length} encounter note(s) from table.`);
+        }
+      }
+    }
+  }
 }
 
 /**

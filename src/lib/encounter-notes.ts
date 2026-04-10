@@ -301,11 +301,50 @@ export function loadEncounterNoteRecords() {
   }
 }
 
+let previousNotesById: Map<string, EncounterNoteRecord> = new Map();
+
 export function saveEncounterNoteRecords(records: EncounterNoteRecord[]) {
   if (typeof window === "undefined") {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  void dualWriteEncounterNotesToCloud(records, previousNotesById);
+  previousNotesById = new Map(records.map((n) => [n.id, n]));
+}
+
+async function dualWriteEncounterNotesToCloud(
+  nextRecords: EncounterNoteRecord[],
+  prevById: Map<string, EncounterNoteRecord>,
+) {
+  try {
+    const [{ isCloudEntityEnabled }, { upsertEncounterNoteToTable, deleteEncounterNoteFromTable }] =
+      await Promise.all([
+        import("@/lib/feature-flags"),
+        import("@/lib/encounter-notes-cloud"),
+      ]);
+    if (!isCloudEntityEnabled("encounterNotes")) return;
+
+    const nextById = new Map(nextRecords.map((n) => [n.id, n]));
+    for (const note of nextRecords) {
+      const prev = prevById.get(note.id);
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(note)) {
+        void upsertEncounterNoteToTable(note);
+      }
+    }
+    for (const prevId of prevById.keys()) {
+      if (!nextById.has(prevId)) {
+        void deleteEncounterNoteFromTable(prevId);
+      }
+    }
+  } catch (error) {
+    console.error("[encounter-notes] dual-write failed:", error);
+  }
+}
+
+export function replaceEncounterNotesFromCloud(records: EncounterNoteRecord[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  previousNotesById = new Map(records.map((n) => [n.id, n]));
 }
 
 export function createEncounterId() {
