@@ -36,7 +36,7 @@ async function verifyAdmin(request: Request) {
   if (!admin) return { error: "Service role key not configured", status: 500 };
 
   const { data: account } = await admin
-    .from("accounts")
+    .from("account_profiles")
     .select("is_admin")
     .eq("user_id", user.id)
     .single();
