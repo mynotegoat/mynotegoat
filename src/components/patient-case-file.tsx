@@ -625,41 +625,109 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         display: block;
       }
 
-      /* ── Attached encounter pages ── */
-      .encounter-page {
+      /* ── Attached SOAP encounter pages (same styling as encounter print) ── */
+      .soap-pages {
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         font-size: 12px;
         line-height: 1.4;
+        color: #1a1a1a;
       }
-      .enc-banner {
+      .letterhead {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
+        gap: 16px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #0d79bf;
+        margin-bottom: 10px;
+      }
+      .logo {
+        height: 70px;
+        width: auto;
+        max-width: 200px;
+        object-fit: contain;
+        flex-shrink: 0;
+        display: block;
+        margin: 0;
+        padding: 0;
+      }
+      .office-info { flex: 1; text-align: right; margin: 0; padding: 0; }
+      .office-name-lh { font-size: 15px; font-weight: 700; color: #0d79bf; margin: 0; padding: 0; line-height: 1.2; }
+      .office-detail { font-size: 11px; color: #444; line-height: 1.5; margin: 0; }
+      .patient-banner {
         background: #f0f6fb;
         border: 1px solid #d0dfe9;
         border-radius: 4px;
         padding: 6px 10px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .patient-banner .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a7a8f; }
+      .patient-banner .name { font-size: 14px; font-weight: 700; color: #13293d; }
+      .patient-banner .doc-title { font-size: 11px; font-weight: 600; color: #0d79bf; }
+      .encounter {
+        border: 1px solid #d0dfe9;
+        border-radius: 4px;
         margin-bottom: 8px;
       }
-      .enc-banner-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a7a8f; }
-      .enc-banner-name { font-size: 14px; font-weight: 700; color: #13293d; }
-      .enc-banner-date { font-size: 13px; font-weight: 700; color: #0d79bf; }
-      .enc-banner-type { font-size: 11px; color: #5a7a8f; }
-      .enc-provider { font-size: 10px; color: #5a7a8f; margin-bottom: 6px; }
-      .enc-soap { border: 1px solid #d0dfe9; border-radius: 4px; }
-      .enc-soap-section { padding: 5px 10px; border-bottom: 1px solid #eef2f6; }
-      .enc-soap-section:last-child { border-bottom: none; }
-      .enc-soap-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #0d79bf; margin-bottom: 2px; }
-      .enc-soap-content { font-size: 12px; line-height: 1.45; color: #1a1a1a; word-break: break-word; white-space: pre-wrap; }
-      .enc-soap-content p { margin: 0 0 3px 0; }
-      .enc-soap-content b, .enc-soap-content strong { font-weight: 700; }
+      .encounter-header {
+        background: #0d79bf;
+        color: #fff;
+        padding: 4px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .encounter-date { font-size: 12px; font-weight: 700; }
+      .encounter-type { font-size: 11px; opacity: 0.9; }
+      .encounter-meta {
+        background: #f7fafc;
+        padding: 3px 10px;
+        border-bottom: 1px solid #e2eaf0;
+        font-size: 10px;
+        color: #5a7a8f;
+        display: flex;
+        gap: 16px;
+      }
+      .soap-section {
+        padding: 4px 10px;
+        border-bottom: 1px solid #eef2f6;
+      }
+      .soap-section:last-child { border-bottom: none; }
+      .soap-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #0d79bf;
+        margin-bottom: 2px;
+      }
+      .soap-content {
+        font-size: 12px;
+        line-height: 1.45;
+        color: #1a1a1a;
+        word-break: break-word;
+      }
+      .soap-content p { margin: 0 0 3px 0; }
+      .soap-content b, .soap-content strong { font-weight: 700; }
+      .soap-content span { font-size: inherit; color: inherit; }
+      .print-footer {
+        margin-top: 14px;
+        padding-top: 6px;
+        border-top: 1px solid #d0dfe9;
+        font-size: 9px;
+        color: #8899a6;
+        text-align: center;
+      }
 
       @page {
         size: Letter;
         margin: 0.55in;
       }
       @media print {
-        .encounter-page { break-inside: auto; }
+        .soap-pages * { break-inside: auto !important; break-before: auto !important; break-after: auto !important; }
+        .encounter { page-break-inside: auto !important; }
       }
     </style>
   </head>
@@ -674,12 +742,18 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
 </html>`;
 }
 
-function buildEncounterPagesHtml(config: {
+/**
+ * Build a full standalone SOAP-notes HTML document — identical styling to the
+ * encounter workspace print. Returns a complete `<!doctype html>…</html>`
+ * string that can be concatenated before the narrative document.
+ */
+function buildSoapPrintHtmlForNarrative(config: {
   officeName: string;
   officeAddress: string;
   officePhone: string;
   officeFax: string;
   officeEmail: string;
+  logoDataUrl: string;
   patientName: string;
   encounters: Array<{
     encounterDate: string;
@@ -696,42 +770,65 @@ function buildEncounterPagesHtml(config: {
     return trimmed || "-";
   };
 
-  return config.encounters
+  const logoMarkup = config.logoDataUrl.trim()
+    ? `<img alt="Office Logo" src="${escapeHtml(config.logoDataUrl)}" class="logo" />`
+    : "";
+
+  const encounterMarkup = config.encounters
     .map(
-      (encounter) => `
-<div class="encounter-page" style="page-break-after: always;">
-  <div class="enc-banner">
-    <div>
-      <div class="enc-banner-label">Patient</div>
-      <div class="enc-banner-name">${escapeHtml(config.patientName)}</div>
-    </div>
-    <div style="text-align:right;">
-      <div class="enc-banner-date">${escapeHtml(encounter.encounterDate)}</div>
-      <div class="enc-banner-type">${escapeHtml(encounter.appointmentType)}${encounter.signed ? " • Signed" : " • Open"}</div>
-    </div>
+      (encounter) => `<section class="encounter">
+  <div class="encounter-header">
+    <div class="encounter-date">${escapeHtml(encounter.encounterDate)}</div>
+    <div class="encounter-type">${escapeHtml(encounter.appointmentType)}</div>
   </div>
-  <div class="enc-provider">Provider: <strong>${escapeHtml(encounter.provider)}</strong></div>
-  <div class="enc-soap">
-    <div class="enc-soap-section">
-      <div class="enc-soap-label">Subjective</div>
-      <div class="enc-soap-content">${formatSoapText(encounter.soap.subjective ?? "")}</div>
-    </div>
-    <div class="enc-soap-section">
-      <div class="enc-soap-label">Objective</div>
-      <div class="enc-soap-content">${formatSoapText(encounter.soap.objective ?? "")}</div>
-    </div>
-    <div class="enc-soap-section">
-      <div class="enc-soap-label">Assessment</div>
-      <div class="enc-soap-content">${formatSoapText(encounter.soap.assessment ?? "")}</div>
-    </div>
-    <div class="enc-soap-section">
-      <div class="enc-soap-label">Plan</div>
-      <div class="enc-soap-content">${formatSoapText(encounter.soap.plan ?? "")}</div>
-    </div>
+  <div class="encounter-meta">
+    <span>Provider: <strong>${escapeHtml(encounter.provider)}</strong></span>
+    <span>Status: <strong>${encounter.signed ? "Signed / Closed" : "Open"}</strong></span>
   </div>
-</div>`,
+  <div class="soap-section">
+    <div class="soap-label">Subjective</div>
+    <div class="soap-content">${formatSoapText(encounter.soap.subjective ?? "")}</div>
+  </div>
+  <div class="soap-section">
+    <div class="soap-label">Objective</div>
+    <div class="soap-content">${formatSoapText(encounter.soap.objective ?? "")}</div>
+  </div>
+  <div class="soap-section">
+    <div class="soap-label">Assessment</div>
+    <div class="soap-content">${formatSoapText(encounter.soap.assessment ?? "")}</div>
+  </div>
+  <div class="soap-section">
+    <div class="soap-label">Plan</div>
+    <div class="soap-content">${formatSoapText(encounter.soap.plan ?? "")}</div>
+  </div>
+</section>`,
     )
     .join("");
+
+  return `<div class="soap-pages" style="page-break-after: always;">
+    <header class="letterhead">
+      ${logoMarkup}
+      <div class="office-info">
+        <p class="office-name-lh">${escapeHtml(config.officeName)}</p>
+        <p class="office-detail">
+          ${escapeHtml(config.officeAddress)}<br />
+          T: ${escapeHtml(config.officePhone)}${config.officeFax.trim() ? ` &nbsp;|&nbsp; F: ${escapeHtml(config.officeFax)}` : ""}<br />
+          ${escapeHtml(config.officeEmail)}
+        </p>
+      </div>
+    </header>
+    <div class="patient-banner">
+      <div>
+        <p class="label">Patient</p>
+        <p class="name">${escapeHtml(config.patientName)}</p>
+      </div>
+      <div class="doc-title">Clinical SOAP Notes</div>
+    </div>
+    ${encounterMarkup}
+    <div class="print-footer">
+      ${escapeHtml(config.officeName)} &bull; Confidential Medical Record
+    </div>
+  </div>`;
 }
 
 function printHtmlWithIframeFallback(printableHtml: string) {
@@ -2367,12 +2464,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           toSortStampFromUsDate(a.encounterDate) - toSortStampFromUsDate(b.encounterDate),
       );
 
-    const encounterPagesHtml = buildEncounterPagesHtml({
+    const encounterPagesHtml = buildSoapPrintHtmlForNarrative({
       officeName: officeSettings.officeName,
       officeAddress: officeSettings.address,
       officePhone: officeSettings.phone,
       officeFax: officeSettings.fax,
       officeEmail: officeSettings.email,
+      logoDataUrl: officeSettings.logoDataUrl,
       patientName: `${firstName} ${lastName}`.trim(),
       encounters: attachedEncounters.map((entry) => ({
         encounterDate: entry.encounterDate,
