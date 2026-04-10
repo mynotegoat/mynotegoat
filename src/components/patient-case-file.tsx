@@ -1066,16 +1066,52 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     async (html: string, fileName: string) => {
       setSavingToFile(true);
       try {
-        const blob = new Blob([html], { type: "text/html" });
-        const file = new File([blob], fileName, { type: "text/html" });
+        // Render HTML to PDF via hidden iframe
+        const iframe = document.createElement("iframe");
+        iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:816px;height:1056px;border:0;opacity:0;pointer-events:none;";
+        document.body.appendChild(iframe);
+        const iframeDoc = iframe.contentDocument ?? iframe.contentWindow?.document;
+        if (!iframeDoc) {
+          iframe.remove();
+          return false;
+        }
+        iframeDoc.open();
+        iframeDoc.write(html);
+        iframeDoc.close();
+
+        await new Promise<void>((resolve) => {
+          if (iframeDoc.readyState === "complete") {
+            setTimeout(resolve, 200);
+          } else {
+            iframe.onload = () => setTimeout(resolve, 200);
+          }
+        });
+
+        const html2pdf = (await import("html2pdf.js")).default;
+        const pdfBlob: Blob = await html2pdf()
+          .from(iframeDoc.body)
+          .set({
+            margin: 0,
+            filename: "doc.pdf",
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, width: 816, windowWidth: 816 },
+            jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+          })
+          .outputPdf("blob");
+
+        iframe.remove();
+
+        const pdfFileName = fileName.replace(/\.html$/i, ".pdf");
+        const blob = new Blob([pdfBlob], { type: "application/pdf" });
+        const file = new File([blob], pdfFileName, { type: "application/pdf" });
         const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
         if (!error && storagePath) {
           setFileManagerState((current) => {
             const next = addFileRecord(current, {
               folderId: patientFolderId,
-              name: fileName,
+              name: pdfFileName,
               storagePath,
-              mimeType: "text/html",
+              mimeType: "application/pdf",
               sizeBytes: blob.size,
             });
             saveFileManagerState(next);
@@ -1937,7 +1973,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     const date = new Date().toISOString().slice(0, 10);
     const safeName = entry.specialist.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `Specialist-Referral-${safeName}-${date}.html`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `Specialist-Referral-${safeName}-${date}.pdf`).then((saved) => {
       setSpecialistMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -1992,7 +2028,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     }
 
     const date = new Date().toISOString().slice(0, 10);
-    void saveHtmlToPatientFiles(printableHtml, `${mode === "xray" ? "XRay" : "MRI"}-Request-${date}.html`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `${mode === "xray" ? "XRay" : "MRI"}-Request-${date}.pdf`).then((saved) => {
       setMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -2039,7 +2075,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
     const date = new Date().toISOString().slice(0, 10);
     const safeName = selectedLetterTemplate.name.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-    void saveHtmlToPatientFiles(printableHtml, `${safeName}-${date}.html`).then((saved) => {
+    void saveHtmlToPatientFiles(printableHtml, `${safeName}-${date}.pdf`).then((saved) => {
       setLetterMessage(
         saved
           ? `Generated & saved to Patient Files. Use Save as PDF in the print dialog.`
@@ -4776,7 +4812,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       });
                       const date = new Date().toISOString().slice(0, 10);
                       const safeName = narrativePreview.title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
-                      const fileName = `${safeName}-${date}.html`;
+                      const fileName = `${safeName}-${date}.pdf`;
                       const saved = await saveHtmlToPatientFiles(printableHtml, fileName);
                       if (saved) {
                         setNarrativeMessage(`Saved "${fileName}" to Patient Files.`);
