@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useCaseStatuses } from "@/hooks/use-case-statuses";
-import {
-  caseTimelineMetrics,
-  charges,
-  patients,
-} from "@/lib/mock-data";
+import { patients } from "@/lib/mock-data";
 
 const monthOrder = [
   "January",
@@ -45,6 +41,19 @@ function extractSpecialistLabel(value: string) {
   }
   const withoutLeadingDate = trimmed.replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s*/, "").trim();
   return withoutLeadingDate || trimmed;
+}
+
+function parseDollar(value: string | undefined): number {
+  if (!value) return 0;
+  const cleaned = value.replace(/[^0-9.\-]/g, "");
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function parseDaysFromMatrix(value: string | undefined): number | null {
+  if (!value) return null;
+  const num = parseFloat(value);
+  return Number.isFinite(num) ? num : null;
 }
 
 function formatMoney(value: number) {
@@ -147,46 +156,31 @@ export default function StatisticsPage() {
     });
   }, [attorney, search, status, year]);
 
-  const filteredNames = useMemo(
-    () => new Set(filteredPatients.map((patient) => patient.fullName)),
-    [filteredPatients],
-  );
-  const filteredPatientIds = useMemo(
-    () => new Set(filteredPatients.map((patient) => patient.id)),
-    [filteredPatients],
-  );
-  const filteredPatientByName = useMemo(
-    () => new Map(filteredPatients.map((patient) => [patient.fullName, patient] as const)),
-    [filteredPatients],
-  );
+  // Billing data from patient matrix (Additional Details → $ Billed, $ Paid Amount)
+  const billingData = useMemo(() => {
+    let billedTotal = 0;
+    let paidTotal = 0;
+    let billedPaidCases = 0;
+    let paidPaidCases = 0;
 
-  const filteredCharges = useMemo(
-    () => charges.filter((charge) => filteredNames.has(charge.patientName)),
-    [filteredNames],
-  );
+    filteredPatients.forEach((patient) => {
+      const billed = parseDollar(patient.matrix?.billed);
+      const paid = parseDollar(patient.matrix?.paidAmount);
+      billedTotal += billed;
+      paidTotal += paid;
 
-  const filteredTimelineMetrics = useMemo(
-    () => caseTimelineMetrics.filter((record) => filteredPatientIds.has(record.patientId)),
-    [filteredPatientIds],
-  );
+      if (paid > 0 || patient.caseStatus === "Paid") {
+        billedPaidCases += billed;
+        paidPaidCases += paid;
+      }
+    });
 
-  const billedTotal = filteredCharges.reduce((sum, entry) => sum + entry.billed, 0);
-  const paidTotal = filteredCharges.reduce((sum, entry) => sum + entry.paid, 0);
+    const paidRate = billedPaidCases === 0 ? 0 : (paidPaidCases / billedPaidCases) * 100;
+    const avgBilled = filteredPatients.length ? billedTotal / filteredPatients.length : 0;
+    const avgPaid = filteredPatients.length ? paidTotal / filteredPatients.length : 0;
 
-  const paidCaseCharges = useMemo(
-    () =>
-      filteredCharges.filter((charge) => {
-        const patient = filteredPatientByName.get(charge.patientName);
-        return charge.paid > 0 || patient?.caseStatus === "Paid";
-      }),
-    [filteredCharges, filteredPatientByName],
-  );
-
-  const billedTotalPaidCases = paidCaseCharges.reduce((sum, entry) => sum + entry.billed, 0);
-  const paidTotalPaidCases = paidCaseCharges.reduce((sum, entry) => sum + entry.paid, 0);
-  const paidRate = billedTotalPaidCases === 0 ? 0 : (paidTotalPaidCases / billedTotalPaidCases) * 100;
-  const avgBilled = filteredPatients.length ? billedTotal / filteredPatients.length : 0;
-  const avgPaid = filteredPatients.length ? paidTotal / filteredPatients.length : 0;
+    return { billedTotal, paidTotal, paidRate, avgBilled, avgPaid };
+  }, [filteredPatients]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -220,23 +214,27 @@ export default function StatisticsPage() {
   const monthsWithCases = monthCounts.filter((entry) => entry.count > 0).length;
   const averageCasesPerMonth = monthsWithCases > 0 ? totalCasesAcrossMonths / monthsWithCases : 0;
 
+  // Cycle time averages from patient matrix (Additional Details)
   const timelineAverages = useMemo(() => {
-    const initialToDischargeValues = filteredTimelineMetrics
-      .map((metric) => metric.initialToDischargeDays)
-      .filter((value): value is number => typeof value === "number");
-    const dischargeToRbValues = filteredTimelineMetrics
-      .map((metric) => metric.dischargeToRbDays)
-      .filter((value): value is number => typeof value === "number");
-    const rbToPaidValues = filteredTimelineMetrics
-      .map((metric) => metric.rbToPaidDays)
-      .filter((value): value is number => typeof value === "number");
+    const initialToDischargeValues: number[] = [];
+    const dischargeToRbValues: number[] = [];
+    const rbToPaidValues: number[] = [];
+
+    filteredPatients.forEach((patient) => {
+      const itd = parseDaysFromMatrix(patient.matrix?.initialToDischarge);
+      const dtr = parseDaysFromMatrix(patient.matrix?.dischargeToRb);
+      const rtp = parseDaysFromMatrix(patient.matrix?.rbToPaid);
+      if (itd !== null) initialToDischargeValues.push(itd);
+      if (dtr !== null) dischargeToRbValues.push(dtr);
+      if (rtp !== null) rbToPaidValues.push(rtp);
+    });
 
     return {
       initialToDischarge: average(initialToDischargeValues),
       dischargeToRb: average(dischargeToRbValues),
       rbToPaid: average(rbToPaidValues),
     };
-  }, [filteredTimelineMetrics]);
+  }, [filteredPatients]);
 
   const imagingFacilityStats = useMemo(() => {
     type FacilityRow = { facility: string; xray: number; mri: number; total: number; casePatientIds: Set<string> };
@@ -333,18 +331,6 @@ export default function StatisticsPage() {
   }, [filteredPatients]);
 
   const attorneyStats = useMemo(() => {
-    const chargeByPatient = new Map<string, { billed: number; paid: number }>();
-    filteredCharges.forEach((charge) => {
-      const current = chargeByPatient.get(charge.patientName) ?? { billed: 0, paid: 0 };
-      current.billed += charge.billed;
-      current.paid += charge.paid;
-      chargeByPatient.set(charge.patientName, current);
-    });
-
-    const timelineByPatientId = new Map(
-      filteredTimelineMetrics.map((metric) => [metric.patientId, metric] as const),
-    );
-
     const grouped: Record<
       string,
       {
@@ -391,19 +377,15 @@ export default function StatisticsPage() {
       row.dropped += patient.caseStatus === "Dropped" ? 1 : 0;
       row.paid += patient.caseStatus === "Paid" ? 1 : 0;
 
-      const chargeTotals = chargeByPatient.get(patient.fullName);
-      if (chargeTotals) {
-        row.billed += chargeTotals.billed;
-        row.collected += chargeTotals.paid;
-      }
+      // Billing from patient matrix
+      row.billed += parseDollar(patient.matrix?.billed);
+      row.collected += parseDollar(patient.matrix?.paidAmount);
 
-      const timeline = timelineByPatientId.get(patient.id);
-      if (timeline?.dischargeToRbDays) {
-        row.timeToRbValues.push(timeline.dischargeToRbDays);
-      }
-      if (timeline?.rbToPaidDays) {
-        row.timeToPaidValues.push(timeline.rbToPaidDays);
-      }
+      // Timeline from patient matrix
+      const dtr = parseDaysFromMatrix(patient.matrix?.dischargeToRb);
+      const rtp = parseDaysFromMatrix(patient.matrix?.rbToPaid);
+      if (dtr !== null) row.timeToRbValues.push(dtr);
+      if (rtp !== null) row.timeToPaidValues.push(rtp);
     });
 
     return Object.values(grouped)
@@ -419,7 +401,7 @@ export default function StatisticsPage() {
         };
       })
       .sort((a, b) => b.received - a.received);
-  }, [filteredCharges, filteredPatients, filteredTimelineMetrics]);
+  }, [filteredPatients]);
 
   return (
     <div className="space-y-5">
@@ -519,15 +501,15 @@ export default function StatisticsPage() {
             <div className="mt-4 space-y-2 text-sm">
               <p className="flex items-center justify-between">
                 <span className="text-[var(--text-muted)]">Billed</span>
-                <span className="font-bold">{formatMoney(billedTotal)}</span>
+                <span className="font-bold">{formatMoney(billingData.billedTotal)}</span>
               </p>
               <p className="flex items-center justify-between">
                 <span className="text-[var(--text-muted)]">Collected</span>
-                <span className="font-bold">{formatMoney(paidTotal)}</span>
+                <span className="font-bold">{formatMoney(billingData.paidTotal)}</span>
               </p>
               <p className="flex items-center justify-between">
                 <span className="text-[var(--text-muted)]">% Paid (Paid Cases)</span>
-                <span className="font-bold">{paidRate.toFixed(1)}%</span>
+                <span className="font-bold">{billingData.paidRate.toFixed(1)}%</span>
               </p>
               <p className="text-xs text-[var(--text-muted)]">
                 Uses only cases with payments or Paid status for percentage.
@@ -535,11 +517,11 @@ export default function StatisticsPage() {
               <div className="my-2 border-t border-[var(--line-soft)]" />
               <p className="flex items-center justify-between">
                 <span className="text-[var(--text-muted)]">Avg/Billed</span>
-                <span className="font-bold">{formatMoney(avgBilled)}</span>
+                <span className="font-bold">{formatMoney(billingData.avgBilled)}</span>
               </p>
               <p className="flex items-center justify-between">
                 <span className="text-[var(--text-muted)]">Avg/Paid</span>
-                <span className="font-bold">{formatMoney(avgPaid)}</span>
+                <span className="font-bold">{formatMoney(billingData.avgPaid)}</span>
               </p>
             </div>
           </article>

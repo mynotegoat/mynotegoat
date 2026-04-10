@@ -615,10 +615,14 @@ export interface MappedPatient {
   matrix: Record<string, string>;
   related_cases: { patientId: string; fullName: string; dateOfLoss: string }[] | null;
   specialist_referrals: {
-    specialistName: string;
-    sent: string;
-    scheduled: string;
-    reportReceived: boolean;
+    id: string;
+    specialist: string;
+    sentDate: string;
+    scheduledDate: string;
+    completedDate: string;
+    reportReceivedDate: string;
+    reportReviewedDate: string;
+    recommendations: string;
   }[] | null;
   alerts: string[] | null;
   notes: string;
@@ -921,11 +925,15 @@ export function buildMigrationPayload(
     // Specialist referrals
     let specialistReferrals: MappedPatient["specialist_referrals"] = null;
     if (specs.length > 0) {
-      specialistReferrals = specs.map((s) => ({
-        specialistName: specialistMap.get(s.specialist_id) ?? `Specialist #${s.specialist_id}`,
-        sent: formatDate(s.specialist_sent),
-        scheduled: formatDate(s.specialist_scheduled),
-        reportReceived: s.report_received === "Y",
+      specialistReferrals = specs.map((s, idx) => ({
+        id: `cm-spec-${p.patient_id}-${idx}`,
+        specialist: specialistMap.get(s.specialist_id) ?? `Specialist #${s.specialist_id}`,
+        sentDate: formatDate(s.specialist_sent),
+        scheduledDate: formatDate(s.specialist_scheduled),
+        completedDate: "",
+        reportReceivedDate: s.report_received === "Y" ? formatDate(s.specialist_scheduled) : "",
+        reportReviewedDate: "",
+        recommendations: "",
       }));
     }
 
