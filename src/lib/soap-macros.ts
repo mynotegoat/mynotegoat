@@ -103,4 +103,5 @@ export function saveSoapMacros(config: SoapMacroConfig) {
   }
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "macros", config));
 }

@@ -70,6 +70,7 @@ export function saveContactCategories(categories: string[]) {
   }
   const normalized = normalizeCategoryList(categories);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "contacts", categories));
 }
 
 export function sanitizeContactCategory(category: string) {

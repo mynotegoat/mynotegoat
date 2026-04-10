@@ -256,4 +256,5 @@ export function saveDashboardWorkspaceSettings(settings: DashboardWorkspaceSetti
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeDashboardWorkspaceSettings(settings)));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", settings));
 }

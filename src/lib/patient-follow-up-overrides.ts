@@ -120,4 +120,5 @@ export function savePatientFollowUpOverridesMap(value: PatientFollowUpOverrideMa
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "billing", value));
 }

@@ -213,6 +213,7 @@ export function saveCaseStatusSettings(settings: CaseStatusSettings) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeCaseStatusSettings(settings)));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", settings));
 }
 
 export function loadCaseStatuses(): CaseStatusConfig[] {

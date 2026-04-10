@@ -160,4 +160,5 @@ export function savePriorityCaseRules(rules: PriorityCaseRules) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rules));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", rules));
 }

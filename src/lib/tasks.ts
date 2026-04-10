@@ -131,6 +131,7 @@ export function saveTasks(rows: TaskRecord[]) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", rows));
 }
 
 export function formatUsDateFromIso(value: string) {

@@ -68,4 +68,5 @@ export function loadEmailSettings(): EmailSettings {
 export function saveEmailSettings(settings: EmailSettings) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", settings));
 }

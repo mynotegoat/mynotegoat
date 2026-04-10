@@ -122,4 +122,5 @@ export function saveQuickStatsSettings(settings: QuickStatsSettings) {
     STORAGE_KEY,
     JSON.stringify(normalizeQuickStatsSettings(settings)),
   );
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", settings));
 }

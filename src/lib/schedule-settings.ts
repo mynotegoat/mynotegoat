@@ -159,6 +159,7 @@ export function saveScheduleSettings(settings: ScheduleSettingsConfig) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "schedulingSettings", settings));
 }
 
 function getDayOfWeek(dateIso: string) {

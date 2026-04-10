@@ -116,5 +116,6 @@ export function saveScheduleRooms(config: ScheduleRoomsConfig) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeScheduleRooms(config)));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "schedulingSettings", config));
 }
 

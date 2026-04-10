@@ -149,6 +149,7 @@ export function saveAppointmentTypes(types: AppointmentTypeConfig[]) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ensureSingleDefault(types)));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "schedulingSettings", types));
 }
 
 export function formatDurationMinutes(durationMin: number) {

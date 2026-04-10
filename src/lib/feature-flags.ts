@@ -25,15 +25,15 @@ export const cloudEntityFlags: Record<CloudEntityFlag, boolean> = {
   /** Phase 3: encounter notes. */
   encounterNotes: true,
   /** Phase 4: patient billing, diagnoses, follow-up overrides. */
-  billing: false,
+  billing: true,
   /** Phase 5: macros + templates. */
-  macros: false,
+  macros: true,
   /** Phase 6: scheduling settings. */
-  schedulingSettings: false,
+  schedulingSettings: true,
   /** Phase 7: contacts. */
-  contacts: false,
+  contacts: true,
   /** Phase 8: tasks, dashboard, settings. */
-  tasks: false,
+  tasks: true,
 };
 
 export type CloudEntityFlag =

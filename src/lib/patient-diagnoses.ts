@@ -64,5 +64,6 @@ export function savePatientDiagnosesMap(value: PatientDiagnosisMap) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "billing", value));
 }
 

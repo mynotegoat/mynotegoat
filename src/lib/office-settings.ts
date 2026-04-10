@@ -86,4 +86,5 @@ export function saveOfficeSettings(settings: OfficeSettings) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "tasks", settings));
 }

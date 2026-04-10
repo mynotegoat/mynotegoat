@@ -80,6 +80,7 @@ export function saveContactDirectory(contacts: ContactRecord[]) {
     return;
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "contacts", contacts));
 }
 
 export function createContactId() {

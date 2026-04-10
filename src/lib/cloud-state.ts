@@ -604,6 +604,118 @@ async function bootstrapTableBackedEntities() {
     }
   }
 
+  // ── Phases 4-8: workspace_kv for all remaining entities ──
+  const anyKvFlagOn =
+    isCloudEntityEnabled("billing") ||
+    isCloudEntityEnabled("macros") ||
+    isCloudEntityEnabled("schedulingSettings") ||
+    isCloudEntityEnabled("contacts") ||
+    isCloudEntityEnabled("tasks");
+
+  if (anyKvFlagOn) {
+    const { isKvTableReady, fetchAllKvValues, bulkUpsertKvValues } =
+      await import("@/lib/kv-cloud");
+
+    const kvReady = await isKvTableReady();
+    if (!kvReady) {
+      console.warn(
+        "[Cloud Sync] KV flags are on but workspace_kv table isn't ready. " +
+        "Run supabase/workspace_kv_table.sql in the SQL editor.",
+      );
+    } else {
+      // All KV storage keys that should be migrated, grouped by flag.
+      const kvKeysByFlag: Record<string, string[]> = {
+        billing: [
+          "casemate.patient-billing.v1",
+          "casemate.patient-diagnoses.v1",
+          "casemate.patient-follow-up-overrides.v1",
+        ],
+        macros: [
+          "casemate.soap-macros.v1",
+          "casemate.macro-library.v1",
+          "casemate.report-templates.v1",
+          "casemate.document-templates.v1",
+          "casemate.billing-macros.v1",
+        ],
+        schedulingSettings: [
+          "casemate.schedule-settings.v1",
+          "casemate.schedule-rooms.v1",
+          "casemate.schedule-appointment-types.v1",
+        ],
+        contacts: [
+          "casemate.contact-directory.v1",
+          "casemate.contact-categories.v1",
+        ],
+        tasks: [
+          "casemate.tasks.v1",
+          "casemate.dashboard-workspace-settings.v1",
+          "casemate.quick-stats-settings.v1",
+          "casemate.office-settings.v1",
+          "casemate.email-settings.v1",
+          "casemate.case-statuses.v1",
+          "casemate.key-dates.v1",
+          "casemate.dashboard-priority-rules.v1",
+        ],
+      };
+
+      // Collect all enabled keys.
+      const enabledKeys: string[] = [];
+      for (const [flag, keys] of Object.entries(kvKeysByFlag)) {
+        if (isCloudEntityEnabled(flag as import("@/lib/feature-flags").CloudEntityFlag)) {
+          enabledKeys.push(...keys);
+        }
+      }
+
+      // Fetch all kv values in one query.
+      const remoteKv = await fetchAllKvValues();
+      if (remoteKv !== null) {
+        if (remoteKv.size === 0) {
+          // First-run migration: push all enabled localStorage keys to the table.
+          const entries: Array<{ key: string; value: unknown }> = [];
+          for (const key of enabledKeys) {
+            const raw = window.localStorage.getItem(key);
+            if (raw) {
+              try {
+                entries.push({ key, value: JSON.parse(raw) });
+              } catch {
+                // skip unparseable
+              }
+            }
+          }
+          if (entries.length > 0) {
+            console.info(
+              `[Cloud Sync] Migrating ${entries.length} kv key(s) to workspace_kv table...`,
+            );
+            const result = await bulkUpsertKvValues(entries);
+            if (result.ok) {
+              console.info(`[Cloud Sync] Migrated ${result.count} kv key(s).`);
+            } else {
+              console.error("[Cloud Sync] KV migration failed:", result.error);
+            }
+          }
+        } else {
+          // Table has data — replace localStorage from the table for enabled keys.
+          let replacedCount = 0;
+          pauseSync();
+          try {
+            for (const key of enabledKeys) {
+              const value = remoteKv.get(key);
+              if (value !== undefined) {
+                window.localStorage.setItem(key, JSON.stringify(value));
+                replacedCount += 1;
+              }
+            }
+          } finally {
+            resumeSync();
+          }
+          if (replacedCount > 0) {
+            console.info(`[Cloud Sync] Loaded ${replacedCount} kv key(s) from workspace_kv table.`);
+          }
+        }
+      }
+    }
+  }
+
   // ── Phase 3: encounter notes ──
   if (isCloudEntityEnabled("encounterNotes")) {
     const {
