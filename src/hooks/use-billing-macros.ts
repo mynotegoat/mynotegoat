@@ -56,6 +56,7 @@ export function useBillingMacros() {
               id: createId("tx"),
               name,
               procedureCode,
+              modifier: (draft.modifier ?? "").trim().toUpperCase(),
               unitPrice: Math.max(0, draft.unitPrice),
               defaultUnits: Math.max(1, Math.round(draft.defaultUnits)),
               active: true,
@@ -83,6 +84,8 @@ export function useBillingMacros() {
             name: patch.name === undefined ? entry.name : patch.name.trim(),
             procedureCode:
               patch.procedureCode === undefined ? entry.procedureCode : patch.procedureCode.trim().toUpperCase(),
+            modifier:
+              patch.modifier === undefined ? (entry.modifier ?? "") : patch.modifier.trim().toUpperCase(),
             unitPrice: patch.unitPrice === undefined ? entry.unitPrice : Math.max(0, patch.unitPrice),
             defaultUnits:
               patch.defaultUnits === undefined ? entry.defaultUnits : Math.max(1, Math.round(patch.defaultUnits)),

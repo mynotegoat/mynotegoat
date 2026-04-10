@@ -2,6 +2,7 @@ export interface TreatmentMacro {
   id: string;
   name: string;
   procedureCode: string;
+  modifier: string;
   unitPrice: number;
   defaultUnits: number;
   active: boolean;
@@ -126,6 +127,7 @@ function createTreatment(
     id,
     name,
     procedureCode,
+    modifier: "",
     unitPrice,
     defaultUnits,
     active: true,
@@ -344,6 +346,7 @@ function normalizeTreatment(value: unknown): TreatmentMacro | null {
     id,
     name,
     procedureCode,
+    modifier: normalizeString(row.modifier),
     unitPrice: normalizeNumber(row.unitPrice, 0),
     defaultUnits: Math.max(1, Math.round(normalizeNumber(row.defaultUnits, 1))),
     active: row.active !== false,

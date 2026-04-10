@@ -284,16 +284,16 @@ function buildSoapPrintHtml(config: {
       /* ── Letterhead ── */
       .letterhead {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 24px;
         padding-bottom: 16px;
         border-bottom: 3px solid #0d79bf;
         margin-bottom: 20px;
       }
       .logo {
-        height: 100px;
+        height: 120px;
         width: auto;
-        max-width: 280px;
+        max-width: 320px;
         object-fit: contain;
         flex-shrink: 0;
       }

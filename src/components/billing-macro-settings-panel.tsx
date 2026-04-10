@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { GENERAL_DIAGNOSIS_FOLDER_ID } from "@/lib/billing-macros";
+
+type TreatmentSortKey = "name" | "procedureCode" | "unitPrice";
+type SortDir = "asc" | "desc";
 
 export function BillingMacroSettingsPanel() {
   const {
@@ -26,9 +29,36 @@ export function BillingMacroSettingsPanel() {
   const [treatmentDraft, setTreatmentDraft] = useState({
     name: "",
     procedureCode: "",
+    modifier: "",
     unitPrice: 0,
     defaultUnits: 1,
   });
+  const [treatmentSortKey, setTreatmentSortKey] = useState<TreatmentSortKey | null>(null);
+  const [treatmentSortDir, setTreatmentSortDir] = useState<SortDir>("asc");
+
+  const toggleTreatmentSort = useCallback((key: TreatmentSortKey) => {
+    setTreatmentSortKey((prev) => {
+      if (prev === key) {
+        setTreatmentSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return key;
+      }
+      setTreatmentSortDir("asc");
+      return key;
+    });
+  }, []);
+
+  const sortedTreatments = useMemo(() => {
+    if (!treatmentSortKey) return billingMacros.treatments;
+    return [...billingMacros.treatments].sort((a, b) => {
+      let cmp = 0;
+      if (treatmentSortKey === "unitPrice") {
+        cmp = a.unitPrice - b.unitPrice;
+      } else {
+        cmp = a[treatmentSortKey].localeCompare(b[treatmentSortKey]);
+      }
+      return treatmentSortDir === "desc" ? -cmp : cmp;
+    });
+  }, [billingMacros.treatments, treatmentSortKey, treatmentSortDir]);
   const [diagnosisDraft, setDiagnosisDraft] = useState({
     code: "",
     description: "",
@@ -78,6 +108,7 @@ export function BillingMacroSettingsPanel() {
     setTreatmentDraft({
       name: "",
       procedureCode: "",
+      modifier: "",
       unitPrice: 0,
       defaultUnits: 1,
     });
@@ -155,8 +186,8 @@ export function BillingMacroSettingsPanel() {
           Default Units are auto-filled when you add this treatment to Billing. Most services are set to 1.
         </p>
 
-        <div className="mt-3 grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 md:grid-cols-[1.4fr_140px_120px_120px_auto]">
-          <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-muted)] md:col-span-5">
+        <div className="mt-3 grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3 md:grid-cols-[1.4fr_120px_60px_100px_56px_auto]">
+          <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-muted)] md:col-span-6">
             Add New Treatment Macro
           </p>
           <label className="grid gap-1">
@@ -181,8 +212,23 @@ export function BillingMacroSettingsPanel() {
               onChange={(event) =>
                 setTreatmentDraft((current) => ({ ...current, procedureCode: event.target.value }))
               }
-              placeholder="CPT / Code"
+              placeholder="CPT"
               value={treatmentDraft.procedureCode}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+              Mod
+            </span>
+            <input
+              aria-label="Modifier"
+              className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-2 text-center"
+              maxLength={2}
+              onChange={(event) =>
+                setTreatmentDraft((current) => ({ ...current, modifier: event.target.value }))
+              }
+              placeholder="--"
+              value={treatmentDraft.modifier}
             />
           </label>
           <label className="grid gap-1">
@@ -196,7 +242,7 @@ export function BillingMacroSettingsPanel() {
               onChange={(event) =>
                 setTreatmentDraft((current) => ({ ...current, unitPrice: Number(event.target.value) || 0 }))
               }
-              placeholder="Price ($)"
+              placeholder="$"
               step="0.01"
               type="number"
               value={treatmentDraft.unitPrice}
@@ -204,16 +250,17 @@ export function BillingMacroSettingsPanel() {
           </label>
           <label className="grid gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
-              Default Units
+              Units
             </span>
             <input
               aria-label="Default Units"
-              className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2"
+              className="rounded-lg border border-[var(--line-soft)] bg-white px-1 py-2 text-center"
               min={1}
+              max={9}
               onChange={(event) =>
                 setTreatmentDraft((current) => ({ ...current, defaultUnits: Number(event.target.value) || 1 }))
               }
-              placeholder="Default units"
+              placeholder="1"
               type="number"
               value={treatmentDraft.defaultUnits}
             />
@@ -230,18 +277,25 @@ export function BillingMacroSettingsPanel() {
         </div>
 
         <div className="mt-3 space-y-2">
-          <div className="hidden rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:grid md:grid-cols-[1.4fr_140px_120px_120px_80px_90px]">
-            <span>Treatment Name</span>
-            <span>CPT / Code</span>
-            <span>Price ($)</span>
-            <span>Default Units</span>
+          <div className="hidden rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:grid md:grid-cols-[1.4fr_120px_60px_100px_56px_80px_90px]">
+            <button type="button" className="text-left hover:text-[var(--brand-primary)]" onClick={() => toggleTreatmentSort("name")}>
+              Treatment Name {treatmentSortKey === "name" ? (treatmentSortDir === "asc" ? "▲" : "▼") : ""}
+            </button>
+            <button type="button" className="text-left hover:text-[var(--brand-primary)]" onClick={() => toggleTreatmentSort("procedureCode")}>
+              CPT Code {treatmentSortKey === "procedureCode" ? (treatmentSortDir === "asc" ? "▲" : "▼") : ""}
+            </button>
+            <span>Mod</span>
+            <button type="button" className="text-left hover:text-[var(--brand-primary)]" onClick={() => toggleTreatmentSort("unitPrice")}>
+              Price ($) {treatmentSortKey === "unitPrice" ? (treatmentSortDir === "asc" ? "▲" : "▼") : ""}
+            </button>
+            <span>Units</span>
             <span>Status</span>
             <span>Action</span>
           </div>
-          {billingMacros.treatments.map((entry) => (
+          {sortedTreatments.map((entry) => (
             <div
               key={entry.id}
-              className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 md:grid-cols-[1.4fr_140px_120px_120px_80px_90px]"
+              className="grid gap-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 md:grid-cols-[1.4fr_120px_60px_100px_56px_80px_90px]"
             >
               <label className="grid gap-1">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
@@ -267,6 +321,18 @@ export function BillingMacroSettingsPanel() {
               </label>
               <label className="grid gap-1">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
+                  Modifier
+                </span>
+                <input
+                  aria-label="Modifier"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-1 py-1 text-center"
+                  maxLength={2}
+                  onChange={(event) => updateTreatment(entry.id, { modifier: event.target.value })}
+                  value={entry.modifier ?? ""}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
                   Price ($)
                 </span>
                 <input
@@ -281,12 +347,13 @@ export function BillingMacroSettingsPanel() {
               </label>
               <label className="grid gap-1">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)] md:hidden">
-                  Default Units
+                  Units
                 </span>
                 <input
                   aria-label="Default Units"
-                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1"
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-1 py-1 text-center"
                   min={1}
+                  max={9}
                   onChange={(event) => updateTreatment(entry.id, { defaultUnits: Number(event.target.value) || 1 })}
                   type="number"
                   value={entry.defaultUnits}
