@@ -585,6 +585,22 @@ function toTitleCase(s: string): string {
     .join(" ");
 }
 
+export interface ImagingReferralData {
+  id: string;
+  sentDate: string;
+  center: string;
+  isCt?: boolean;
+  regions: string[];
+  lateralityByRegion: Record<string, string>;
+  flexExtRegions: string[];
+  scheduledDate: string;
+  doneDate: string;
+  reportReceivedDate: string;
+  reportReviewedDate: string;
+  findings: string;
+  modalityLabel: "X-Ray" | "MRI" | "CT";
+}
+
 export interface MappedPatient {
   id: string;
   full_name: string;
@@ -609,8 +625,8 @@ export interface MappedPatient {
   sex: null;
   marital_status: null;
   address: null;
-  xray_referrals: null;
-  mri_referrals: null;
+  xray_referrals: ImagingReferralData[] | null;
+  mri_referrals: ImagingReferralData[] | null;
 }
 
 export interface MappedContact {
@@ -656,6 +672,64 @@ export function getChiroPreviews(data: CasemateData): ChiroMigrationPreview[] {
         contactCount,
       };
     });
+}
+
+function buildXrayReferral(
+  p: RawPatient,
+  facilityName: string
+): ImagingReferralData[] | null {
+  // Only create a referral if there's any X-ray data
+  const hasSent = p.xray_sent === "Y" || !isEmptyDate(p.xray_sent_date);
+  const hasDone = !isEmptyDate(p.xray_done);
+  const hasReceived = p.xray_received_checked === "Y" || !isEmptyDate(p.xray_received);
+  const hasReviewed = p.xray_reviewed_checked === "Y" || !isEmptyDate(p.xray_reviewed);
+  if (!hasSent && !hasDone && !hasReceived && !hasReviewed && !facilityName) return null;
+
+  return [
+    {
+      id: `cm-xray-${p.patient_id}`,
+      sentDate: formatDate(p.xray_sent_date),
+      center: facilityName,
+      regions: [],
+      lateralityByRegion: {},
+      flexExtRegions: [],
+      scheduledDate: "",
+      doneDate: formatDate(p.xray_done),
+      reportReceivedDate: formatDate(p.xray_received),
+      reportReviewedDate: formatDate(p.xray_reviewed),
+      findings: "",
+      modalityLabel: "X-Ray",
+    },
+  ];
+}
+
+function buildMriReferral(
+  p: RawPatient,
+  facilityName: string
+): ImagingReferralData[] | null {
+  const hasSent = p.mri_sent === "Y" || !isEmptyDate(p.mri_sent_date);
+  const hasScheduled = !isEmptyDate(p.mri_scheduled);
+  const hasDone = !isEmptyDate(p.mri_done);
+  const hasReceived = p.mri_received_checked === "Y" || !isEmptyDate(p.mri_received);
+  const hasReviewed = p.mri_reviewed_checked === "Y" || !isEmptyDate(p.mri_reviewed);
+  if (!hasSent && !hasScheduled && !hasDone && !hasReceived && !hasReviewed && !facilityName) return null;
+
+  return [
+    {
+      id: `cm-mri-${p.patient_id}`,
+      sentDate: formatDate(p.mri_sent_date),
+      center: facilityName,
+      regions: [],
+      lateralityByRegion: {},
+      flexExtRegions: [],
+      scheduledDate: formatDate(p.mri_scheduled),
+      doneDate: formatDate(p.mri_done),
+      reportReceivedDate: formatDate(p.mri_received),
+      reportReviewedDate: formatDate(p.mri_reviewed),
+      findings: "",
+      modalityLabel: "MRI",
+    },
+  ];
 }
 
 export function buildMigrationPayload(
@@ -885,8 +959,8 @@ export function buildMigrationPayload(
       sex: null,
       marital_status: null,
       address: null,
-      xray_referrals: null,
-      mri_referrals: null,
+      xray_referrals: buildXrayReferral(p, xrayFacility),
+      mri_referrals: buildMriReferral(p, mriFacility),
     };
   });
 
