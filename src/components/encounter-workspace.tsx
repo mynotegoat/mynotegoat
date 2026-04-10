@@ -755,7 +755,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     (entry) => entry.id === saltSourceEncounterIdDraft,
   )
     ? saltSourceEncounterIdDraft
-    : "";
+    : priorPatientEncounters[0]?.id ?? "";
   const saltSourceEncounter = useMemo(
     () =>
       priorPatientEncounters.find(
@@ -1771,24 +1771,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               </section>
 
               <section className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
-                <div className="flex flex-wrap gap-2">
-                  {encounterSections.map((section) => (
-                    <button
-                      key={section}
-                      className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                        activeSection === section
-                          ? "bg-[var(--brand-primary)] text-white"
-                          : "bg-[var(--bg-soft)] text-[var(--text-main)]"
-                      }`}
-                      onClick={() => setActiveSection(section)}
-                      type="button"
-                    >
-                      {sectionLabels[section]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold">Compare / Copy From Prior Encounter</p>
                   </div>
@@ -1934,8 +1917,25 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   )}
                 </div>
 
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {encounterSections.map((section) => (
+                    <button
+                      key={section}
+                      className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                        activeSection === section
+                          ? "bg-[var(--brand-primary)] text-white"
+                          : "bg-[var(--bg-soft)] text-[var(--text-main)]"
+                      }`}
+                      onClick={() => setActiveSection(section)}
+                      type="button"
+                    >
+                      {sectionLabels[section]}
+                    </button>
+                  ))}
+                </div>
+
                 {saltSourceEncounter ? (
-                  <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                  <div className="mt-3 grid gap-3">
                     <div className="grid gap-1">
                       <span className="text-sm font-semibold text-[var(--text-muted)]">
                         {sectionLabels[activeSection]} Note
@@ -1946,7 +1946,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         onChange={(nextValue) =>
                           setSoapSection(selectedEncounter.id, activeSection, nextValue)
                         }
-                        minHeightClassName="min-h-44"
+                        minHeightClassName="min-h-64"
                         placeholder="Type directly here, use macros, or mix both."
                         onElementClick={handleSoapEditorElementClick}
                       />
@@ -1957,7 +1957,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       </span>
                       {saltSourceEncounter.soap[activeSection].trim() ? (
                         <div
-                          className="rich-text-editor min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                          className="rich-text-editor min-h-64 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                           // Prior encounter notes are stored as HTML so they can
                           // contain bold/underline/macro pills. Render the markup
                           // instead of showing the raw tags.
@@ -1966,7 +1966,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                           }}
                         />
                       ) : (
-                        <div className="min-h-44 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--text-muted)]">
+                        <div className="min-h-64 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--text-muted)]">
                           No text in this section for selected prior encounter.
                         </div>
                       )}
@@ -1983,7 +1983,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       onChange={(nextValue) =>
                         setSoapSection(selectedEncounter.id, activeSection, nextValue)
                       }
-                      minHeightClassName="min-h-44"
+                      minHeightClassName="min-h-64"
                       placeholder="Type directly here, use macros, or mix both."
                       onElementClick={handleSoapEditorElementClick}
                     />
