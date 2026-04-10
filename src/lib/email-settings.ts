@@ -44,11 +44,11 @@ function normalize(value: unknown): EmailSettings {
   const row = value as Partial<EmailSettings>;
   return {
     subjectTemplate:
-      typeof row.subjectTemplate === "string" && row.subjectTemplate.trim()
+      typeof row.subjectTemplate === "string"
         ? row.subjectTemplate
         : defaults.subjectTemplate,
     bodyTemplate:
-      typeof row.bodyTemplate === "string" && row.bodyTemplate.trim()
+      typeof row.bodyTemplate === "string"
         ? row.bodyTemplate
         : defaults.bodyTemplate,
   };

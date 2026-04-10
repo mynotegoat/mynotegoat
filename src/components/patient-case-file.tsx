@@ -4914,10 +4914,25 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 <button
                   className="rounded-lg bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   disabled={fileUploading}
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.multiple = true;
+                    input.accept = "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt";
+                    input.onchange = () => handlePatientFileUpload(input.files);
+                    input.click();
+                  }}
+                  type="button"
+                >
+                  {fileUploading ? "Uploading..." : "Upload"}
+                </button>
+                <button
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                  disabled={fileUploading}
                   onClick={() => setScannerOpen(true)}
                   type="button"
                 >
-                  {fileUploading ? "Uploading..." : "Scan Document"}
+                  Scan
                 </button>
               </div>
               <Link
