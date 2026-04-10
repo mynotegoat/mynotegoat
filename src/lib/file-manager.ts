@@ -242,20 +242,20 @@ export function getFolderById(state: FileManagerState, folderId: string) {
 // Patient folder sync
 // ---------------------------------------------------------------------------
 
-function extractYearFromDateOfLoss(dateOfLoss: string): string {
+function extractYearFromDate(dateStr: string): string {
   // Try ISO format YYYY-MM-DD
-  const isoMatch = dateOfLoss.match(/^(\d{4})-\d{2}-\d{2}$/);
+  const isoMatch = dateStr.match(/^(\d{4})-\d{2}-\d{2}$/);
   if (isoMatch) return isoMatch[1];
 
   // Try US format MM/DD/YYYY
-  const usMatch = dateOfLoss.match(/\d{1,2}\/\d{1,2}\/(\d{4})$/);
+  const usMatch = dateStr.match(/\d{1,2}\/\d{1,2}\/(\d{4})$/);
   if (usMatch) return usMatch[1];
 
   // Try US short format MM/DD/YY
-  const usShortMatch = dateOfLoss.match(/\d{1,2}\/\d{1,2}\/(\d{2})$/);
+  const usShortMatch = dateStr.match(/\d{1,2}\/\d{1,2}\/(\d{2})$/);
   if (usShortMatch) return `20${usShortMatch[1]}`;
 
-  return new Date().getFullYear().toString();
+  return "";
 }
 
 function buildPatientFolderName(patient: PatientRecord): string {
@@ -288,7 +288,8 @@ export function syncPatientFolders(
 
   // 2. For each patient, ensure year folder + patient folder exists
   for (const patient of patients) {
-    const year = extractYearFromDateOfLoss(patient.dateOfLoss);
+    const initialExamDate = patient.matrix?.initialExam ?? "";
+    const year = extractYearFromDate(initialExamDate) || extractYearFromDate(patient.dateOfLoss) || new Date().getFullYear().toString();
     const dolCanonical = toUsDateCanonical(patient.dateOfLoss);
     if (!dolCanonical) continue; // skip patients with invalid DOL
 

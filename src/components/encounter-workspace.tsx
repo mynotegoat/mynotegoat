@@ -1460,11 +1460,37 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           })),
       });
 
+      // Render to PDF
+      const container = document.createElement("div");
+      container.style.cssText = "position:fixed;left:-9999px;top:0;width:8.5in;opacity:0;pointer-events:none;";
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(printableHtml, "text/html");
+      const styles = parsed.querySelectorAll("style");
+      styles.forEach((s) => container.appendChild(s.cloneNode(true)));
+      const bodyDiv = document.createElement("div");
+      bodyDiv.innerHTML = parsed.body.innerHTML;
+      container.appendChild(bodyDiv);
+      document.body.appendChild(container);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const html2pdf = (await import("html2pdf.js")).default;
+      const pdfBlob: Blob = await html2pdf()
+        .from(container)
+        .set({
+          margin: [0.55, 0.55, 0.55, 0.55],
+          filename: "soap.pdf",
+          image: { type: "jpeg", quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+        })
+        .outputPdf("blob");
+      container.remove();
+
       const folderId = `SYSTEM-PATIENT-${filteredEncounterPatientId}`;
       const dateStamp = new Date().toISOString().slice(0, 10);
-      const fileName = `SOAP_Notes_${filteredEncounterPatientName.replace(/\s+/g, "_")}_${dateStamp}.html`;
-      const blob = new Blob([printableHtml], { type: "text/html" });
-      const file = new File([blob], fileName, { type: "text/html" });
+      const fileName = `SOAP_Notes_${filteredEncounterPatientName.replace(/\s+/g, "_")}_${dateStamp}.pdf`;
+      const blob = new Blob([pdfBlob], { type: "application/pdf" });
+      const file = new File([blob], fileName, { type: "application/pdf" });
 
       const { storagePath, error } = await uploadFileToStorage(folderId, file);
       if (error || !storagePath) {
@@ -1478,7 +1504,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         folderId,
         name: fileName,
         storagePath,
-        mimeType: "text/html",
+        mimeType: "application/pdf",
         sizeBytes: blob.size,
       });
       saveFileManagerState(nextState);

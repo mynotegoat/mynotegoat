@@ -1148,16 +1148,50 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     async (html: string, fileName: string) => {
       setSavingToFile(true);
       try {
-        const blob = new Blob([html], { type: "text/html" });
-        const file = new File([blob], fileName, { type: "text/html" });
+        // Render to PDF using hidden iframe + html2pdf.js
+        const container = document.createElement("div");
+        container.style.cssText = "position:fixed;left:-9999px;top:0;width:8.5in;opacity:0;pointer-events:none;";
+        container.innerHTML = html;
+        // Strip <html>/<head>/<body> wrappers — extract just the body + inject styles
+        const parser = new DOMParser();
+        const parsed = parser.parseFromString(html, "text/html");
+        const styles = parsed.querySelectorAll("style");
+        container.innerHTML = "";
+        styles.forEach((s) => container.appendChild(s.cloneNode(true)));
+        const bodyContent = parsed.body.innerHTML;
+        const bodyDiv = document.createElement("div");
+        bodyDiv.innerHTML = bodyContent;
+        container.appendChild(bodyDiv);
+        document.body.appendChild(container);
+
+        // Let images/fonts load
+        await new Promise((r) => setTimeout(r, 300));
+
+        const html2pdf = (await import("html2pdf.js")).default;
+        const pdfBlob: Blob = await html2pdf()
+          .from(container)
+          .set({
+            margin: [0.55, 0.55, 0.55, 0.55],
+            filename: "doc.pdf",
+            image: { type: "jpeg", quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+          })
+          .outputPdf("blob");
+
+        container.remove();
+
+        const pdfFileName = fileName.replace(/\.html$/i, ".pdf");
+        const blob = new Blob([pdfBlob], { type: "application/pdf" });
+        const file = new File([blob], pdfFileName, { type: "application/pdf" });
         const { storagePath, error } = await uploadFileToStorage(patientFolderId, file);
         if (!error && storagePath) {
           setFileManagerState((current) => {
             const next = addFileRecord(current, {
               folderId: patientFolderId,
-              name: fileName,
+              name: pdfFileName,
               storagePath,
-              mimeType: "text/html",
+              mimeType: "application/pdf",
               sizeBytes: blob.size,
             });
             saveFileManagerState(next);
