@@ -888,11 +888,12 @@ export async function pushLocalStateToCloud() {
     let remote: Awaited<ReturnType<typeof fetchRemoteSnapshot>> = null;
     try {
       remote = await fetchRemoteSnapshot(authed.workspaceId);
-    } catch (error) {
-      console.warn(
-        "[Cloud Sync] Could not fetch remote for safety check — refusing push:",
-        error,
-      );
+    } catch {
+      // The pre-flight fetch commonly fails during visibilitychange/beforeunload
+      // because browsers restrict async network during page-hide lifecycle events.
+      // This is harmless — the database trigger (protect_app_snapshots) is the
+      // real safety net and will reject any destructive writes regardless.
+      // Skip silently instead of logging a scary red error every page transition.
       return;
     }
 

@@ -985,7 +985,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     );
   }, [fileManagerState, patientFolderId]);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const narrativeEditableRef = useRef<HTMLDivElement | null>(null);
   const [fileUploading, setFileUploading] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -1011,7 +1010,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         }
       }
       setFileUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
     },
     [patientFolderId],
   );
@@ -4369,27 +4368,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 <button
                   className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
                   disabled={fileUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                  type="button"
-                >
-                  {fileUploading ? "Uploading..." : "Upload File"}
-                </button>
-                <button
-                  className="rounded-xl border border-[var(--brand-primary)] bg-white px-4 py-2 font-semibold text-[var(--brand-primary)]"
-                  disabled={fileUploading}
                   onClick={() => setScannerOpen(true)}
                   type="button"
                 >
-                  Scan Document
+                  {fileUploading ? "Uploading..." : "Scan Document"}
                 </button>
-                <input
-                  ref={fileInputRef}
-                  accept="*/*"
-                  className="hidden"
-                  multiple
-                  onChange={(event) => handlePatientFileUpload(event.target.files)}
-                  type="file"
-                />
               </div>
               <Link
                 className="text-sm font-semibold text-[var(--brand-primary)] hover:underline"

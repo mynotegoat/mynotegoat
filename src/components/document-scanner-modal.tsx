@@ -42,7 +42,7 @@ export function DocumentScannerModal({
       cropRef.current = { x: 0, y: 0, w: 0, h: 0 };
       return;
     }
-    // Auto-launch the camera as soon as we mount.
+    // Auto-launch the file/camera picker as soon as we mount.
     const t = setTimeout(() => fileInputRef.current?.click(), 50);
     return () => clearTimeout(t);
   }, [open]);
@@ -89,11 +89,15 @@ export function DocumentScannerModal({
     });
   }, []);
 
-  // Set up the canvas + initial crop after an image is loaded.
-  const setupCanvasForImage = useCallback(
-    (img: HTMLImageElement) => {
-      const container = canvasRef.current?.parentElement;
-      if (!canvasRef.current || !container) return;
+  // Re-draw whenever imageLoaded flips to true (canvas now in DOM).
+  useEffect(() => {
+    if (imageLoaded) {
+      const img = imageRef.current;
+      const canvas = canvasRef.current;
+      if (!img || !canvas) return;
+
+      const container = canvas.parentElement;
+      if (!container) return;
 
       const maxW = Math.min(container.clientWidth, 900);
       const maxH = Math.min(window.innerHeight - 240, 900);
@@ -106,10 +110,10 @@ export function DocumentScannerModal({
         w = h * ratio;
       }
 
-      canvasRef.current.width = w;
-      canvasRef.current.height = h;
-      canvasRef.current.style.width = `${w}px`;
-      canvasRef.current.style.height = `${h}px`;
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
 
       // Initial crop: full image inset by ~5%.
       const inset = 0.05;
@@ -119,33 +123,27 @@ export function DocumentScannerModal({
         w: w * (1 - inset * 2),
         h: h * (1 - inset * 2),
       };
-      setImageLoaded(true);
       draw();
-    },
-    [draw],
-  );
+    }
+  }, [imageLoaded, draw]);
 
   const handleFileChosen = useCallback(
     (file: File | null) => {
-      if (!file) {
-        onClose();
-        return;
-      }
+      if (!file) return;
       setOriginalFileName(file.name || "scan.jpg");
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         imageRef.current = img;
-        setupCanvasForImage(img);
+        setImageLoaded(true);
         URL.revokeObjectURL(url);
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        onClose();
       };
       img.src = url;
     },
-    [setupCanvasForImage, onClose],
+    [],
   );
 
   // Pointer hit-testing.
@@ -230,7 +228,7 @@ export function DocumentScannerModal({
   const handleRetake = () => {
     setImageLoaded(false);
     imageRef.current = null;
-    fileInputRef.current?.click();
+    setTimeout(() => fileInputRef.current?.click(), 50);
   };
 
   const handleUseScan = async () => {
@@ -284,7 +282,7 @@ export function DocumentScannerModal({
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               {imageLoaded
                 ? "Drag the corners or middle to crop, then tap Use Scan."
-                : "Opening camera..."}
+                : "Take a photo or choose a file."}
             </p>
           </div>
           <button
@@ -300,24 +298,29 @@ export function DocumentScannerModal({
           accept="image/*"
           capture="environment"
           className="hidden"
-          onChange={(event) => handleFileChosen(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            handleFileChosen(event.target.files?.[0] ?? null);
+            // Reset so the same file can be re-selected.
+            event.target.value = "";
+          }}
           ref={fileInputRef}
           type="file"
         />
 
         <div className="mt-4 flex min-h-[200px] items-center justify-center rounded-xl bg-[#0e293e]">
-          {imageLoaded ? (
-            <canvas
-              className="touch-none select-none"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              ref={canvasRef}
-            />
-          ) : (
+          {/* Canvas is always in the DOM so the ref is available when the image loads. */}
+          <canvas
+            className="touch-none select-none"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            ref={canvasRef}
+            style={{ display: imageLoaded ? "block" : "none" }}
+          />
+          {!imageLoaded && (
             <p className="px-6 py-12 text-sm font-semibold text-white">
-              Waiting for camera...
+              Waiting for image...
             </p>
           )}
         </div>
