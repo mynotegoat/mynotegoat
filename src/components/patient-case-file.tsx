@@ -687,6 +687,11 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .soap-pages .office-detail { font-size: 11px; color: #444; line-height: 1.5; margin: 0; }
       .soap-pages p { display: block; margin: 0 0 3px 0; padding: 0; text-indent: 0 !important; }
       .soap-pages strong, .soap-pages b { font-weight: 700; }
+      .soap-pages em, .soap-pages i { font-style: italic; }
+      .soap-pages u { text-decoration: underline; }
+      .soap-pages s, .soap-pages strike, .soap-pages del { text-decoration: line-through; }
+      .soap-pages sub { vertical-align: sub; font-size: smaller; }
+      .soap-pages sup { vertical-align: super; font-size: smaller; }
       .soap-pages br { display: block; }
       .soap-pages img { display: inline; }
       .soap-pages .patient-banner {
@@ -753,6 +758,8 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .soap-pages .soap-content div { margin: 0; padding: 0; text-indent: 0 !important; display: block; }
       .soap-pages .soap-content span { font-size: inherit; color: inherit; }
       .soap-pages .soap-content b, .soap-pages .soap-content strong { font-weight: 700; }
+      .soap-pages .soap-content em, .soap-pages .soap-content i { font-style: italic; }
+      .soap-pages .soap-content u { text-decoration: underline; }
       .soap-pages .print-footer {
         margin-top: 14px;
         padding-top: 6px;
