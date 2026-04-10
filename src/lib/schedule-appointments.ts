@@ -283,12 +283,61 @@ export function loadScheduleAppointments(): ScheduleAppointmentRecord[] {
   }
 }
 
+/** Previous snapshot for diff-based dual-write. */
+let previousAppointmentsById: Map<string, ScheduleAppointmentRecord> = new Map();
+
 export function saveScheduleAppointments(records: ScheduleAppointmentRecord[]) {
   if (typeof window === "undefined") {
     return;
   }
   const next = [...records].sort(compareAppointments);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+
+  // Phase-2 dual-write — same fire-and-forget pattern as patients.
+  void dualWriteAppointmentsToCloud(next, previousAppointmentsById);
+  previousAppointmentsById = new Map(next.map((a) => [a.id, a]));
+}
+
+async function dualWriteAppointmentsToCloud(
+  nextRecords: ScheduleAppointmentRecord[],
+  prevById: Map<string, ScheduleAppointmentRecord>,
+) {
+  try {
+    const [{ isCloudEntityEnabled }, { upsertAppointmentToTable, deleteAppointmentFromTable }] =
+      await Promise.all([
+        import("@/lib/feature-flags"),
+        import("@/lib/appointments-cloud"),
+      ]);
+    if (!isCloudEntityEnabled("scheduleAppointments")) return;
+
+    const nextById = new Map(nextRecords.map((a) => [a.id, a]));
+
+    for (const appt of nextRecords) {
+      const prev = prevById.get(appt.id);
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(appt)) {
+        void upsertAppointmentToTable(appt);
+      }
+    }
+    for (const prevId of prevById.keys()) {
+      if (!nextById.has(prevId)) {
+        void deleteAppointmentFromTable(prevId);
+      }
+    }
+  } catch (error) {
+    console.error("[schedule-appointments] dual-write failed:", error);
+  }
+}
+
+/**
+ * Replace the in-memory appointment cache from the cloud table.
+ * Called by the bootstrap — does NOT trigger a dual-write.
+ */
+export function replaceAppointmentsFromCloud(records: ScheduleAppointmentRecord[]) {
+  if (typeof window === "undefined") return;
+  const sorted = [...records].sort(compareAppointments);
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
+  // Update the diff baseline so the next save doesn't re-push everything.
+  previousAppointmentsById = new Map(sorted.map((a) => [a.id, a]));
 }
 
 export function createAppointmentId() {

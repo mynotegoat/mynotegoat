@@ -558,6 +558,51 @@ async function bootstrapTableBackedEntities() {
     resumeSync();
   }
   console.info(`[Cloud Sync] Loaded ${tableRows.length} patient(s) from table.`);
+
+  // ── Phase 2: schedule appointments ──
+  if (isCloudEntityEnabled("scheduleAppointments")) {
+    const {
+      fetchAllAppointmentsFromTable,
+      isAppointmentsTableReady,
+      bulkUpsertAppointmentsToTable,
+    } = await import("@/lib/appointments-cloud");
+    const {
+      loadScheduleAppointments,
+      replaceAppointmentsFromCloud,
+    } = await import("@/lib/schedule-appointments");
+
+    const apptsReady = await isAppointmentsTableReady();
+    if (!apptsReady) {
+      console.warn(
+        "[Cloud Sync] scheduleAppointments flag is on but table isn't ready. " +
+        "Run supabase/schedule_appointments_table.sql in the SQL editor.",
+      );
+    } else {
+      const apptsRows = await fetchAllAppointmentsFromTable();
+      if (apptsRows !== null) {
+        const localAppts = loadScheduleAppointments();
+        if (apptsRows.length === 0 && localAppts.length > 0) {
+          console.info(
+            `[Cloud Sync] Migrating ${localAppts.length} appointment(s) to table...`,
+          );
+          const result = await bulkUpsertAppointmentsToTable(localAppts);
+          if (result.ok) {
+            console.info(`[Cloud Sync] Migrated ${result.count} appointment(s).`);
+          } else {
+            console.error("[Cloud Sync] Appointment migration failed:", result.error);
+          }
+        } else if (apptsRows.length > 0) {
+          pauseSync();
+          try {
+            replaceAppointmentsFromCloud(apptsRows);
+          } finally {
+            resumeSync();
+          }
+          console.info(`[Cloud Sync] Loaded ${apptsRows.length} appointment(s) from table.`);
+        }
+      }
+    }
+  }
 }
 
 /**
