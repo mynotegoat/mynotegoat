@@ -2571,7 +2571,7 @@ export default function SettingsPage() {
                         onChange={(event) => setIncludeRbStatusCheck(event.target.checked)}
                         type="checkbox"
                       />
-                      R&amp;B Status Check after
+                      Payment Status after
                     </label>
                     <input
                       className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
@@ -2581,11 +2581,11 @@ export default function SettingsPage() {
                       type="number"
                       value={priorityRules.rbStatusCheckDaysThreshold}
                     />
-                    <span className="text-sm text-[var(--text-muted)]">days from R&amp;B sent</span>
+                    <span className="text-sm text-[var(--text-muted)]">days from report submitted</span>
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  MRI Due and No Update alerts pause after a case is Discharged or once R&amp;B is sent.
+                  MRI Due and No Update alerts pause after a case is Discharged or once a report is submitted. Paid/Dropped cases are automatically excluded from Case Flow.
                 </p>
               </div>
 

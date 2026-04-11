@@ -57,7 +57,7 @@ function extractLeadingDate(rawValue?: string) {
 }
 
 function getPriorityBadgeClass(reasons: string[]) {
-  if (reasons.some((reason) => reason.toLowerCase().includes("no update"))) {
+  if (reasons.some((reason) => reason.toLowerCase().includes("no update") || reason.toLowerCase().includes("send report"))) {
     return "alert";
   }
   if (reasons.some((reason) => reason.toLowerCase().includes("mri"))) {
@@ -69,7 +69,7 @@ function getPriorityBadgeClass(reasons: string[]) {
   if (reasons.some((reason) => reason.toLowerCase().includes("submitted"))) {
     return "warning";
   }
-  if (reasons.some((reason) => reason.toLowerCase().includes("status check"))) {
+  if (reasons.some((reason) => reason.toLowerCase().includes("payment status") || reason.toLowerCase().includes("status check"))) {
     return "warning";
   }
   return "active";
@@ -215,8 +215,16 @@ export default function DashboardPage() {
         );
 
         const isDischarged = statusLower.includes("discharg");
+        const isSubmitted = statusLower.includes("submit");
         const isPaid = statusLower.includes("paid");
         const pauseRules = isDischarged || Boolean(rbSentDate);
+
+        // Discharged but report not yet sent → "Send Report" alert
+        if (isDischarged && !rbSentDate) {
+          const dischargeDate = extractLeadingDate(patient.matrix?.discharge);
+          const dischargeDays = dischargeDate ? (daysSince(dischargeDate) ?? 0) : 0;
+          reasons.push(`Send Report${dischargeDays > 0 ? ` ${dischargeDays}d` : ""}`);
+        }
 
         if (
           priorityRules.includeMriDue &&
@@ -236,13 +244,21 @@ export default function DashboardPage() {
           reasons.push(`No update ${staleDays}d`);
         }
 
+        // Submitted cases: only Payment Status matters
         if (
           priorityRules.includeRbStatusCheck &&
           rbSentDays !== null &&
           !isPaid &&
           rbSentDays >= priorityRules.rbStatusCheckDaysThreshold
         ) {
-          reasons.push(`R&B status check ${rbSentDays}d`);
+          reasons.push(`Payment status ${rbSentDays}d`);
+        }
+
+        // For submitted cases, only keep Payment Status alerts (drop MRI Due, No Update, etc.)
+        if (isSubmitted && reasons.some((r) => r.startsWith("Payment"))) {
+          const paymentOnly = reasons.filter((r) => r.startsWith("Payment"));
+          reasons.length = 0;
+          reasons.push(...paymentOnly);
         }
 
         if (!reasons.length) {
@@ -351,7 +367,7 @@ export default function DashboardPage() {
           patientName: entry.patient.fullName,
           detail: reason,
           subDetail: `${entry.patient.attorney} • Last update ${entry.patient.lastUpdate}`,
-          tag: reason.split(" ")[0] === "No" ? "No Update" : reason.split(" ")[0] === "R&B" ? "R&B Check" : reason,
+          tag: reason.split(" ")[0] === "No" ? "No Update" : reason.startsWith("Payment") ? "Payment Status" : reason.startsWith("Send Report") ? "Send Report" : reason,
           tagClass: getPriorityBadgeClass([reason]),
           staleDays: entry.staleDays,
         });

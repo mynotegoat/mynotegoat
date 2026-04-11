@@ -986,7 +986,7 @@ export default function PatientsPage() {
               Year
               <select
                 className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-normal text-[var(--text-primary)]"
-                onChange={(event) => setYearDraft(event.target.value)}
+                onChange={(event) => { setYearDraft(event.target.value); setYear(event.target.value); }}
                 value={yearDraft}
               >
                 {years.map((yearOption) => (
@@ -1001,7 +1001,7 @@ export default function PatientsPage() {
               Attorney
               <select
                 className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-normal text-[var(--text-primary)]"
-                onChange={(event) => setAttorneyDraft(event.target.value)}
+                onChange={(event) => { setAttorneyDraft(event.target.value); setAttorney(event.target.value); }}
                 value={attorneyDraft}
               >
                 {attorneyOptions.map((attorneyOption) => (
@@ -1016,7 +1016,7 @@ export default function PatientsPage() {
               Status
               <select
                 className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-normal text-[var(--text-primary)]"
-                onChange={(event) => setStatusDraft(event.target.value)}
+                onChange={(event) => { setStatusDraft(event.target.value); setStatus(event.target.value); }}
                 value={statusDraft}
               >
                 <option value="ALL">ALL</option>
@@ -1027,16 +1027,6 @@ export default function PatientsPage() {
                 ))}
               </select>
             </label>
-
-            <div className="flex items-end">
-              <button
-                className="h-[42px] w-full rounded-xl bg-[#1f6b2c] px-4 py-2 font-semibold text-white"
-                onClick={applyFilters}
-                type="button"
-              >
-                GO
-              </button>
-            </div>
           </div>
         </div>
       </section>
