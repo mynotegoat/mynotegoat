@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
+  loadPatientBillingMap,
+  savePatientBillingMap,
+  createPatientBillingRecord,
+} from "@/lib/patient-billing";
+import {
   parseCasemateSql,
   getChiroPreviews,
   buildMigrationPayload,
@@ -66,6 +71,8 @@ export default function MigrateCasematePage() {
   const [parseError, setParseError] = useState("");
   const [fixingNames, setFixingNames] = useState(false);
   const [fixNamesResult, setFixNamesResult] = useState("");
+  const [fixingBilled, setFixingBilled] = useState(false);
+  const [fixBilledResult, setFixBilledResult] = useState("");
 
   useEffect(() => {
     async function loadAccounts() {
@@ -599,6 +606,91 @@ export default function MigrateCasematePage() {
           {fixNamesResult && (
             <p className={`text-sm font-medium ${fixNamesResult.startsWith("Error") ? "text-red-700" : "text-emerald-700"}`}>
               {fixNamesResult}
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Fix billed amounts tool */}
+      <section className="mt-6 rounded-2xl border border-blue-300 bg-blue-50 p-5">
+        <h3 className="text-lg font-semibold text-blue-900">Fix Imported Billed Amounts</h3>
+        <p className="mt-1 text-sm text-blue-800">
+          Reads billed &amp; paid amounts from imported patient data (matrix) and syncs them
+          into the billing system so they show up on the billing page and patient details.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+            disabled={fixingBilled}
+            onClick={async () => {
+              setFixingBilled(true);
+              setFixBilledResult("");
+              try {
+                const supabase = getSupabaseBrowserClient();
+                if (!supabase) throw new Error("No supabase client");
+
+                // Fetch all patients with their matrix data
+                const { data: rows, error: fetchErr } = await supabase
+                  .from("patients")
+                  .select("id, matrix");
+
+                if (fetchErr) throw fetchErr;
+                if (!rows || rows.length === 0) {
+                  setFixBilledResult("No patients found.");
+                  return;
+                }
+
+                const billingMap = loadPatientBillingMap();
+                let fixedCount = 0;
+
+                for (const row of rows) {
+                  const matrix = row.matrix as Record<string, string> | null;
+                  if (!matrix) continue;
+
+                  const rawBilled = (matrix.billed ?? "").replace(/[^0-9.]/g, "");
+                  const rawPaid = (matrix.paidAmount ?? "").replace(/[^0-9.]/g, "");
+                  const rawPaidDate = matrix.paidDate ?? "";
+                  const billedNum = Number.parseFloat(rawBilled);
+                  const paidNum = Number.parseFloat(rawPaid);
+
+                  if (!Number.isFinite(billedNum) || billedNum <= 0) continue;
+
+                  // Skip if billing record already exists with a nonzero billed amount
+                  const existing = billingMap[row.id];
+                  if (existing && existing.billedAmount > 0) continue;
+
+                  const record = existing ?? createPatientBillingRecord(row.id);
+                  record.billedAmount = billedNum;
+                  if (Number.isFinite(paidNum) && paidNum > 0) {
+                    record.paidAmount = paidNum;
+                  }
+                  if (rawPaidDate) {
+                    record.paidDate = rawPaidDate;
+                  }
+                  record.updatedAt = new Date().toISOString();
+                  billingMap[row.id] = record;
+                  fixedCount++;
+                }
+
+                savePatientBillingMap(billingMap);
+                setFixBilledResult(
+                  fixedCount > 0
+                    ? `Synced billing data for ${fixedCount} patients. Refresh the app to see changes.`
+                    : "All patients already have billing records — nothing to fix."
+                );
+              } catch (err: unknown) {
+                setFixBilledResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setFixingBilled(false);
+              }
+            }}
+            type="button"
+          >
+            {fixingBilled ? "Fixing..." : "Fix Billed Amounts"}
+          </button>
+          {fixBilledResult && (
+            <p className={`text-sm font-medium ${fixBilledResult.startsWith("Error") ? "text-red-700" : "text-emerald-700"}`}>
+              {fixBilledResult}
             </p>
           )}
         </div>

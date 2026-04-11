@@ -5198,14 +5198,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     </dd>
                   </div>
                 </dl>
-                <div className="mt-3 border-t border-[var(--line-soft)] pt-3">
-                  <div className="grid grid-cols-[minmax(0,220px)_minmax(0,1fr)] items-baseline gap-x-4">
-                    <dt className="font-semibold text-[var(--text-muted)]">Balance Due:</dt>
-                    <dd className={`font-bold tabular-nums ${balanceDue !== null && balanceDue > 0 ? "text-[#b43b34]" : "text-[#196d3a]"}`}>
-                      {balanceDue === null ? "-" : formatUsdCurrency(balanceDue)}
-                    </dd>
-                  </div>
-                </div>
               </div>
 
               <label className="grid gap-1">
