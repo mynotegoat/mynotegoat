@@ -517,7 +517,7 @@ export default function PatientsPage() {
         deduped.set(key, cleanName);
       }
     });
-    return ["ALL", ...Array.from(deduped.values())];
+    return ["ALL", ...Array.from(deduped.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))];
   }, []);
 
   const statusFilterOptions = useMemo(
