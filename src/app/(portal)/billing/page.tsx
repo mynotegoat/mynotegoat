@@ -548,7 +548,8 @@ export default function BillingPage() {
     [encounterChargeLines],
   );
   const patientBillingRecord = activePatientId ? getPatientBillingRecord(activePatientId) : null;
-  const billedAmount = totalBilled;
+  // Use encounter charges when available, otherwise fall back to manual billed amount
+  const billedAmount = totalBilled > 0 ? totalBilled : (patientBillingRecord?.billedAmount ?? 0);
   const paidAmount = patientBillingRecord?.paidAmount ?? 0;
   const paidDate = patientBillingRecord?.paidDate ?? "";
   const remainingBalance = billedAmount - paidAmount;

@@ -1844,7 +1844,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     () => patientEncounterRecords.filter((entry) => entry.signed).length,
     [patientEncounterRecords],
   );
-  const currentBillTotal = useMemo(
+  const encounterChargesTotal = useMemo(
     () =>
       patientEncounterRecords.reduce((sum, encounter) => {
         const encounterTotal = encounter.charges.reduce(
@@ -1855,6 +1855,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       }, 0),
     [patientEncounterRecords],
   );
+  // Auto-sync billedAmount from encounter charges when charges exist
+  const prevChargesTotal = useRef(encounterChargesTotal);
+  if (encounterChargesTotal > 0 && encounterChargesTotal !== prevChargesTotal.current) {
+    prevChargesTotal.current = encounterChargesTotal;
+    setBilledAmount(encounterChargesTotal.toFixed(2));
+  }
+  const currentBillTotal = Number.parseFloat(billedAmount) || 0;
   const quickStatRows = useMemo(
     () => {
       const rows: Array<{
@@ -5132,10 +5139,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">$ Billed</span>
-                <div className="flex items-center rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 font-semibold tabular-nums text-[var(--text-main)]">
-                  {formatUsdCurrency(currentBillTotal)}
-                </div>
+                <span className="text-sm font-semibold text-[var(--text-muted)]">
+                  $ Billed
+                  {encounterChargesTotal > 0 && (
+                    <span className="ml-1 text-xs font-normal text-emerald-600">(auto)</span>
+                  )}
+                </span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 tabular-nums"
+                  inputMode="decimal"
+                  onChange={(event) => setBilledAmount(event.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.00"
+                  value={billedAmount}
+                />
               </label>
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Paid Date</span>
