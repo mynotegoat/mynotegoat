@@ -73,6 +73,8 @@ export default function MigrateCasematePage() {
   const [fixNamesResult, setFixNamesResult] = useState("");
   const [fixingBilled, setFixingBilled] = useState(false);
   const [fixBilledResult, setFixBilledResult] = useState("");
+  const [fixingDates, setFixingDates] = useState(false);
+  const [fixDatesResult, setFixDatesResult] = useState("");
 
   useEffect(() => {
     async function loadAccounts() {
@@ -691,6 +693,171 @@ export default function MigrateCasematePage() {
           {fixBilledResult && (
             <p className={`text-sm font-medium ${fixBilledResult.startsWith("Error") ? "text-red-700" : "text-emerald-700"}`}>
               {fixBilledResult}
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Fix imported dates tool */}
+      <section className="mt-6 rounded-2xl border border-emerald-300 bg-emerald-50 p-5">
+        <h3 className="text-lg font-semibold text-emerald-900">Fix Imported Dates</h3>
+        <p className="mt-1 text-sm text-emerald-800">
+          Converts all dates in patient data from ISO format (2024-03-30) to US format (03/30/2024).
+          Fixes matrix fields (MRI, X-Ray, specialist, discharge, etc.), imaging referrals, specialist referrals, DOB, and date of loss.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+            disabled={fixingDates}
+            onClick={async () => {
+              setFixingDates(true);
+              setFixDatesResult("");
+              try {
+                const supabase = getSupabaseBrowserClient();
+                if (!supabase) throw new Error("No supabase client");
+
+                const isoToUs = (v: string): string => {
+                  if (!v) return v;
+                  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                  if (m) return `${m[2]}/${m[3]}/${m[1]}`;
+                  return v;
+                };
+
+                const { data: rows, error: fetchErr } = await supabase
+                  .from("patients")
+                  .select("id, dob, date_of_loss, matrix, xray_referrals, mri_referrals, specialist_referrals");
+
+                if (fetchErr) throw fetchErr;
+                if (!rows || rows.length === 0) {
+                  setFixDatesResult("No patients found.");
+                  return;
+                }
+
+                const matrixDateKeys = [
+                  "initialExam", "xraySent", "xrayDone", "xrayReceived", "xrayReviewed",
+                  "mriSent", "mriScheduled", "mriDone", "mriReceived", "mriReviewed",
+                  "reExam1", "reExam2", "reExam3",
+                  "specialistSent", "specialistScheduled",
+                  "discharge", "rbSent", "paidDate",
+                ];
+
+                const refDateKeys = [
+                  "sentDate", "doneDate", "reportReceivedDate", "reportReviewedDate",
+                  "scheduledDate", "completedDate",
+                ];
+
+                let fixedCount = 0;
+                const errors: string[] = [];
+
+                for (const row of rows) {
+                  const patch: Record<string, unknown> = {};
+                  let changed = false;
+
+                  // Fix DOB
+                  if (row.dob && /^\d{4}-\d{2}-\d{2}/.test(row.dob)) {
+                    patch.dob = isoToUs(row.dob);
+                    changed = true;
+                  }
+
+                  // Fix date_of_loss
+                  if (row.date_of_loss && /^\d{4}-\d{2}-\d{2}/.test(row.date_of_loss)) {
+                    patch.date_of_loss = isoToUs(row.date_of_loss);
+                    changed = true;
+                  }
+
+                  // Fix matrix dates
+                  const matrix = row.matrix as Record<string, string> | null;
+                  if (matrix) {
+                    const newMatrix = { ...matrix };
+                    let matrixChanged = false;
+                    for (const key of matrixDateKeys) {
+                      const val = newMatrix[key];
+                      if (val && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+                        newMatrix[key] = isoToUs(val);
+                        matrixChanged = true;
+                      }
+                    }
+                    if (matrixChanged) {
+                      patch.matrix = newMatrix;
+                      changed = true;
+                    }
+                  }
+
+                  // Fix imaging referral dates
+                  for (const refKey of ["xray_referrals", "mri_referrals"] as const) {
+                    const refs = row[refKey] as Array<Record<string, string>> | null;
+                    if (refs && Array.isArray(refs)) {
+                      let refChanged = false;
+                      const newRefs = refs.map((ref) => {
+                        const newRef = { ...ref };
+                        for (const dk of refDateKeys) {
+                          if (newRef[dk] && /^\d{4}-\d{2}-\d{2}/.test(newRef[dk])) {
+                            newRef[dk] = isoToUs(newRef[dk]);
+                            refChanged = true;
+                          }
+                        }
+                        return newRef;
+                      });
+                      if (refChanged) {
+                        patch[refKey] = newRefs;
+                        changed = true;
+                      }
+                    }
+                  }
+
+                  // Fix specialist referral dates
+                  const specRefs = row.specialist_referrals as Array<Record<string, string>> | null;
+                  if (specRefs && Array.isArray(specRefs)) {
+                    let specChanged = false;
+                    const newSpecs = specRefs.map((ref) => {
+                      const newRef = { ...ref };
+                      for (const dk of refDateKeys) {
+                        if (newRef[dk] && /^\d{4}-\d{2}-\d{2}/.test(newRef[dk])) {
+                          newRef[dk] = isoToUs(newRef[dk]);
+                          specChanged = true;
+                        }
+                      }
+                      return newRef;
+                    });
+                    if (specChanged) {
+                      patch.specialist_referrals = newSpecs;
+                      changed = true;
+                    }
+                  }
+
+                  if (!changed) continue;
+
+                  const { error: updateErr } = await supabase
+                    .from("patients")
+                    .update(patch)
+                    .eq("id", row.id);
+
+                  if (updateErr) {
+                    errors.push(`${row.id}: ${updateErr.message}`);
+                  } else {
+                    fixedCount++;
+                  }
+                }
+
+                const errMsg = errors.length > 0 ? ` | ${errors.length} errors: ${errors.slice(0, 3).join("; ")}` : "";
+                setFixDatesResult(
+                  fixedCount > 0
+                    ? `Fixed dates for ${fixedCount} patients.${errMsg} Refresh the app to see changes.`
+                    : "All dates already in US format — nothing to fix."
+                );
+              } catch (err: unknown) {
+                setFixDatesResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setFixingDates(false);
+              }
+            }}
+            type="button"
+          >
+            {fixingDates ? "Fixing..." : "Fix All Dates"}
+          </button>
+          {fixDatesResult && (
+            <p className={`text-sm font-medium ${fixDatesResult.startsWith("Error") ? "text-red-700" : "text-emerald-700"}`}>
+              {fixDatesResult}
             </p>
           )}
         </div>
