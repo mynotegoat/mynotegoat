@@ -635,9 +635,9 @@ export default function PatientsPage() {
       let cmp = 0;
       let datesNeutral = false; // when true, don't flip cmp for desc order
       if (sortColumn === "patient") {
-        cmp = a.fullName.localeCompare(b.fullName);
+        cmp = a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" });
       } else if (sortColumn === "attorney") {
-        cmp = cleanAttorneyLabel(a.attorney).localeCompare(cleanAttorneyLabel(b.attorney));
+        cmp = cleanAttorneyLabel(a.attorney).localeCompare(cleanAttorneyLabel(b.attorney), undefined, { sensitivity: "base" });
       } else if (sortColumn === "dateOfLoss") {
         cmp = compareUsDates(a.dateOfLoss, b.dateOfLoss);
         datesNeutral = true;
