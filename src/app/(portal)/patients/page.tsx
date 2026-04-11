@@ -565,11 +565,14 @@ export default function PatientsPage() {
 
   const filteredPatients = useMemo(() => {
     const q = searchDraft.trim().toLowerCase();
+    // Split query into individual words so "john doe" matches "Doe, John"
+    const qWords = q.replace(/[,.:;]/g, " ").split(/\s+/).filter(Boolean);
     const filtered = patients.filter((patient) => {
+      const nameNorm = patient.fullName.toLowerCase().replace(/[,.:;]/g, " ");
+      const attNorm = patient.attorney.toLowerCase().replace(/[,.:;]/g, " ");
+      const haystack = `${nameNorm} ${attNorm}`;
       const matchesSearch =
-        !q ||
-        patient.fullName.toLowerCase().includes(q) ||
-        patient.attorney.toLowerCase().includes(q);
+        !q || qWords.every((word) => haystack.includes(word));
 
       const matchesYear =
         year === "ALL" ||
