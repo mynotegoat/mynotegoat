@@ -833,7 +833,7 @@ export function buildMigrationPayload(
     // Build name
     const firstName = toTitleCase(p.patient_firstname.trim());
     const lastName = toTitleCase(p.patient_lastname.trim());
-    const fullName = `${firstName} ${lastName}`.trim() || "Unknown";
+    const fullName = (firstName && lastName ? `${lastName}, ${firstName}` : firstName || lastName).trim() || "Unknown";
 
     // Contact info from patient_contact table
     const email = contacts.find((c) => c.patient_email)?.patient_email ?? null;

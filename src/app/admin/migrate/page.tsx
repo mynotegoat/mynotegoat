@@ -64,6 +64,8 @@ export default function MigrateCasematePage() {
   const [migrating, setMigrating] = useState<number | null>(null);
   const [results, setResults] = useState<MigrationResult[]>([]);
   const [parseError, setParseError] = useState("");
+  const [fixingNames, setFixingNames] = useState(false);
+  const [fixNamesResult, setFixNamesResult] = useState("");
 
   useEffect(() => {
     async function loadAccounts() {
@@ -517,6 +519,90 @@ export default function MigrateCasematePage() {
           </div>
         </section>
       )}
+
+      {/* Fix imported names tool */}
+      <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
+        <h3 className="text-lg font-semibold text-amber-900">Fix Imported Patient Names</h3>
+        <p className="mt-1 text-sm text-amber-800">
+          Converts names from &quot;FirstName LastName&quot; format to &quot;LastName, FirstName&quot; format.
+          Only affects patients whose name does NOT already contain a comma.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            className="rounded-xl bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+            disabled={fixingNames}
+            onClick={async () => {
+              setFixingNames(true);
+              setFixNamesResult("");
+              try {
+                const supabase = getSupabaseBrowserClient();
+                if (!supabase) throw new Error("No supabase client");
+
+                // Fetch all patients whose name doesn't contain a comma
+                const { data: rows, error: fetchErr } = await supabase
+                  .from("patients")
+                  .select("id, full_name")
+                  .not("full_name", "like", "%,%");
+
+                if (fetchErr) throw fetchErr;
+                if (!rows || rows.length === 0) {
+                  setFixNamesResult("No patients need fixing — all names already contain a comma.");
+                  return;
+                }
+
+                let fixedCount = 0;
+                const errors: string[] = [];
+
+                for (const row of rows) {
+                  const name = (row.full_name || "").trim();
+                  if (!name || name === "Unknown") continue;
+
+                  // Split "FirstName LastName" -> "LastName, FirstName"
+                  const parts = name.split(/\s+/);
+                  let newName: string;
+                  if (parts.length === 1) {
+                    // Single word name — keep as-is
+                    continue;
+                  } else if (parts.length === 2) {
+                    newName = `${parts[1]}, ${parts[0]}`;
+                  } else {
+                    // Multi-part: treat last word as last name, rest as first
+                    const lastName = parts[parts.length - 1];
+                    const firstName = parts.slice(0, -1).join(" ");
+                    newName = `${lastName}, ${firstName}`;
+                  }
+
+                  const { error: updateErr } = await supabase
+                    .from("patients")
+                    .update({ full_name: newName })
+                    .eq("id", row.id);
+
+                  if (updateErr) {
+                    errors.push(`${name}: ${updateErr.message}`);
+                  } else {
+                    fixedCount++;
+                  }
+                }
+
+                const errMsg = errors.length > 0 ? ` | ${errors.length} errors: ${errors.slice(0, 3).join("; ")}` : "";
+                setFixNamesResult(`Fixed ${fixedCount} of ${rows.length} patients.${errMsg} Refresh the app to see changes.`);
+              } catch (err: unknown) {
+                setFixNamesResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+              } finally {
+                setFixingNames(false);
+              }
+            }}
+            type="button"
+          >
+            {fixingNames ? "Fixing..." : "Fix All Names"}
+          </button>
+          {fixNamesResult && (
+            <p className={`text-sm font-medium ${fixNamesResult.startsWith("Error") ? "text-red-700" : "text-emerald-700"}`}>
+              {fixNamesResult}
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
