@@ -662,6 +662,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     addCharge,
     updateCharge,
     removeCharge,
+    moveCharge,
     setSigned,
     deleteEncounter,
   } = useEncounterNotes();
@@ -702,6 +703,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const [editingMacroPromptId, setEditingMacroPromptId] = useState<string | null>(null);
   const [saltSourceEncounterIdDraft, setSaltSourceEncounterIdDraft] = useState("");
   const [autoSalt, setAutoSalt] = useState(false);
+  const [autoSaltCharges, setAutoSaltCharges] = useState(false);
 
   const selectedEncounterPatientId = useMemo(() => {
     if (!selectedEncounterId) {
@@ -878,6 +880,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
 
   // Track which encounter we last auto-salted into so we don't repeat
   const autoSaltedRef = useRef<string | null>(null);
+  const autoSaltedChargesRef = useRef<string | null>(null);
 
   // Auto-Salt: when enabled and a new encounter is selected that has empty SOAP,
   // automatically copy all SOAP sections from the most recent prior encounter.
@@ -934,6 +937,42 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       `Auto-Salted ${sectionsWithText.length} SOAP section${sectionsWithText.length === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}${macroSuffix}.`,
     );
   }, [autoSalt, selectedEncounter, saltSourceEncounter, setSoapSection, addMacroRun]);
+
+  // Auto-Salt Charges: when enabled and a new encounter is selected that has no charges,
+  // automatically copy charges from the most recent prior encounter.
+  useEffect(() => {
+    if (!autoSaltCharges) return;
+    if (!selectedEncounter) return;
+    if (selectedEncounter.signed) return;
+    if (!saltSourceEncounter) return;
+    if (autoSaltedChargesRef.current === selectedEncounter.id) return;
+
+    // Only auto-salt charges if encounter has no charges yet
+    if (selectedEncounter.charges.length > 0) {
+      autoSaltedChargesRef.current = selectedEncounter.id;
+      return;
+    }
+
+    autoSaltedChargesRef.current = selectedEncounter.id;
+    if (saltSourceEncounter.charges.length === 0) return;
+
+    let copiedCount = 0;
+    saltSourceEncounter.charges.forEach((charge) => {
+      const added = addCharge(selectedEncounter.id, {
+        treatmentMacroId: charge.treatmentMacroId,
+        name: charge.name,
+        procedureCode: charge.procedureCode,
+        unitPrice: charge.unitPrice,
+        units: charge.units,
+      });
+      if (added) copiedCount += 1;
+    });
+    if (copiedCount > 0) {
+      setMessage(
+        `Auto-Salted ${copiedCount} charge${copiedCount === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}.`,
+      );
+    }
+  }, [autoSaltCharges, selectedEncounter, saltSourceEncounter, addCharge]);
 
   const sectionMacros = useMemo(
     () =>
@@ -1413,6 +1452,15 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       setMessage("Treatment not found.");
       return;
     }
+    // If this treatment is already on the encounter, bump units instead of adding a duplicate
+    const existing = selectedEncounter.charges.find(
+      (c) => c.procedureCode.toUpperCase() === treatment.procedureCode.toUpperCase(),
+    );
+    if (existing) {
+      updateCharge(selectedEncounter.id, existing.id, { units: existing.units + treatment.defaultUnits });
+      setMessage(`Increased "${treatment.name}" units to ${existing.units + treatment.defaultUnits}.`);
+      return;
+    }
     const added = addCharge(selectedEncounter.id, {
       treatmentMacroId: treatment.id,
       name: treatment.name,
@@ -1807,7 +1855,12 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </button>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                      onClick={() => setSigned(selectedEncounter.id, !selectedEncounter.signed)}
+                      onClick={() => {
+                        if (!selectedEncounter.signed && selectedEncounter.charges.length === 0) {
+                          if (!window.confirm("This encounter has no charges. Close it anyway?")) return;
+                        }
+                        setSigned(selectedEncounter.id, !selectedEncounter.signed);
+                      }}
                       type="button"
                     >
                       {selectedEncounter.signed ? "Reopen Encounter" : "Close Encounter"}
@@ -1817,6 +1870,9 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
                         disabled={!linkedAppointmentForStatus}
                         onClick={() => {
+                          if (selectedEncounter.charges.length === 0) {
+                            if (!window.confirm("This encounter has no charges. Close and check out anyway?")) return;
+                          }
                           setSigned(selectedEncounter.id, true);
                           if (linkedAppointmentForStatus) {
                             updateAppointment(linkedAppointmentForStatus.id, (current) => ({
@@ -2313,88 +2369,110 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     )}
                   </div>
 
-                  <div className="mt-3 max-h-56 space-y-2 overflow-auto rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+                  <div className="mt-3 max-h-56 space-y-1 overflow-auto rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
                     {selectedEncounter.charges.length === 0 && (
                       <p className="text-sm text-[var(--text-muted)]">No charges added for this encounter.</p>
                     )}
-                    {selectedEncounter.charges.map((entry) => (
-                      <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] bg-white p-2">
-                        <div className="grid gap-2 md:grid-cols-[1.2fr_130px_110px_90px_auto]">
-                          <label className="grid gap-1">
-                            <span className="text-xs font-semibold text-[var(--text-muted)]">Treatment</span>
-                            <input
-                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
-                              disabled={selectedEncounter.signed}
-                              onChange={(event) =>
-                                updateCharge(selectedEncounter.id, entry.id, { name: event.target.value })
-                              }
-                              value={entry.name}
-                            />
-                          </label>
-                          <label className="grid gap-1">
-                            <span className="text-xs font-semibold text-[var(--text-muted)]">CPT / Code</span>
-                            <input
-                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
-                              disabled={selectedEncounter.signed}
-                              onChange={(event) =>
-                                updateCharge(selectedEncounter.id, entry.id, { procedureCode: event.target.value })
-                              }
-                              value={entry.procedureCode}
-                            />
-                          </label>
-                          <label className="grid gap-1">
-                            <span className="text-xs font-semibold text-[var(--text-muted)]">Price ($)</span>
-                            <input
-                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
-                              disabled={selectedEncounter.signed}
-                              min={0}
-                              onChange={(event) =>
-                                updateCharge(selectedEncounter.id, entry.id, {
-                                  unitPrice: Number(event.target.value),
-                                })
-                              }
-                              step="0.01"
-                              type="number"
-                              value={entry.unitPrice}
-                            />
-                          </label>
-                          <label className="grid gap-1">
-                            <span className="text-xs font-semibold text-[var(--text-muted)]">Units</span>
-                            <input
-                              className="rounded-lg border border-[var(--line-soft)] px-2 py-1"
-                              disabled={selectedEncounter.signed}
-                              min={1}
-                              onChange={(event) =>
-                                updateCharge(selectedEncounter.id, entry.id, {
-                                  units: Number(event.target.value),
-                                })
-                              }
-                              step={1}
-                              type="number"
-                              value={entry.units}
-                            />
-                          </label>
-                          <div className="grid gap-1">
-                            <span className="text-xs font-semibold text-[var(--text-muted)]">Line Total</span>
-                            <div className="flex items-center gap-2">
-                              <p className="px-1 py-1 text-sm font-semibold">
-                                ${(entry.unitPrice * entry.units).toFixed(2)}
-                              </p>
-                              <button
-                                className="rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold"
-                                disabled={selectedEncounter.signed}
-                                onClick={() => { if (window.confirm(`Remove charge "${entry.name}"?`)) removeCharge(selectedEncounter.id, entry.id); }}
-                                type="button"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
+                    {selectedEncounter.charges.length > 0 && (
+                      <div className="mb-1 grid grid-cols-[28px_1fr_100px_80px_60px_70px_56px] items-center gap-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                        <span />
+                        <span>Treatment</span>
+                        <span>CPT</span>
+                        <span>Price</span>
+                        <span>Qty</span>
+                        <span>Total</span>
+                        <span />
+                      </div>
+                    )}
+                    {selectedEncounter.charges.map((entry, idx) => (
+                      <div key={entry.id} className="grid grid-cols-[28px_1fr_100px_80px_60px_70px_56px] items-center gap-1 rounded-lg border border-[var(--line-soft)] bg-white px-1 py-0.5">
+                        {/* Move arrows */}
+                        <div className="flex flex-col items-center">
+                          <button
+                            className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--brand-primary)] disabled:opacity-30"
+                            disabled={selectedEncounter.signed || idx === 0}
+                            onClick={() => moveCharge(selectedEncounter.id, entry.id, "up")}
+                            title="Move up"
+                            type="button"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m5 15 7-7 7 7" /></svg>
+                          </button>
+                          <button
+                            className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--brand-primary)] disabled:opacity-30"
+                            disabled={selectedEncounter.signed || idx === selectedEncounter.charges.length - 1}
+                            onClick={() => moveCharge(selectedEncounter.id, entry.id, "down")}
+                            title="Move down"
+                            type="button"
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
+                          </button>
                         </div>
+                        {/* Treatment */}
+                        <input
+                          className="w-full truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line-soft)] focus:border-[var(--brand-primary)] focus:outline-none"
+                          disabled={selectedEncounter.signed}
+                          onChange={(event) => updateCharge(selectedEncounter.id, entry.id, { name: event.target.value })}
+                          value={entry.name}
+                        />
+                        {/* CPT */}
+                        <input
+                          className="w-full truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line-soft)] focus:border-[var(--brand-primary)] focus:outline-none"
+                          disabled={selectedEncounter.signed}
+                          onChange={(event) => updateCharge(selectedEncounter.id, entry.id, { procedureCode: event.target.value })}
+                          value={entry.procedureCode}
+                        />
+                        {/* Price */}
+                        <input
+                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line-soft)] focus:border-[var(--brand-primary)] focus:outline-none"
+                          disabled={selectedEncounter.signed}
+                          min={0}
+                          onChange={(event) => updateCharge(selectedEncounter.id, entry.id, { unitPrice: Number(event.target.value) })}
+                          step="0.01"
+                          type="number"
+                          value={entry.unitPrice}
+                        />
+                        {/* Qty */}
+                        <input
+                          className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line-soft)] focus:border-[var(--brand-primary)] focus:outline-none"
+                          disabled={selectedEncounter.signed}
+                          min={1}
+                          onChange={(event) => updateCharge(selectedEncounter.id, entry.id, { units: Number(event.target.value) })}
+                          step={1}
+                          type="number"
+                          value={entry.units}
+                        />
+                        {/* Total */}
+                        <p className="px-1 text-xs font-semibold">${(entry.unitPrice * entry.units).toFixed(2)}</p>
+                        {/* Remove */}
+                        <button
+                          className="rounded-lg p-1 text-[#b43b34] hover:bg-red-50 transition-colors disabled:opacity-30"
+                          disabled={selectedEncounter.signed}
+                          onClick={() => { if (window.confirm(`Remove charge "${entry.name}"?`)) removeCharge(selectedEncounter.id, entry.id); }}
+                          title="Remove charge"
+                          type="button"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 7-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" /></svg>
+                        </button>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-sm font-semibold">Encounter Total: ${encounterChargeTotal.toFixed(2)}</p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-sm font-semibold">Encounter Total: ${encounterChargeTotal.toFixed(2)}</p>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5 text-xs font-semibold select-none hover:bg-[var(--bg-soft)]">
+                      <input
+                        checked={autoSaltCharges}
+                        className="accent-[var(--brand-primary)]"
+                        onChange={(e) => {
+                          setAutoSaltCharges(e.target.checked);
+                          if (e.target.checked) {
+                            autoSaltedChargesRef.current = null;
+                          }
+                        }}
+                        type="checkbox"
+                      />
+                      Salt Encounter Charges
+                    </label>
+                  </div>
                 </article>
               </section>
             </div>

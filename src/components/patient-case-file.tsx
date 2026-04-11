@@ -1682,19 +1682,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   }, [activeDiagnosisMacros, billingMacros.diagnosisFolders]);
 
   const filteredDiagnosisMacros = useMemo(() => {
-    const query = diagnosisSearchDraft.trim().toLowerCase();
+    const q = diagnosisSearchDraft.trim().toLowerCase();
+    const qWords = q.replace(/[,.:;]/g, " ").split(/\s+/).filter(Boolean);
     return activeDiagnosisMacros
       .filter((entry) =>
         diagnosisFolderFilter === "all" ? true : entry.folderId === diagnosisFolderFilter,
       )
       .filter((entry) => {
-        if (!query) {
+        if (!qWords.length) {
           return true;
         }
-        return (
-          entry.code.toLowerCase().includes(query) ||
-          entry.description.toLowerCase().includes(query)
-        );
+        const haystack = `${entry.code.toLowerCase()} ${entry.description.toLowerCase()}`;
+        return qWords.every((word) => haystack.includes(word));
       })
       .sort((left, right) => left.code.localeCompare(right.code));
   }, [activeDiagnosisMacros, diagnosisFolderFilter, diagnosisSearchDraft]);
@@ -4490,12 +4489,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                             <td className="px-2 py-2 text-right">
                               {appointment ? (
                                 <button
-                                  className="rounded-lg border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-2 py-1 text-xs font-semibold text-[#b43b34]"
+                                  className="rounded-lg p-1.5 text-[#b43b34] hover:bg-red-50 transition-colors"
                                   onClick={() => handleDeleteAppointment(appointment)}
                                   title="Delete appointment"
                                   type="button"
                                 >
-                                  Delete
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 7-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" /></svg>
                                 </button>
                               ) : null}
                             </td>
@@ -4581,14 +4580,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   />
                   {diagnosisListSearch.trim() && (() => {
                     const q = diagnosisListSearch.trim().toLowerCase();
+                    const qWords = q.replace(/[,.:;]/g, " ").split(/\s+/).filter(Boolean);
                     const groupsWithMatches = diagnosisMacrosByFolder
                       .map((group) => ({
                         ...group,
-                        macros: group.macros.filter(
-                          (entry) =>
-                            entry.code.toLowerCase().includes(q) ||
-                            entry.description.toLowerCase().includes(q),
-                        ),
+                        macros: group.macros.filter((entry) => {
+                          const haystack = `${entry.code.toLowerCase()} ${entry.description.toLowerCase()}`;
+                          return qWords.every((word) => haystack.includes(word));
+                        }),
                       }))
                       .filter((group) => group.macros.length > 0);
                     const totalResults = groupsWithMatches.reduce((sum, g) => sum + g.macros.length, 0);
@@ -5459,24 +5458,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               )}
 
               {/* Attach billing statement checkbox */}
-              {currentBillTotal > 0 && (
-                <div className="mb-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                  <label className="flex cursor-pointer items-center gap-2 select-none text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      className="accent-[var(--brand-primary)]"
-                      checked={narrativeAttachBilling}
-                      onChange={(e) => setNarrativeAttachBilling(e.target.checked)}
-                    />
-                    Attach Billing Statement
-                    {narrativeAttachBilling && (
-                      <span className="ml-1 text-xs font-normal text-[var(--text-muted)]">
-                        (will print after narrative)
-                      </span>
-                    )}
-                  </label>
-                </div>
-              )}
+              <div className="mb-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+                <label className="flex cursor-pointer items-center gap-2 select-none text-sm font-semibold">
+                  <input
+                    type="checkbox"
+                    className="accent-[var(--brand-primary)]"
+                    checked={narrativeAttachBilling}
+                    onChange={(e) => setNarrativeAttachBilling(e.target.checked)}
+                  />
+                  Attach Billing Statement
+                  {narrativeAttachBilling && (
+                    <span className="ml-1 text-xs font-normal text-[var(--text-muted)]">
+                      (will print after narrative)
+                    </span>
+                  )}
+                </label>
+              </div>
 
               <article className="rounded-xl border border-[var(--line-soft)] bg-white p-6">
                 <div

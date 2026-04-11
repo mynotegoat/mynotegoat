@@ -371,6 +371,21 @@ export function useEncounterNotes() {
     [upsertEncounter],
   );
 
+  const moveCharge = useCallback(
+    (encounterId: string, chargeId: string, direction: "up" | "down") => {
+      upsertEncounter(encounterId, (current) => {
+        const charges = [...current.charges];
+        const idx = charges.findIndex((e) => e.id === chargeId);
+        if (idx < 0) return current;
+        const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+        if (swapIdx < 0 || swapIdx >= charges.length) return current;
+        [charges[idx], charges[swapIdx]] = [charges[swapIdx], charges[idx]];
+        return { ...current, charges };
+      });
+    },
+    [upsertEncounter],
+  );
+
   const setSigned = useCallback(
     (encounterId: string, signed: boolean) => {
       upsertEncounter(encounterId, (current) => ({
@@ -415,6 +430,7 @@ export function useEncounterNotes() {
     addCharge,
     updateCharge,
     removeCharge,
+    moveCharge,
     setSigned,
     deleteEncounter,
   };

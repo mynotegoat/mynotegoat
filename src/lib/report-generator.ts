@@ -286,17 +286,39 @@ function extractSegments(encounter: EncounterNoteRecord): string[] {
 }
 
 /**
- * Extracts the weight value from a single encounter's macro runs.
+ * Extracts the decompression/traction weight from an encounter's macro runs.
+ * Only looks at macro runs whose name contains "decompression" or "traction"
+ * to avoid picking up the patient's body weight from general exam macros.
  * Returns the numeric weight or null if not found.
  */
 function extractWeight(encounter: EncounterNoteRecord): number | null {
+  // First pass: only look at decompression/traction-related macros
   for (const run of encounter.macroRuns) {
+    const macroNameNorm = run.macroName.toLowerCase();
+    if (!/decompression|traction/i.test(macroNameNorm)) continue;
     for (const [key, value] of Object.entries(run.answers)) {
       if (key.toLowerCase().replace(/[\s_-]+/g, "") !== "weight") continue;
       const str = typeof value === "string" ? value : Array.isArray(value) ? value[0] : null;
       if (!str) continue;
       const num = parseFloat(str);
       if (Number.isFinite(num) && num > 0) return num;
+    }
+  }
+  // Second pass: look for keys that explicitly mention decompression/traction weight
+  for (const run of encounter.macroRuns) {
+    for (const [key, value] of Object.entries(run.answers)) {
+      const normKey = key.toLowerCase().replace(/[\s_-]+/g, "");
+      if (
+        normKey === "decompressionweight" ||
+        normKey === "tractionweight" ||
+        normKey === "treatmentweight" ||
+        normKey === "pullingweight"
+      ) {
+        const str = typeof value === "string" ? value : Array.isArray(value) ? value[0] : null;
+        if (!str) continue;
+        const num = parseFloat(str);
+        if (Number.isFinite(num) && num > 0) return num;
+      }
     }
   }
   return null;

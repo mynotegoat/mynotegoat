@@ -502,7 +502,7 @@ export function NewAppointmentModal({
 
     const durationMin = getDurationMinutes(sanitizedDraft.durationHours, sanitizedDraft.durationMinutes);
     const caseLabel = sanitizedDraft.caseLabel.trim() || buildCaseLabelFromPatient(selectedPatient);
-    const scheduleDates = getDatesForDraft(sanitizedDraft);
+    let scheduleDates = getDatesForDraft(sanitizedDraft);
     if (!scheduleDates.length) {
       setError("Recurring rule did not generate any appointment dates.");
       return;
@@ -525,14 +525,29 @@ export function NewAppointmentModal({
       return;
     }
 
-    const closedDate = scheduleDates.find((dateIso) => Boolean(findClosedKeyDateForDate(keyDates, dateIso)));
-    if (closedDate) {
-      const closedEntry = findClosedKeyDateForDate(keyDates, closedDate);
-      const reasonSuffix = closedEntry?.reason ? ` (${closedEntry.reason})` : "";
-      setError(
-        `Cannot schedule on CLOSED key date ${formatUsDateFromIso(closedDate)}${reasonSuffix}.`,
+    const closedDates = scheduleDates.filter((dateIso) => Boolean(findClosedKeyDateForDate(keyDates, dateIso)));
+    if (closedDates.length > 0) {
+      const openDates = scheduleDates.filter((dateIso) => !closedDates.includes(dateIso));
+      const closedList = closedDates
+        .map((dateIso) => {
+          const entry = findClosedKeyDateForDate(keyDates, dateIso);
+          const reason = entry?.reason ? ` (${entry.reason})` : "";
+          return `${formatUsDateFromIso(dateIso)}${reason}`;
+        })
+        .join("\n  • ");
+
+      if (openDates.length === 0) {
+        setError(`Cannot schedule — all dates fall on CLOSED key dates:\n  • ${closedList}`);
+        return;
+      }
+
+      const skipConfirmed = window.confirm(
+        `Cannot schedule on CLOSED key date(s):\n  • ${closedList}\n\nWould you like to skip ${closedDates.length === 1 ? "this date" : "these dates"} and schedule the remaining ${openDates.length} appointment${openDates.length === 1 ? "" : "s"}?`,
       );
-      return;
+      if (!skipConfirmed) return;
+
+      // Replace scheduleDates with only the open dates
+      scheduleDates = openDates;
     }
 
     if (scheduleSettings.enforceOfficeHours) {
