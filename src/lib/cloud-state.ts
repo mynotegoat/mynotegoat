@@ -246,11 +246,15 @@ function writeLocalSnapshot(snapshot: Record<string, unknown>) {
     if (!key.startsWith(LOCAL_KEY_PREFIX)) {
       continue;
     }
-    if (typeof value === "string") {
-      window.localStorage.setItem(key, value);
-      continue;
+    try {
+      if (typeof value === "string") {
+        window.localStorage.setItem(key, value);
+      } else {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch (storageErr) {
+      console.warn(`[Cloud Sync] Could not write "${key}" to localStorage (quota?):`, storageErr);
     }
-    window.localStorage.setItem(key, JSON.stringify(value));
   }
 }
 
@@ -701,8 +705,13 @@ async function bootstrapTableBackedEntities() {
             for (const key of enabledKeys) {
               const value = remoteKv.get(key);
               if (value !== undefined) {
-                window.localStorage.setItem(key, JSON.stringify(value));
-                replacedCount += 1;
+                try {
+                  window.localStorage.setItem(key, JSON.stringify(value));
+                  replacedCount += 1;
+                } catch (storageErr) {
+                  // localStorage quota exceeded — skip this key but don't crash bootstrap
+                  console.warn(`[Cloud Sync] Could not write "${key}" to localStorage (quota?):`, storageErr);
+                }
               }
             }
           } finally {
