@@ -90,17 +90,12 @@ export const RichTextTemplateEditor = forwardRef<
   const lastAppliedRef = useRef("");
   const isFocusedRef = useRef(false);
 
-  // Strip HTML tags to get plain text for comparison.
-  const stripTags = (html: string) => html.replace(/<[^>]*>/g, "").trim();
-
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
     if (!editor) {
       return;
     }
     const nextHtml = normalizeIncomingValue(value);
-    // If the incoming value matches what the editor last emitted, skip —
-    // this avoids resetting the cursor on every keystroke.
     if (editor.innerHTML === nextHtml) {
       lastAppliedRef.current = nextHtml;
       return;
@@ -126,26 +121,10 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
-
     const next = normalizeOutgoingValue(editor.innerHTML);
     if (next === lastAppliedRef.current) {
       return;
     }
-
-    // Compare the actual text content (tags stripped) of the editor vs the
-    // parent's value.  If the text is identical it means only the HTML
-    // formatting differs (e.g. browser normalised self-closing tags or
-    // whitespace after a programmatic sync).  Treat that as a no-op so we
-    // don't overwrite the parent with a cosmetic-only diff.
-    const nextText = stripTags(next);
-    const valueText = stripTags(value);
-    if (nextText === valueText) {
-      // Keep lastAppliedRef in sync so future real edits aren't compared
-      // against stale data.
-      lastAppliedRef.current = next;
-      return;
-    }
-
     lastAppliedRef.current = next;
     onChange(next);
   };

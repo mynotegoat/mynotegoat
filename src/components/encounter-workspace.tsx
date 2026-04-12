@@ -1723,7 +1723,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                             const linked = encountersByNewest.find(
                               (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
                             );
-                            const canStart = apt.status === "Check In";
+                            const canStart = apt.status !== "Canceled";
                             const isLinkedToSelected = linkedAppointmentForStatus?.id === apt.id;
                             const printChecked = linked ? selectedSoapPrintEncounterIds.includes(linked.id) : false;
                             // Smart word-wrap: break long type names at the midpoint
