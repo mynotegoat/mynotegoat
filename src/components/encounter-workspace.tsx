@@ -1895,10 +1895,21 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     {selectedEncounter.signed ? (
                       <button
                         className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                        onClick={() => setSigned(selectedEncounter.id, false)}
+                        onClick={() => {
+                          setSigned(selectedEncounter.id, false);
+                          if (linkedAppointmentForStatus) {
+                            updateAppointment(linkedAppointmentForStatus.id, (current) => ({
+                              ...current,
+                              status: "Check In",
+                            }));
+                            setMessage(`Encounter reopened and ${selectedEncounter.patientName} checked back in.`);
+                          } else {
+                            setMessage("Encounter reopened.");
+                          }
+                        }}
                         type="button"
                       >
-                        Reopen Encounter
+                        Reopen + Check In
                       </button>
                     ) : (
                       <button
