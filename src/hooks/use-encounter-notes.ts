@@ -9,6 +9,7 @@ import {
   forceSaveAllEncountersToCloud,
   getNowUsDate,
   loadEncounterNoteRecords,
+  loadEncounterNotesFromCloud,
   saveEncounterNoteRecords,
   type EncounterChargeEntry,
   type EncounterMacroRunRecord,
@@ -45,6 +46,17 @@ export function useEncounterNotes() {
   // increments; each notification decrements.  Only reload from LS
   // when counter hits 0 (meaning a DIFFERENT hook instance wrote).
   const selfWriteCountRef = useRef(0);
+
+  // If localStorage is empty (quota exceeded), fetch from cloud
+  useEffect(() => {
+    const local = loadEncounterNoteRecords();
+    if (local.length > 0) return; // localStorage has data, no need for fallback
+    void loadEncounterNotesFromCloud().then((cloud) => {
+      if (cloud && cloud.length > 0) {
+        setEncounters(cloud);
+      }
+    });
+  }, []);
 
   // Listen for changes made by other hook instances on this page
   useEffect(() => {

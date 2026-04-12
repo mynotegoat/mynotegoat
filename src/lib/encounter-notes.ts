@@ -416,8 +416,30 @@ export function replaceEncounterNotesFromCloud(cloudRecords: EncounterNoteRecord
   }
 
   const merged = Array.from(mergedById.values());
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  } catch {
+    // Quota exceeded — localStorage can't hold this, but we still update
+    // the in-memory previousNotesById so dual-write diffs work correctly.
+    console.warn("[encounter-notes] localStorage quota exceeded during cloud merge");
+  }
   previousNotesById = new Map(merged.map((n) => [n.id, n]));
+}
+
+/**
+ * Async fallback: fetch encounters from the cloud table when localStorage
+ * is empty (e.g. quota exceeded). Returns the records or null.
+ */
+export async function loadEncounterNotesFromCloud(): Promise<EncounterNoteRecord[] | null> {
+  try {
+    const { isCloudEntityEnabled } = await import("@/lib/feature-flags");
+    if (!isCloudEntityEnabled("encounterNotes")) return null;
+    const { fetchAllEncounterNotesFromTable } = await import("@/lib/encounter-notes-cloud");
+    return await fetchAllEncounterNotesFromTable();
+  } catch (err) {
+    console.warn("[encounter-notes] cloud fallback failed:", err);
+    return null;
+  }
 }
 
 export function createEncounterId() {
