@@ -1802,7 +1802,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       const linked = encountersByNewest.find(
                         (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
                       );
-                      const canStart = apt.status === "Check In" || apt.status === "Check Out";
+                      const canStart = apt.status === "Check In";
                       return (
                         <tr key={apt.id} className="border-t border-[var(--line-soft)]">
                           <td className="px-2 py-1.5 tabular-nums">{dateUs}</td>
@@ -1817,18 +1817,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               >
                                 {linked.signed ? "View" : "Open"}
                               </button>
-                            ) : (
+                            ) : canStart ? (
                               <button
-                                className={`rounded-lg border px-2 py-0.5 text-xs font-semibold ${
-                                  canStart
-                                    ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                                    : "cursor-not-allowed border-[var(--line-soft)] bg-[var(--bg-soft)] text-[var(--text-muted)]"
-                                }`}
-                                disabled={!canStart}
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
                                 onClick={() => {
-                                  if (!canStart) {
-                                    return;
-                                  }
                                   const provider = officeSettings.doctorName || "Provider";
                                   const newId = createEncounter({
                                     patientId: apt.patientId,
@@ -1842,15 +1834,13 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                                     setMessage(`Encounter created for ${dateUs}.`);
                                   }
                                 }}
-                                title={
-                                  canStart
-                                    ? "Start encounter"
-                                    : "Patient must be Checked In before starting an encounter"
-                                }
+                                title="Start encounter"
                                 type="button"
                               >
                                 + Encounter
                               </button>
+                            ) : (
+                              <span className="text-xs text-[var(--text-muted)]">-</span>
                             )}
                           </td>
                         </tr>
