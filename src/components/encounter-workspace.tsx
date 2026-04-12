@@ -840,8 +840,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           // Only hide if encounter exists AND is signed (fully done)
           if (linked?.signed) return false;
         }
-        // Also hide cancelled/no-show if hiding completed
-        if (apt.status === "Canceled" || apt.status === "No Show") return false;
+        // Also hide cancelled if hiding completed
+        if (apt.status === "Canceled") return false;
         return true;
       })
       .sort((a, b) => dir * a.date.localeCompare(b.date) || dir * a.startTime.localeCompare(b.startTime));

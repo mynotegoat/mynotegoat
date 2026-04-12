@@ -4,7 +4,6 @@ export type AppointmentStatus =
   | "Scheduled"
   | "Check In"
   | "Check Out"
-  | "No Show"
   | "Canceled"
   | "Reschedule";
 
@@ -34,7 +33,6 @@ export const appointmentStatusOptions: AppointmentStatus[] = [
   "Scheduled",
   "Check In",
   "Check Out",
-  "No Show",
   "Canceled",
   "Reschedule",
 ];
@@ -141,7 +139,7 @@ function normalizeStatus(value: unknown): AppointmentStatus {
     return "Check Out";
   }
   if (candidate === "no show") {
-    return "No Show";
+    return "Canceled"; // legacy: No Show mapped to Canceled
   }
   if (candidate === "canceled" || candidate === "cancelled") {
     return "Canceled";
@@ -353,8 +351,6 @@ export function getStatusBadgeClass(status: AppointmentStatus) {
       return "bg-[rgba(13,121,191,0.14)] text-[#0d79bf]";
     case "Check Out":
       return "bg-[rgba(31,157,96,0.14)] text-[#1f9d60]";
-    case "No Show":
-      return "bg-[rgba(201,66,58,0.14)] text-[#b43b34]";
     case "Canceled":
       return "bg-[rgba(124,141,158,0.2)] text-[#516578]";
     case "Reschedule":

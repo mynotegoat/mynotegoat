@@ -313,10 +313,9 @@ export function NewAppointmentModal({
 
   const defaultStartDate = useMemo(() => {
     if (initialDate) return initialDate;
-    return getNextBusinessDayIso(scheduleSettings, closedDateSet, getTodayIsoDate(), false);
+    // Default to today (inclusive) — the real guard is duplicate-day detection below
+    return getNextBusinessDayIso(scheduleSettings, closedDateSet, getTodayIsoDate(), true);
   }, [initialDate, scheduleSettings, closedDateSet]);
-
-  const [allowStartToday, setAllowStartToday] = useState(false);
 
   const [draft, setDraft] = useState<NewAppointmentDraft>(() =>
     createInitialDraft(defaultStartDate, defaultAppointmentType),
@@ -330,9 +329,7 @@ export function NewAppointmentModal({
     if (!open) {
       return;
     }
-    const baseDate = allowStartToday
-      ? (initialDate ?? getTodayIsoDate())
-      : defaultStartDate;
+    const baseDate = defaultStartDate;
     const initial = createInitialDraft(baseDate, defaultAppointmentType);
     if (lockedPatientId) {
       const lockedPatient = patients.find((p) => p.id === lockedPatientId);
@@ -349,7 +346,7 @@ export function NewAppointmentModal({
     setDraft(initial);
     setShowPatientSuggestions(false);
     setError("");
-  }, [open, initialDate, lockedPatientId, defaultAppointmentType, defaultStartDate, allowStartToday]);
+  }, [open, initialDate, lockedPatientId, defaultAppointmentType, defaultStartDate]);
 
   const patientById = useMemo(() => {
     const map = new Map<string, (typeof patients)[number]>();
@@ -456,12 +453,6 @@ export function NewAppointmentModal({
       setError("Start date and start time are required.");
       return;
     }
-    if (!allowStartToday && draft.startDate < defaultStartDate) {
-      setError(
-        `Start date must be on or after ${formatUsDateFromIso(defaultStartDate)} (next business day). Enable "allow same-day scheduling" to override.`,
-      );
-      return;
-    }
     if (!isStartTimeAlignedToInterval(draft.startTime, scheduleSettings.appointmentIntervalMin)) {
       setError(
         `Start time must align to ${scheduleSettings.appointmentIntervalMin}-minute intervals.`,
@@ -548,6 +539,33 @@ export function NewAppointmentModal({
 
       // Replace scheduleDates with only the open dates
       scheduleDates = openDates;
+    }
+
+    // Duplicate-day detection: prevent scheduling this patient on a day they already have an appointment
+    const patientExistingDates = new Set(
+      scheduleAppointments
+        .filter((entry) => entry.patientId === selectedPatient.id && entry.status !== "Canceled")
+        .map((entry) => entry.date),
+    );
+    const duplicateDates = scheduleDates.filter((dateIso) => patientExistingDates.has(dateIso));
+    if (duplicateDates.length > 0) {
+      const nonDupDates = scheduleDates.filter((dateIso) => !patientExistingDates.has(dateIso));
+      const dupList = duplicateDates
+        .slice(0, 5)
+        .map((dateIso) => formatUsDateFromIso(dateIso))
+        .join(", ");
+
+      if (nonDupDates.length === 0) {
+        setError(`${selectedPatient.fullName} already has an appointment on ${dupList}. Cannot create duplicate.`);
+        return;
+      }
+
+      const skipConfirmed = window.confirm(
+        `${selectedPatient.fullName} already has an appointment on:\n  • ${duplicateDates.map((d) => formatUsDateFromIso(d)).join("\n  • ")}\n\nSkip ${duplicateDates.length === 1 ? "this date" : "these dates"} and schedule the remaining ${nonDupDates.length} appointment${nonDupDates.length === 1 ? "" : "s"}?`,
+      );
+      if (!skipConfirmed) return;
+
+      scheduleDates = nonDupDates;
     }
 
     if (scheduleSettings.enforceOfficeHours) {
@@ -816,7 +834,6 @@ export function NewAppointmentModal({
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Date *</span>
             <input
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              min={allowStartToday ? undefined : defaultStartDate}
               onChange={(event) => {
                 const nextStartDate = event.target.value;
                 const nextStartDay = getDayOfWeek(nextStartDate);
@@ -836,45 +853,6 @@ export function NewAppointmentModal({
               type="date"
               value={draft.startDate}
             />
-            <label className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-muted)]">
-              <input
-                checked={allowStartToday}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setAllowStartToday(checked);
-                  if (checked) {
-                    const today = getTodayIsoDate();
-                    setDraft((current) => ({
-                      ...current,
-                      startDate: today,
-                      recurDays:
-                        current.isRecurring && current.recurUnit === "weeks"
-                          ? current.recurDays
-                          : [getDayOfWeek(today)],
-                      recurEndDate:
-                        current.recurrenceEndMode === "date" && current.recurEndDate < today
-                          ? addDays(today, 30)
-                          : current.recurEndDate,
-                    }));
-                  } else {
-                    setDraft((current) => ({
-                      ...current,
-                      startDate: defaultStartDate,
-                      recurDays:
-                        current.isRecurring && current.recurUnit === "weeks"
-                          ? current.recurDays
-                          : [getDayOfWeek(defaultStartDate)],
-                      recurEndDate:
-                        current.recurrenceEndMode === "date" && current.recurEndDate < defaultStartDate
-                          ? addDays(defaultStartDate, 30)
-                          : current.recurEndDate,
-                    }));
-                  }
-                }}
-                type="checkbox"
-              />
-              Override: allow same-day scheduling
-            </label>
           </label>
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time *</span>

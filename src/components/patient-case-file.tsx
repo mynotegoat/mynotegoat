@@ -1839,10 +1839,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     [patientAppointmentRecords],
   );
   const checkedInOutCount = checkedInCount + checkedOutCount;
-  const noShowCount = useMemo(
-    () => patientAppointmentRecords.filter((entry) => entry.status === "No Show").length,
-    [patientAppointmentRecords],
-  );
   const canceledCount = useMemo(
     () => patientAppointmentRecords.filter((entry) => entry.status === "Canceled").length,
     [patientAppointmentRecords],
@@ -1884,11 +1880,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           helper: `In ${checkedInCount} • Out ${checkedOutCount}`,
         },
         {
-          key: "noShow",
-          label: "No Show",
-          value: `${noShowCount}`,
-        },
-        {
           key: "canceled",
           label: "Canceled",
           value: `${canceledCount}`,
@@ -1918,7 +1909,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       checkedOutCount,
       closedEncounterCount,
       currentBillTotal,
-      noShowCount,
       openPatientEncounterRecords.length,
       quickStatsSettings.visibleStats,
     ],
