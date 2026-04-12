@@ -1863,7 +1863,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     [patientEncounterRecords],
   );
   // Auto-sync billedAmount from encounter charges when charges exist
-  const prevChargesTotal = useRef(encounterChargesTotal);
+  const prevChargesTotal = useRef<number | null>(null);
   if (encounterChargesTotal > 0 && encounterChargesTotal !== prevChargesTotal.current) {
     prevChargesTotal.current = encounterChargesTotal;
     setBilledAmount(encounterChargesTotal.toFixed(2));
