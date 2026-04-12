@@ -827,12 +827,14 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       }
       .billing-pages .bill-totals { margin-top: 8px; display: flex; justify-content: flex-end; }
       .billing-pages .bill-total-box {
-        background: #0d79bf;
-        color: #fff;
-        padding: 6px 14px;
-        font-size: 12px;
+        background: #0d79bf !important;
+        color: #fff !important;
+        padding: 8px 18px;
+        font-size: 14px;
         font-weight: 700;
-        border-radius: 3px;
+        border-radius: 4px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
 
       @page {
@@ -847,7 +849,7 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
   </head>
   <body>
     ${encounterPagesHtml}
-    <main class="wrapper">
+    <main class="wrapper"${encounterPagesHtml ? ' style="page-break-before: always;"' : ""}>
       ${headerTopMarkup}
       ${headerMarkup}
       <div class="content">${bodyHtml}</div>
@@ -2760,7 +2762,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           providerName: officeSettings.doctorName,
           diagnoses: patientDiagnoses.map((d) => ({ code: d.code, description: d.description })),
           charges: allCharges,
-          total: currentBillTotal,
+          total: allCharges.reduce((sum, c) => sum + c.lineTotal, 0),
         });
       }
     }
