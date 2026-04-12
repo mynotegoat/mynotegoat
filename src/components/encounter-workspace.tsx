@@ -1122,7 +1122,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       } else {
         // Couldn't locate the original macro output — append fresh.
         nextSectionText = currentSectionText.trim()
-          ? `${currentSectionText.trim()}\n\n${generatedText}`
+          ? `${currentSectionText.trim()}\n${generatedText}`
           : generatedText;
       }
 

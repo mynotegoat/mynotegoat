@@ -221,7 +221,7 @@ export function useEncounterNotes() {
       }
       upsertEncounter(encounterId, (current) => {
         const existing = current.soap[section].trim();
-        const nextText = existing ? `${existing}\n\n${trimmed}` : trimmed;
+        const nextText = existing ? `${existing}\n${trimmed}` : trimmed;
         return {
           ...current,
           soap: {
