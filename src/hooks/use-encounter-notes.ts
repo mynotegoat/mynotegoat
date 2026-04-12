@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createEncounterChargeId,
   createEncounterDiagnosisId,
@@ -48,9 +48,17 @@ export function useEncounterNotes() {
     return valid;
   });
 
+  // Guard: skip reloads triggered by our own writes.
+  const selfWriteRef = useRef(false);
+
   // Listen for changes made by other hook instances on this page
   useEffect(() => {
     return onLocalChange(SYNC_KEY, () => {
+      // If WE just wrote, skip — we already have the latest state.
+      if (selfWriteRef.current) {
+        selfWriteRef.current = false;
+        return;
+      }
       setEncounters(loadEncounterNoteRecords());
     });
   }, []);
@@ -59,6 +67,7 @@ export function useEncounterNotes() {
     setEncounters((current) => {
       const next = updater(current);
       saveEncounterNoteRecords(next);
+      selfWriteRef.current = true;
       notifyChange(SYNC_KEY);
       return next;
     });
@@ -221,7 +230,7 @@ export function useEncounterNotes() {
       }
       upsertEncounter(encounterId, (current) => {
         const existing = current.soap[section].trim();
-        const nextText = existing ? `${existing}\n${trimmed}` : trimmed;
+        const nextText = existing ? `${existing}<p><br></p>${trimmed}` : trimmed;
         return {
           ...current,
           soap: {

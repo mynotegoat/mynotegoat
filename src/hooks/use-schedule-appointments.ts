@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadScheduleAppointments,
   saveScheduleAppointments,
@@ -21,9 +21,15 @@ export function useScheduleAppointments() {
     loadScheduleAppointments(),
   );
 
+  const selfWriteRef = useRef(false);
+
   // Listen for changes made by other hook instances on this page
   useEffect(() => {
     return onLocalChange(SYNC_KEY, () => {
+      if (selfWriteRef.current) {
+        selfWriteRef.current = false;
+        return;
+      }
       setScheduleAppointments(loadScheduleAppointments());
     });
   }, []);
@@ -33,6 +39,7 @@ export function useScheduleAppointments() {
       setScheduleAppointments((current) => {
         const next = updater(current).sort(compareAppointments);
         saveScheduleAppointments(next);
+        selfWriteRef.current = true;
         notifyChange(SYNC_KEY);
         return next;
       });
