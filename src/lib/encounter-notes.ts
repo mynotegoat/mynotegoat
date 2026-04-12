@@ -303,18 +303,52 @@ export function loadEncounterNoteRecords() {
 
 let previousNotesById: Map<string, EncounterNoteRecord> = new Map();
 
-export function saveEncounterNoteRecords(records: EncounterNoteRecord[]) {
+export function saveEncounterNoteRecords(records: EncounterNoteRecord[]): boolean {
   if (typeof window === "undefined") {
-    return;
+    return false;
   }
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch (err) {
     // localStorage can throw QuotaExceededError — log but don't crash the app.
     console.error("[encounter-notes] localStorage write failed:", err);
+    return false;
   }
   void dualWriteEncounterNotesToCloud(records, previousNotesById);
   previousNotesById = new Map(records.map((n) => [n.id, n]));
+  return true;
+}
+
+/**
+ * Force-save ALL encounters to both localStorage and cloud (bulk upsert).
+ * Used by the "Save All Encounters" button — bypasses the diff-based
+ * dual-write and pushes everything unconditionally.
+ */
+export async function forceSaveAllEncountersToCloud(
+  records: EncounterNoteRecord[],
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  // 1. Save to localStorage first
+  const lsOk = saveEncounterNoteRecords(records);
+  if (!lsOk) {
+    return { ok: false, count: 0, error: "localStorage write failed (storage may be full)" };
+  }
+
+  // 2. Bulk-upsert everything to cloud
+  try {
+    const { isCloudEntityEnabled } = await import("@/lib/feature-flags");
+    if (!isCloudEntityEnabled("encounterNotes")) {
+      return { ok: true, count: records.length, error: "Cloud sync is disabled" };
+    }
+    const { bulkUpsertEncounterNotesToTable } = await import("@/lib/encounter-notes-cloud");
+    return await bulkUpsertEncounterNotesToTable(records);
+  } catch (error) {
+    console.error("[encounter-notes] force cloud save failed:", error);
+    return {
+      ok: false,
+      count: 0,
+      error: error instanceof Error ? error.message : "Unknown cloud save error",
+    };
+  }
 }
 
 async function dualWriteEncounterNotesToCloud(

@@ -669,6 +669,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     moveCharge,
     setSigned,
     deleteEncounter,
+    forceSaveAll,
   } = useEncounterNotes();
 
   const { contacts: allContacts } = useContactDirectory();
@@ -1901,11 +1902,19 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                      onClick={() => setMessage("Encounter saved.")}
+                      className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition-all active:scale-[0.97] active:brightness-95"
+                      onClick={async () => {
+                        setMessage("Saving all encounters...");
+                        const result = await forceSaveAll();
+                        if (result.ok) {
+                          setMessage(`All encounters saved (${result.count} total).${result.error ? ` Note: ${result.error}` : ""}`);
+                        } else {
+                          setMessage(`Save failed: ${result.error || "Unknown error"}`);
+                        }
+                      }}
                       type="button"
                     >
-                      Save Now
+                      Save All
                     </button>
                     {selectedEncounter.signed ? (
                       <button

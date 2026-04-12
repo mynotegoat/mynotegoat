@@ -6,6 +6,7 @@ import {
   createEncounterDiagnosisId,
   createEncounterId,
   createEncounterMacroRunId,
+  forceSaveAllEncountersToCloud,
   getNowUsDate,
   loadEncounterNoteRecords,
   saveEncounterNoteRecords,
@@ -15,7 +16,6 @@ import {
   type EncounterNoteRecord,
   type EncounterSection,
 } from "@/lib/encounter-notes";
-import { patients } from "@/lib/mock-data";
 import { notifyChange, onLocalChange } from "@/lib/local-sync";
 
 const SYNC_KEY = "casemate.encounter-notes.v1";
@@ -37,16 +37,9 @@ function nowIso() {
 }
 
 export function useEncounterNotes() {
-  const [encounters, setEncounters] = useState<EncounterNoteRecord[]>(() => {
-    const all = loadEncounterNoteRecords();
-    // Remove orphaned encounters whose patient no longer exists
-    const patientIds = new Set(patients.map((p) => p.id));
-    const valid = all.filter((enc) => patientIds.has(enc.patientId));
-    if (valid.length < all.length) {
-      saveEncounterNoteRecords(valid);
-    }
-    return valid;
-  });
+  const [encounters, setEncounters] = useState<EncounterNoteRecord[]>(() =>
+    loadEncounterNoteRecords(),
+  );
 
   // Counter: skip reloads triggered by our own writes.  Each write
   // increments; each notification decrements.  Only reload from LS
@@ -463,6 +456,11 @@ export function useEncounterNotes() {
     [encounters],
   );
 
+  /** Force-save all encounters to localStorage + cloud (bulk upsert). */
+  const forceSaveAll = useCallback(async (): Promise<{ ok: boolean; count: number; error?: string }> => {
+    return forceSaveAllEncountersToCloud(encounters);
+  }, [encounters]);
+
   return {
     encounters,
     encountersByNewest,
@@ -483,5 +481,6 @@ export function useEncounterNotes() {
     moveCharge,
     setSigned,
     deleteEncounter,
+    forceSaveAll,
   };
 }
