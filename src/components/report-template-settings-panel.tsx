@@ -385,7 +385,7 @@ export function ReportTemplateSettingsPanel() {
       <style>{`@keyframes fadeInOut { 0% { opacity: 0; transform: translateX(-50%) translateY(-8px); } 15% { opacity: 1; transform: translateX(-50%) translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; } }`}</style>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
-          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
           onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetToDefaults(); }}
           type="button"
         >
@@ -413,7 +413,7 @@ export function ReportTemplateSettingsPanel() {
               />
             </label>
             <button
-              className="mt-2 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="mt-2 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddTemplate}
               type="button"
             >
@@ -449,7 +449,7 @@ export function ReportTemplateSettingsPanel() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-xl font-semibold">Edit Narrative Template</h4>
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               disabled={reportTemplates.templates.length <= 1}
               onClick={() => {
                 if (!window.confirm(`Delete template "${selectedTemplate.name}"? This cannot be undone.`)) return;

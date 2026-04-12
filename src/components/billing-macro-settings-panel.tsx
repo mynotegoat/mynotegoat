@@ -157,7 +157,7 @@ export function BillingMacroSettingsPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
-          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
           onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetToDefaults(); }}
           type="button"
         >
@@ -267,7 +267,7 @@ export function BillingMacroSettingsPanel() {
           </label>
           <div className="flex items-end">
             <button
-              className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddTreatment}
               type="button"
             >
@@ -425,7 +425,7 @@ export function BillingMacroSettingsPanel() {
                 value={diagnosisFolderDraft}
               />
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleAddDiagnosisFolder}
                 type="button"
               >
@@ -516,7 +516,7 @@ export function BillingMacroSettingsPanel() {
               </select>
             </div>
             <button
-              className="mt-2 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="mt-2 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddDiagnosis}
               type="button"
             >
@@ -604,7 +604,7 @@ export function BillingMacroSettingsPanel() {
               value={bundleNameDraft}
             />
             <button
-              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddBundle}
               type="button"
             >

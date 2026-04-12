@@ -327,14 +327,14 @@ export function DocumentScannerModal({
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
             onClick={handleRetake}
             type="button"
           >
             Retake
           </button>
           <button
-            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white disabled:opacity-60"
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90 disabled:opacity-60"
             disabled={!imageLoaded || busy}
             onClick={handleUseScan}
             type="button"

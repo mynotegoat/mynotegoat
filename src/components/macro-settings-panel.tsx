@@ -287,7 +287,7 @@ export function MacroSettingsPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <button
-          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+          className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
           onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetToDefaults(); }}
           type="button"
         >
@@ -631,7 +631,7 @@ export function MacroSettingsPanel() {
                     Multi-select
                   </label>
                   <button
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                     onClick={handleAddQuestion}
                     type="button"
                   >
@@ -910,14 +910,14 @@ export function MacroSettingsPanel() {
 
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => setRunOpen(false)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={runMacro}
                 type="button"
               >

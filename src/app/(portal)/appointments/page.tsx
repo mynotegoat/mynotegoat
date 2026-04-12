@@ -1091,11 +1091,11 @@ export default function AppointmentsPage() {
                 value={selectedDate}
               />
             </label>
-            <button className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold" type="button">
+            <button className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner" type="button">
               Day
             </button>
             <button
-              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={openNewAppointmentModal}
               type="button"
             >
@@ -1998,14 +1998,14 @@ export default function AppointmentsPage() {
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => setShowNewAppointmentModal(false)}
                 type="button"
               >
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleSubmitNewAppointment}
                 type="button"
               >
@@ -2084,7 +2084,7 @@ export default function AppointmentsPage() {
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => {
                   setCheckInRoomPrompt(null);
                   setCheckInRoomDraft("");
@@ -2094,14 +2094,14 @@ export default function AppointmentsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={() => completeCheckInWithRoom("")}
                 type="button"
               >
                 Check In Without Room
               </button>
               <button
-                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={() => completeCheckInWithRoom(checkInRoomDraft)}
                 type="button"
               >
@@ -2359,14 +2359,14 @@ export default function AppointmentsPage() {
               </button>
               <div className="flex flex-wrap justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={() => setSelectedAppointmentId(null)}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   onClick={handleSaveAppointmentUpdates}
                   type="button"
                 >

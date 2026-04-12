@@ -926,7 +926,7 @@ export default function PatientsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-xl font-semibold">All Patients Workspace</h3>
           <button
-            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
             onClick={openNewPatientModal}
             type="button"
           >
@@ -1386,7 +1386,7 @@ export default function PatientsPage() {
                 />
               </label>
               <div className="flex items-end md:col-span-2">
-                <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white" onClick={handleAddTask} type="button">Add</button>
+                <button className="w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90" onClick={handleAddTask} type="button">Add</button>
               </div>
             </div>
             {taskMessage && <p className="mt-3 text-sm font-semibold text-[var(--text-muted)]">{taskMessage}</p>}
@@ -1822,14 +1822,14 @@ export default function PatientsPage() {
 
               <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                 <button
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                   onClick={closeNewPatientModal}
                   type="button"
                 >
                   Cancel
                 </button>
                 <button
-                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                  className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                   type="submit"
                 >
                   Create Patient

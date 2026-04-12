@@ -129,7 +129,7 @@ export function PackageBuilderSettingsPanel() {
           </label>
           <div className="col-span-12 flex items-end lg:col-span-2">
             <button
-              className="h-[42px] w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="h-[42px] w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddPackage}
               type="button"
             >

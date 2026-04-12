@@ -659,6 +659,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     setSoapSection,
     addMacroRun,
     updateMacroRun,
+    removeMacroRun,
     appendSoapSection,
     addCharge,
     updateCharge,
@@ -2195,18 +2196,33 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                             .slice(0, 2)
                             .join(" • ");
                           return (
-                            <button
-                              key={run.id}
-                              className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-left text-sm font-semibold"
-                              disabled={selectedEncounter.signed}
-                              onClick={() => handleEditExistingMacroRun(run)}
-                              type="button"
-                            >
-                              <span>{run.macroName}</span>
-                              {answerPreview && (
-                                <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">{answerPreview}</span>
+                            <span key={run.id} className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] bg-white pr-1">
+                              <button
+                                className="px-3 py-1.5 text-left text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                                disabled={selectedEncounter.signed}
+                                onClick={() => handleEditExistingMacroRun(run)}
+                                type="button"
+                              >
+                                <span>{run.macroName}</span>
+                                {answerPreview && (
+                                  <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">{answerPreview}</span>
+                                )}
+                              </button>
+                              {!selectedEncounter.signed && (
+                                <button
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-red-50 hover:text-[#b43b34] transition-colors"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove "${run.macroName}" input?`)) {
+                                      removeMacroRun(selectedEncounter.id, run.id);
+                                    }
+                                  }}
+                                  title={`Remove ${run.macroName}`}
+                                  type="button"
+                                >
+                                  ×
+                                </button>
                               )}
-                            </button>
+                            </span>
                           );
                         })}
                       </div>

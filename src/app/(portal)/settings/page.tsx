@@ -1485,7 +1485,7 @@ export default function SettingsPage() {
       <CollapsibleSection
         actions={
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
             onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetOfficeSettingsToDefaults(); }}
             type="button"
           >
@@ -1638,7 +1638,7 @@ export default function SettingsPage() {
       <CollapsibleSection
         actions={
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
             onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetContactCategoriesToDefaults(); }}
             type="button"
           >
@@ -1668,7 +1668,7 @@ export default function SettingsPage() {
               />
             </label>
             <button
-              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+              className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddContactCategory}
               type="button"
             >
@@ -1706,7 +1706,7 @@ export default function SettingsPage() {
       <CollapsibleSection
         actions={
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
             onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetScheduleSettingsToDefaults(); }}
             type="button"
           >
@@ -2172,14 +2172,14 @@ export default function SettingsPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetPriorityRulesToDefaults(); }}
               type="button"
             >
               Reset Priority Rules
             </button>
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetDashboardWorkspaceSettingsToDefaults(); }}
               type="button"
             >
@@ -2634,21 +2634,21 @@ export default function SettingsPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => setAllStatsVisible(true)}
               type="button"
             >
               Select All
             </button>
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => setAllStatsVisible(false)}
               type="button"
             >
               Clear All
             </button>
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetQuickStatsToDefaults(); }}
               type="button"
             >
@@ -2686,14 +2686,14 @@ export default function SettingsPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetCaseStatusesToDefaults(); }}
               type="button"
             >
               Reset Status Defaults
             </button>
             <button
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
               onClick={() => { if (window.confirm("Are you sure you want to reset to defaults? This will overwrite your current settings.")) resetLienOptionsToDefaults(); }}
               type="button"
             >
@@ -2743,7 +2743,7 @@ export default function SettingsPage() {
           </label>
 
           <button
-            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+            className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
             onClick={handleAddCaseStatus}
             type="button"
           >
@@ -2861,7 +2861,7 @@ export default function SettingsPage() {
                     value={lienOptionDraft}
                   />
                   <button
-                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                    className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                     onClick={handleAddLienOption}
                     type="button"
                   >
@@ -2964,7 +2964,7 @@ export default function SettingsPage() {
       <CollapsibleSection
         actions={
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+            className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
             onClick={() => {
               if (window.confirm("Reset email settings to defaults?")) resetEmailSettings();
             }}
@@ -3116,7 +3116,7 @@ export default function SettingsPage() {
                 Download a JSON backup for transfer to another office or for your own archive.
               </p>
               <button
-                className="mt-3 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                className="mt-3 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
                 onClick={handleExportBackup}
                 type="button"
               >
@@ -3142,7 +3142,7 @@ export default function SettingsPage() {
                 <p className="mt-2 text-xs text-[var(--text-muted)]">Selected file: {importBackupFile.name}</p>
               )}
               <button
-                className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                 onClick={handleImportBackup}
                 type="button"
               >
