@@ -4319,7 +4319,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
             {encounterMessage && <p className="mt-2 text-sm font-semibold text-[var(--brand-primary)]">{encounterMessage}</p>}
 
-            <div className="mt-3 grid gap-4 xl:grid-cols-[1.8fr_1fr]">
+            <div className="mt-3 grid items-start gap-4 xl:grid-cols-[1.8fr_1fr]">
               <article className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
                 <h4 className="text-base font-semibold">Scheduled Appointments</h4>
                 <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
