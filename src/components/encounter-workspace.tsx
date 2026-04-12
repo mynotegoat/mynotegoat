@@ -1453,13 +1453,20 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     if (!confirmed) {
       return;
     }
+    // Reset linked appointment back to Check In so the user can recreate.
+    if (linkedAppointmentForStatus) {
+      updateAppointment(linkedAppointmentForStatus.id, (current) => ({
+        ...current,
+        status: "Check In",
+      }));
+    }
     // Charges live inside EncounterNoteRecord.charges[], so deleting the
     // encounter naturally removes all attached charges in one shot.
     deleteEncounter(selectedEncounter.id);
     setMessage(
       chargeCount > 0
-        ? `Encounter deleted (${chargeCount} charge${chargeCount === 1 ? "" : "s"} removed).`
-        : "Encounter deleted.",
+        ? `Encounter deleted (${chargeCount} charge${chargeCount === 1 ? "" : "s"} removed). Appointment set back to Check In.`
+        : "Encounter deleted. Appointment set back to Check In.",
     );
   };
 
