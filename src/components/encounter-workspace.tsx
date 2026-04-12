@@ -1676,7 +1676,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               <p className="mt-3 text-sm text-[var(--text-muted)]">No encounters or appointments found.</p>
             ) : (
               <>
-                {/* ── Appointments ── */}
+                {/* ── Unified Appointments + Encounters ── */}
                 {filteredEncounterPatientId && allPatientAppointments.length > 0 && (
                   <div className="mt-3">
                     <div className="flex items-center justify-between gap-2">
@@ -1707,6 +1707,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       <table className="min-w-full border-collapse text-sm">
                         <thead>
                           <tr className="bg-[var(--bg-soft)] text-left">
+                            <th className="w-6 px-1 py-1"></th>
                             <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
                             <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</th>
                             <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Status</th>
@@ -1724,6 +1725,15 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                             );
                             const canStart = apt.status === "Check In";
                             const isLinkedToSelected = linkedAppointmentForStatus?.id === apt.id;
+                            const printChecked = linked ? selectedSoapPrintEncounterIds.includes(linked.id) : false;
+                            // Smart word-wrap: break long type names at the midpoint
+                            const typeWords = apt.appointmentType.split(" ");
+                            const typeLine1 = typeWords.length >= 4
+                              ? typeWords.slice(0, Math.ceil(typeWords.length / 2)).join(" ")
+                              : apt.appointmentType;
+                            const typeLine2 = typeWords.length >= 4
+                              ? typeWords.slice(Math.ceil(typeWords.length / 2)).join(" ")
+                              : null;
                             return (
                               <tr
                                 key={apt.id}
@@ -1733,8 +1743,23 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                                     : ""
                                 }`}
                               >
+                                <td className="px-1 py-1.5 text-center">
+                                  {linked && (
+                                    <input
+                                      checked={printChecked}
+                                      className="accent-[var(--brand-primary)]"
+                                      onChange={() => toggleSoapPrintEncounter(linked.id)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      type="checkbox"
+                                    />
+                                  )}
+                                </td>
                                 <td className="px-2 py-1.5 text-xs tabular-nums">{dateUs}</td>
-                                <td className="px-2 py-1.5 text-xs">{apt.appointmentType}</td>
+                                <td className="px-2 py-1.5 text-xs leading-tight">
+                                  {typeLine2 ? (
+                                    <>{typeLine1}<br />{typeLine2}</>
+                                  ) : typeLine1}
+                                </td>
                                 <td className="px-2 py-1.5">
                                   <span className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(apt.status)}`}>
                                     {formatAppointmentStatusLabel(apt.status)}
@@ -1785,17 +1810,9 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                )}
-
-                {/* ── Encounters ── */}
-                {filteredEncounterList.length > 0 && (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                        Encounters ({filteredEncounterList.length})
-                      </h4>
-                      <div className="flex flex-wrap gap-1.5">
+                    {/* Print controls */}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex gap-1.5">
                         <button
                           className="rounded border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-[10px] font-semibold transition-all active:scale-[0.97] active:shadow-inner"
                           disabled={!filteredEncounterListByOldest.length}
@@ -1817,68 +1834,23 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                           Clear
                         </button>
                       </div>
-                    </div>
-
-                    <div className="mt-1.5 max-h-[420px] space-y-1.5 overflow-auto">
-                      {filteredEncounterList.map((entry) => {
-                        const checked = selectedSoapPrintEncounterIds.includes(entry.id);
-                        return (
-                          <div
-                            key={`soap-print-${entry.id}`}
-                            className={`flex items-start gap-2 rounded-xl border px-2 py-1.5 ${
-                              resolvedEncounterId === entry.id
-                                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)]"
-                                : "border-[var(--line-soft)] bg-white"
-                            }`}
-                          >
-                            <input
-                              checked={checked}
-                              className="mt-1"
-                              onChange={() => toggleSoapPrintEncounter(entry.id)}
-                              onClick={(event) => event.stopPropagation()}
-                              type="checkbox"
-                            />
-                            <button
-                              className="min-w-0 flex-1 text-left"
-                              onClick={() => setSelectedEncounterId(entry.id)}
-                              type="button"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-sm font-semibold">{entry.patientName}</p>
-                                <span className={`status-pill ${entry.signed ? "active" : "warning"}`}>
-                                  {entry.signed ? "Closed" : "Open"}
-                                </span>
-                              </div>
-                              <p className="text-xs text-[var(--text-muted)]">
-                                {entry.encounterDate} • {entry.appointmentType}
-                              </p>
-                            </button>
-                          </div>
-                        );
-                      })}
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner disabled:opacity-50"
+                        disabled={!selectedSoapPrintEncounterIds.length}
+                        onClick={handlePrintSelectedSoapNotes}
+                        type="button"
+                      >
+                        Print SOAP
+                        {selectedSoapPrintEncounterIds.length > 0 && (
+                          <span className="ml-1 text-[10px] font-medium text-[var(--text-muted)]">({selectedSoapPrintEncounterIds.length})</span>
+                        )}
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {filteredEncounterList.length === 0 && (
-                  <p className="mt-3 text-sm text-[var(--text-muted)]">No encounters found.</p>
-                )}
-
-                {/* ── Print ── */}
-                {filteredEncounterList.length > 0 && (
-                  <div className="mt-3">
-                    <button
-                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner disabled:opacity-50"
-                      disabled={!selectedSoapPrintEncounterIds.length}
-                      onClick={handlePrintSelectedSoapNotes}
-                      type="button"
-                    >
-                      Print Selected SOAP Notes
-                      {selectedSoapPrintEncounterIds.length > 0 && (
-                        <span className="ml-1.5 text-xs font-medium text-[var(--text-muted)]">({selectedSoapPrintEncounterIds.length})</span>
-                      )}
-                    </button>
-                  </div>
+                {allPatientAppointments.length === 0 && filteredEncounterList.length === 0 && normalizeLookupText(encounterSearch) && (
+                  <p className="mt-3 text-sm text-[var(--text-muted)]">No appointments or encounters found.</p>
                 )}
               </>
             )}
