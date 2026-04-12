@@ -30,6 +30,7 @@ import {
   appointmentStatusOptions,
   formatAppointmentStatusLabel,
   formatTimeLabel,
+  getStatusBadgeClass,
   isAppointmentStatusSelectable,
   confirmStatusChangeIfNeeded,
   type AppointmentStatus,
@@ -1647,7 +1648,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           <article className="panel-card p-4">
             <div className="flex flex-wrap items-end gap-2">
               <label className="grid flex-1 gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Find Encounter</span>
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Patient</span>
                 <input
                   className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
                   onChange={(event) => setEncounterSearch(event.target.value)}
@@ -1669,191 +1670,219 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               </label>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-[var(--text-muted)]">
-                Printed order: earliest encounter to latest encounter.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                  disabled={!filteredEncounterListByOldest.length}
-                  onClick={() =>
-                    setSoapPrintSelectionForCurrentPatient(
-                      filteredEncounterListByOldest.map((entry) => entry.id),
-                    )
-                  }
-                  type="button"
-                >
-                  Select All
-                </button>
-                <button
-                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                  disabled={!filteredEncounterListByOldest.length}
-                  onClick={() => setSoapPrintSelectionForCurrentPatient([])}
-                  type="button"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3 max-h-[580px] space-y-2 overflow-auto">
-              {!normalizeLookupText(encounterSearch) ? (
-                <p className="text-sm text-[var(--text-muted)]">Type a patient name to load encounters.</p>
-              ) : filteredEncounterList.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)]">No encounters found for that patient name.</p>
-              ) : (
-                <>
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                    Showing encounters for {filteredEncounterPatientName}
-                  </p>
-                  {filteredEncounterList.map((entry) => {
-                  const checked = selectedSoapPrintEncounterIds.includes(entry.id);
-                  return (
-                    <div
-                      key={`soap-print-${entry.id}`}
-                      className={`flex items-start gap-2 rounded-xl border px-2 py-2 ${
-                        resolvedEncounterId === entry.id
-                          ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)]"
-                          : "border-[var(--line-soft)] bg-white"
-                      }`}
-                    >
-                      <input
-                        checked={checked}
-                        className="mt-1"
-                        onChange={() => toggleSoapPrintEncounter(entry.id)}
-                        onClick={(event) => event.stopPropagation()}
-                        type="checkbox"
-                      />
-                      <button
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => setSelectedEncounterId(entry.id)}
-                        type="button"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold">{entry.patientName}</p>
-                          <span className={`status-pill ${entry.signed ? "active" : "warning"}`}>
-                            {entry.signed ? "Closed" : "Open"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {entry.encounterDate} • {entry.appointmentType}
-                        </p>
-                      </button>
+            {!normalizeLookupText(encounterSearch) ? (
+              <p className="mt-3 text-sm text-[var(--text-muted)]">Type a patient name to load encounters.</p>
+            ) : filteredEncounterList.length === 0 && allPatientAppointments.length === 0 ? (
+              <p className="mt-3 text-sm text-[var(--text-muted)]">No encounters or appointments found.</p>
+            ) : (
+              <>
+                {/* ── Appointments ── */}
+                {filteredEncounterPatientId && allPatientAppointments.length > 0 && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                        Appointments
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <label className="flex cursor-pointer items-center gap-1 text-[10px] font-semibold select-none text-[var(--text-muted)]">
+                          <input
+                            type="checkbox"
+                            className="accent-[var(--brand-primary)]"
+                            checked={hideCompleted}
+                            onChange={(e) => setHideCompleted(e.target.checked)}
+                          />
+                          Hide completed
+                        </label>
+                        <button
+                          className="rounded border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-[10px] font-semibold hover:bg-[var(--bg-soft)]"
+                          onClick={() => setAptDateSort((prev) => (prev === "newest" ? "oldest" : "newest"))}
+                          title={`Sort by date: ${aptDateSort === "newest" ? "Newest first" : "Oldest first"}`}
+                          type="button"
+                        >
+                          {aptDateSort === "newest" ? "↓" : "↑"}
+                        </button>
+                      </div>
                     </div>
-                  );
-                  })}
-                </>
-              )}
-            </div>
+                    <div className="mt-1.5 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
+                      <table className="min-w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-[var(--bg-soft)] text-left">
+                            <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</th>
+                            <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</th>
+                            <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Status</th>
+                            <th className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Enc.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {patientAppointments.map((apt) => {
+                            const dateUs = (() => {
+                              const [y, m, d] = apt.date.split("-");
+                              return `${m}/${d}/${y}`;
+                            })();
+                            const linked = encountersByNewest.find(
+                              (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
+                            );
+                            const canStart = apt.status === "Check In";
+                            const isLinkedToSelected = linkedAppointmentForStatus?.id === apt.id;
+                            return (
+                              <tr
+                                key={apt.id}
+                                className={`border-t border-[var(--line-soft)] ${
+                                  isLinkedToSelected
+                                    ? "bg-[rgba(13,121,191,0.08)]"
+                                    : ""
+                                }`}
+                              >
+                                <td className="px-2 py-1.5 text-xs tabular-nums">{dateUs}</td>
+                                <td className="px-2 py-1.5 text-xs">{apt.appointmentType}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(apt.status)}`}>
+                                    {formatAppointmentStatusLabel(apt.status)}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  {linked ? (
+                                    <button
+                                      className={`rounded-lg border px-2 py-0.5 text-xs font-semibold transition-all active:scale-[0.97] ${
+                                        resolvedEncounterId === linked.id
+                                          ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] text-[var(--brand-primary)]"
+                                          : "border-[var(--line-soft)] bg-white"
+                                      }`}
+                                      onClick={() => setSelectedEncounterId(linked.id)}
+                                      type="button"
+                                    >
+                                      {linked.signed ? "View" : "Open"}
+                                    </button>
+                                  ) : canStart ? (
+                                    <button
+                                      className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95"
+                                      onClick={() => {
+                                        const provider = officeSettings.doctorName || "Provider";
+                                        const newId = createEncounter({
+                                          patientId: apt.patientId,
+                                          patientName: apt.patientName,
+                                          provider,
+                                          appointmentType: apt.appointmentType,
+                                          encounterDate: dateUs,
+                                        });
+                                        if (newId) {
+                                          setSelectedEncounterId(newId);
+                                          setMessage(`Encounter created for ${dateUs}.`);
+                                        }
+                                      }}
+                                      title="Start encounter"
+                                      type="button"
+                                    >
+                                      + Enc
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-[var(--text-muted)]">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <button
-                className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
-                disabled={!filteredEncounterListByOldest.length || !selectedSoapPrintEncounterIds.length}
-                onClick={handlePrintSelectedSoapNotes}
-                type="button"
-              >
-                Print Selected SOAP Notes
-              </button>
-            </div>
+                {/* ── Encounters ── */}
+                {filteredEncounterList.length > 0 && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                        Encounters ({filteredEncounterList.length})
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          className="rounded border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-[10px] font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                          disabled={!filteredEncounterListByOldest.length}
+                          onClick={() =>
+                            setSoapPrintSelectionForCurrentPatient(
+                              filteredEncounterListByOldest.map((entry) => entry.id),
+                            )
+                          }
+                          type="button"
+                        >
+                          Select All
+                        </button>
+                        <button
+                          className="rounded border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-[10px] font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                          disabled={!filteredEncounterListByOldest.length}
+                          onClick={() => setSoapPrintSelectionForCurrentPatient([])}
+                          type="button"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-1.5 max-h-[420px] space-y-1.5 overflow-auto">
+                      {filteredEncounterList.map((entry) => {
+                        const checked = selectedSoapPrintEncounterIds.includes(entry.id);
+                        return (
+                          <div
+                            key={`soap-print-${entry.id}`}
+                            className={`flex items-start gap-2 rounded-xl border px-2 py-1.5 ${
+                              resolvedEncounterId === entry.id
+                                ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)]"
+                                : "border-[var(--line-soft)] bg-white"
+                            }`}
+                          >
+                            <input
+                              checked={checked}
+                              className="mt-1"
+                              onChange={() => toggleSoapPrintEncounter(entry.id)}
+                              onClick={(event) => event.stopPropagation()}
+                              type="checkbox"
+                            />
+                            <button
+                              className="min-w-0 flex-1 text-left"
+                              onClick={() => setSelectedEncounterId(entry.id)}
+                              type="button"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-semibold">{entry.patientName}</p>
+                                <span className={`status-pill ${entry.signed ? "active" : "warning"}`}>
+                                  {entry.signed ? "Closed" : "Open"}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {entry.encounterDate} • {entry.appointmentType}
+                              </p>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {filteredEncounterList.length === 0 && (
+                  <p className="mt-3 text-sm text-[var(--text-muted)]">No encounters found.</p>
+                )}
+
+                {/* ── Print ── */}
+                {filteredEncounterList.length > 0 && (
+                  <div className="mt-3">
+                    <button
+                      className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold transition-all active:scale-[0.97] active:shadow-inner disabled:opacity-50"
+                      disabled={!selectedSoapPrintEncounterIds.length}
+                      onClick={handlePrintSelectedSoapNotes}
+                      type="button"
+                    >
+                      Print Selected SOAP Notes
+                      {selectedSoapPrintEncounterIds.length > 0 && (
+                        <span className="ml-1.5 text-xs font-medium text-[var(--text-muted)]">({selectedSoapPrintEncounterIds.length})</span>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </article>
-
-          {filteredEncounterPatientId && allPatientAppointments.length > 0 && (
-            <article className="panel-card p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold">
-                  Appointments for {filteredEncounterPatientName}
-                </h4>
-                <button
-                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold hover:bg-[var(--bg-soft)]"
-                  onClick={() => setAptDateSort((prev) => (prev === "newest" ? "oldest" : "newest"))}
-                  title={`Sort by date: ${aptDateSort === "newest" ? "Newest first" : "Oldest first"}`}
-                  type="button"
-                >
-                  Date {aptDateSort === "newest" ? "↓" : "↑"}
-                </button>
-              </div>
-              <div className="mt-2">
-                <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold select-none">
-                  <input
-                    type="checkbox"
-                    className="accent-[var(--brand-primary)]"
-                    checked={hideCompleted}
-                    onChange={(e) => setHideCompleted(e.target.checked)}
-                  />
-                  Hide completed
-                  <span className="font-normal text-[var(--text-muted)]">(closed + checked out)</span>
-                </label>
-              </div>
-              <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
-                <table className="min-w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-[var(--bg-soft)] text-left">
-                      <th className="px-2 py-1.5 text-xs">Date</th>
-                      <th className="px-2 py-1.5 text-xs">Type</th>
-                      <th className="px-2 py-1.5 text-xs">Status</th>
-                      <th className="px-2 py-1.5 text-xs">Encounter</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {patientAppointments.map((apt) => {
-                      const dateUs = (() => {
-                        const [y, m, d] = apt.date.split("-");
-                        return `${m}/${d}/${y}`;
-                      })();
-                      const linked = encountersByNewest.find(
-                        (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
-                      );
-                      const canStart = apt.status === "Check In";
-                      return (
-                        <tr key={apt.id} className="border-t border-[var(--line-soft)]">
-                          <td className="px-2 py-1.5 tabular-nums">{dateUs}</td>
-                          <td className="px-2 py-1.5">{apt.appointmentType}</td>
-                          <td className="px-2 py-1.5">{formatAppointmentStatusLabel(apt.status)}</td>
-                          <td className="px-2 py-1.5">
-                            {linked ? (
-                              <button
-                                className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold"
-                                onClick={() => setSelectedEncounterId(linked.id)}
-                                type="button"
-                              >
-                                {linked.signed ? "View" : "Open"}
-                              </button>
-                            ) : canStart ? (
-                              <button
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
-                                onClick={() => {
-                                  const provider = officeSettings.doctorName || "Provider";
-                                  const newId = createEncounter({
-                                    patientId: apt.patientId,
-                                    patientName: apt.patientName,
-                                    provider,
-                                    appointmentType: apt.appointmentType,
-                                    encounterDate: dateUs,
-                                  });
-                                  if (newId) {
-                                    setSelectedEncounterId(newId);
-                                    setMessage(`Encounter created for ${dateUs}.`);
-                                  }
-                                }}
-                                title="Start encounter"
-                                type="button"
-                              >
-                                + Encounter
-                              </button>
-                            ) : (
-                              <span className="text-xs text-[var(--text-muted)]">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-          )}
         </aside>
 
         <article className="panel-card p-4">
