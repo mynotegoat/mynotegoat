@@ -1880,29 +1880,38 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
           ) : (
             <div className="space-y-4">
               <section className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Current Encounter</p>
-                    <h3 className="text-xl font-semibold">{selectedEncounter.patientName}</h3>
+                {/* Header row: patient name + action buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-lg font-semibold leading-tight">{selectedEncounter.patientName}</h3>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                      <span>{selectedEncounter.encounterDate}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${selectedEncounter.signed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {selectedEncounter.signed ? "Closed" : "Open"}
+                      </span>
+                      <span>Charges: {selectedEncounter.charges.length} (${encounterChargeTotal.toFixed(2)})</span>
+                      {selectedPatient && (
+                        <Link className="underline" href={`/patients/${selectedPatient.id}`}>
+                          Patient File
+                        </Link>
+                      )}
+                    </div>
                     {selectedPatient?.alerts && selectedPatient.alerts.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1.5">
+                      <div className="mt-1 flex flex-wrap gap-1">
                         {selectedPatient.alerts.map((alert, i) => (
                           <span
                             key={`enc-alert-${i}`}
-                            className="inline-flex items-center rounded-md border border-[#e8b931] bg-[#fef9e7] px-2 py-0.5 text-xs font-bold text-[#92400e]"
+                            className="inline-flex items-center rounded-md border border-[#e8b931] bg-[#fef9e7] px-1.5 py-0.5 text-[10px] font-bold text-[#92400e]"
                           >
                             ⚠ {alert}
                           </span>
                         ))}
                       </div>
                     )}
-                    <p className="text-sm text-[var(--text-muted)]">
-                      {selectedEncounter.encounterDate}
-                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
-                      className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 transition-all active:scale-[0.97] active:brightness-95"
+                      className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 transition-all active:scale-[0.97]"
                       onClick={async () => {
                         setMessage("Saving all encounters...");
                         const result = await forceSaveAll();
@@ -1918,7 +1927,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     </button>
                     {selectedEncounter.signed ? (
                       <button
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-[11px] font-semibold transition-all active:scale-[0.97]"
                         onClick={() => {
                           setSigned(selectedEncounter.id, false);
                           if (linkedAppointmentForStatus) {
@@ -1933,26 +1942,22 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         }}
                         type="button"
                       >
-                        Reopen + Check In
+                        Reopen
                       </button>
                     ) : (
                       <button
-                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95"
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition-all active:scale-[0.97]"
                         onClick={() => {
                           if (selectedEncounter.charges.length === 0) {
                             if (!window.confirm("This encounter has no charges. Close and check out anyway?")) return;
                           }
-                          // Close encounter
                           setSigned(selectedEncounter.id, true);
-                          // Check out linked appointment (if found)
                           if (linkedAppointmentForStatus) {
                             updateAppointment(linkedAppointmentForStatus.id, (current) => ({
                               ...current,
                               status: "Check Out",
                             }));
-                            setMessage(
-                              `Encounter closed and ${selectedEncounter.patientName} checked out.`,
-                            );
+                            setMessage(`Encounter closed and ${selectedEncounter.patientName} checked out.`);
                           } else {
                             setMessage("Encounter closed. No linked appointment found to check out.");
                           }
@@ -1968,7 +1973,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       </button>
                     )}
                     <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                      className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600 transition-all active:scale-[0.97]"
                       onClick={handleDeleteEncounter}
                       type="button"
                     >
@@ -1977,187 +1982,151 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   </div>
                 </div>
 
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="grid gap-1">
-                      <span className="text-xs font-semibold text-[var(--text-muted)]">Provider</span>
-                      <input
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                        disabled={selectedEncounter.signed}
-                        onChange={(event) =>
-                          updateEncounter(selectedEncounter.id, { provider: event.target.value })
-                        }
-                        value={selectedEncounter.provider}
-                      />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="text-xs font-semibold text-[var(--text-muted)]">Appointment Type</span>
-                      <select
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                        disabled={selectedEncounter.signed}
-                        onChange={(event) =>
-                          updateEncounter(selectedEncounter.id, { appointmentType: event.target.value })
-                        }
-                        value={selectedEncounter.appointmentType}
-                      >
-                        {appointmentTypeOptions.map((option) => (
-                          <option key={`encounter-appointment-type-${option}`} value={option}>
-                            {option}
+                {/* Compact info boxes grid */}
+                <div className="mt-2.5 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <label className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Provider</span>
+                    <input
+                      className="mt-0.5 block w-full border-0 bg-transparent p-0 text-sm focus:outline-none"
+                      disabled={selectedEncounter.signed}
+                      onChange={(event) =>
+                        updateEncounter(selectedEncounter.id, { provider: event.target.value })
+                      }
+                      value={selectedEncounter.provider}
+                    />
+                  </label>
+                  <label className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Type</span>
+                    <select
+                      className="mt-0.5 block w-full border-0 bg-transparent p-0 text-sm focus:outline-none"
+                      disabled={selectedEncounter.signed}
+                      onChange={(event) =>
+                        updateEncounter(selectedEncounter.id, { appointmentType: event.target.value })
+                      }
+                      value={selectedEncounter.appointmentType}
+                    >
+                      {appointmentTypeOptions.map((option) => (
+                        <option key={`encounter-appointment-type-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Date</span>
+                    <input
+                      className="mt-0.5 block w-full border-0 bg-transparent p-0 text-sm focus:outline-none"
+                      disabled={selectedEncounter.signed}
+                      inputMode="numeric"
+                      maxLength={10}
+                      onChange={(event) =>
+                        updateEncounter(selectedEncounter.id, {
+                          encounterDate: normalizeEncounterDateInput(event.target.value),
+                        })
+                      }
+                      value={selectedEncounter.encounterDate}
+                    />
+                  </label>
+                  <label className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      Status
+                      {linkedAppointmentForStatus && (
+                        <span className="ml-1 font-normal normal-case text-[var(--text-muted)]">
+                          ({formatTimeLabel(linkedAppointmentForStatus.startTime)})
+                        </span>
+                      )}
+                    </span>
+                    <select
+                      className="mt-0.5 block w-full border-0 bg-transparent p-0 text-sm focus:outline-none"
+                      disabled={!linkedAppointmentForStatus}
+                      onChange={(event) =>
+                        handleEncounterScheduleStatusChange(event.target.value as AppointmentStatus)
+                      }
+                      value={scheduleStatusValue}
+                    >
+                      {appointmentStatusOptions.map((option) => {
+                        const disabled = !isAppointmentStatusSelectable(
+                          option,
+                          (linkedAppointmentForStatus?.status ?? scheduleStatusValue) as AppointmentStatus,
+                        );
+                        return (
+                          <option
+                            key={`encounter-schedule-status-${option}`}
+                            disabled={disabled}
+                            value={option}
+                          >
+                            {formatAppointmentStatusLabel(option)}
+                            {disabled ? " (requires Checked In first)" : ""}
                           </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="grid gap-1">
-                      <span className="text-xs font-semibold text-[var(--text-muted)]">Date</span>
-                      <input
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                        disabled={selectedEncounter.signed}
-                        inputMode="numeric"
-                        maxLength={10}
-                        onChange={(event) =>
-                          updateEncounter(selectedEncounter.id, {
-                            encounterDate: normalizeEncounterDateInput(event.target.value),
-                          })
-                        }
-                        value={selectedEncounter.encounterDate}
-                      />
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="text-xs font-semibold text-[var(--text-muted)]">Schedule Status</span>
-                      <select
-                        className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                        disabled={!linkedAppointmentForStatus}
-                        onChange={(event) =>
-                          handleEncounterScheduleStatusChange(event.target.value as AppointmentStatus)
-                        }
-                        value={scheduleStatusValue}
-                      >
-                        {appointmentStatusOptions.map((option) => {
-                          const disabled = !isAppointmentStatusSelectable(
-                            option,
-                            (linkedAppointmentForStatus?.status ?? scheduleStatusValue) as AppointmentStatus,
-                          );
-                          return (
-                            <option
-                              key={`encounter-schedule-status-${option}`}
-                              disabled={disabled}
-                              value={option}
-                            >
-                              {formatAppointmentStatusLabel(option)}
-                              {disabled ? " (requires Checked In first)" : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </label>
-                    <p className="text-xs text-[var(--text-muted)]">
-                      {linkedAppointmentForStatus
-                        ? `Linked schedule row: ${formatTimeLabel(linkedAppointmentForStatus.startTime)} • ${linkedAppointmentForStatus.appointmentType}`
-                        : "No matching schedule appointment found for this date."}
-                    </p>
-                  </div>
+                        );
+                      })}
+                    </select>
+                  </label>
                 </div>
 
-                <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                  <span className={`status-pill ${selectedEncounter.signed ? "active" : "warning"}`}>
-                    {selectedEncounter.signed ? "Closed" : "Open"}
-                  </span>
-                  <span className="status-pill">
-                    Charges: {selectedEncounter.charges.length}
-                  </span>
-                  <span className="status-pill">Total: ${encounterChargeTotal.toFixed(2)}</span>
-                  {selectedPatient && (
-                    <Link
-                      className="status-pill underline"
-                      href={`/patients/${selectedPatient.id}`}
-                    >
-                      Open Patient File
-                    </Link>
-                  )}
+                {/* Compare / Copy — compact row */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Copy From</span>
+                  <select
+                    className="min-w-0 flex-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1 text-xs"
+                    disabled={selectedEncounter.signed || priorPatientEncounters.length === 0}
+                    onChange={(event) => setSaltSourceEncounterIdDraft(event.target.value)}
+                    value={resolvedSaltSourceEncounterId}
+                  >
+                    {priorPatientEncounters.length === 0 ? (
+                      <option value="">No prior encounters</option>
+                    ) : (
+                      <>
+                        <option value="">Select prior encounter</option>
+                        {priorPatientEncounters.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.encounterDate}
+                            {entry.appointmentType ? ` • ${entry.appointmentType}` : ""}
+                            {entry.signed ? " • Closed" : ""}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1 text-[11px] font-semibold transition-all active:scale-[0.97] disabled:opacity-40"
+                    disabled={selectedEncounter.signed || !saltSourceEncounter}
+                    onClick={handleCopyActiveSectionFromSelected}
+                    type="button"
+                  >
+                    Copy {sectionLabels[activeSection]}
+                  </button>
+                  <button
+                    className="rounded-lg border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-2 py-1 text-[11px] font-semibold text-[var(--brand-primary)] transition-all active:scale-[0.97] disabled:opacity-40 disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
+                    disabled={selectedEncounter.signed || !saltSourceEncounter}
+                    onClick={handleCopyAllSoapFromSelected}
+                    title={
+                      saltSourceEncounter
+                        ? `Copy all SOAP sections from ${saltSourceEncounter.encounterDate}`
+                        : "Select a prior encounter to copy SOAP from"
+                    }
+                    type="button"
+                  >
+                    Copy SOAP
+                  </button>
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] font-semibold select-none">
+                    <input
+                      checked={autoSalt}
+                      className="accent-[var(--brand-primary)]"
+                      onChange={(e) => {
+                        setAutoSalt(e.target.checked);
+                        if (e.target.checked) {
+                          autoSaltedRef.current = null;
+                        }
+                      }}
+                      type="checkbox"
+                    />
+                    Auto-Salt
+                  </label>
                 </div>
               </section>
 
               <section className="rounded-xl border border-[var(--line-soft)] bg-white p-3">
-                <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">Compare / Copy From Prior Encounter</p>
-                  </div>
-                  <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
-                    <select
-                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                      disabled={selectedEncounter.signed || priorPatientEncounters.length === 0}
-                      onChange={(event) => setSaltSourceEncounterIdDraft(event.target.value)}
-                      value={resolvedSaltSourceEncounterId}
-                    >
-                      {priorPatientEncounters.length === 0 ? (
-                        <option value="">No prior encounters for this patient</option>
-                      ) : (
-                        <>
-                          <option value="">Select prior encounter (optional)</option>
-                          {priorPatientEncounters.map((entry) => (
-                            <option key={entry.id} value={entry.id}>
-                              {entry.encounterDate}
-                              {entry.appointmentType ? ` • ${entry.appointmentType}` : ""}
-                              {entry.signed ? " • Closed" : " • Open"}
-                            </option>
-                          ))}
-                        </>
-                      )}
-                    </select>
-                    <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                      disabled={
-                        selectedEncounter.signed ||
-                        priorPatientEncounters.length === 0 ||
-                        !saltSourceEncounter
-                      }
-                      onClick={handleCopyActiveSectionFromSelected}
-                      type="button"
-                    >
-                      Copy ({sectionLabels[activeSection]})
-                    </button>
-                    <button
-                      className="rounded-lg border border-[var(--brand-primary)] bg-[rgba(13,121,191,0.08)] px-2.5 py-1 text-xs font-semibold text-[var(--brand-primary)] transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:border-[var(--line-soft)] disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)]"
-                      disabled={
-                        selectedEncounter.signed ||
-                        priorPatientEncounters.length === 0 ||
-                        !saltSourceEncounter
-                      }
-                      onClick={handleCopyAllSoapFromSelected}
-                      title={
-                        saltSourceEncounter
-                          ? `Copy all SOAP sections from ${saltSourceEncounter.encounterDate}`
-                          : "Select a prior encounter to copy SOAP from"
-                      }
-                      type="button"
-                    >
-                      Copy SOAP
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-[var(--text-muted)]">
-                      Choose a prior encounter only when you want to compare or copy this tab&apos;s SOAP section.
-                    </p>
-                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1.5 text-xs font-semibold select-none hover:bg-[var(--bg-soft)]">
-                      <input
-                        checked={autoSalt}
-                        className="accent-[var(--brand-primary)]"
-                        onChange={(e) => {
-                          setAutoSalt(e.target.checked);
-                          if (e.target.checked) {
-                            // Reset tracker so current encounter gets auto-salted if eligible
-                            autoSaltedRef.current = null;
-                          }
-                        }}
-                        type="checkbox"
-                      />
-                      Auto-Salt
-                    </label>
-                  </div>
-                </div>
 
                 <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                   <p className="text-sm font-semibold">SOAP Macros: {sectionLabels[activeSection]}</p>
