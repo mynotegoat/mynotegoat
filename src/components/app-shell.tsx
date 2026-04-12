@@ -139,19 +139,19 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-[1680px] px-3 py-3 lg:px-5 lg:py-5">
-        <div className="rounded-[30px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(16,38,58,0.1)]">
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto px-0">
+        <div className="min-h-screen border-white/70 bg-white">
           <div
             className={classNames(
-              "grid min-h-[calc(100vh-2rem)]",
+              "grid min-h-screen",
               sidebarCollapsed
                 ? "lg:grid-cols-[56px_1fr]"
                 : "lg:grid-cols-[250px_1fr]",
             )}
             style={{ transition: "grid-template-columns 0.2s ease" }}
           >
-            <aside className="sticky top-0 hidden max-h-screen overflow-y-auto overflow-x-hidden rounded-l-[30px] border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] text-[#e4f4ff] lg:block">
+            <aside className="sticky top-0 hidden max-h-screen overflow-y-auto overflow-x-hidden border-r border-[var(--line-soft)] bg-[var(--bg-sidebar)] text-[#e4f4ff] lg:block">
               <div className={sidebarCollapsed ? "p-2" : "p-6"}>
                 {!sidebarCollapsed && (
                   <>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   createPatientFollowUpOverrideRecord,
   hasAnyFollowUpOverrideFlags,
@@ -11,6 +11,9 @@ import {
   type PatientFollowUpOverrideMap,
   type PatientFollowUpOverrideRecord,
 } from "@/lib/patient-follow-up-overrides";
+import { notifyChange, onLocalChange } from "@/lib/local-sync";
+
+const SYNC_KEY = "casemate.patient-follow-up-overrides.v1";
 
 type FollowUpOverrideCategoryPatch = Partial<FollowUpCategoryOverrideFlags>;
 
@@ -23,10 +26,18 @@ export function usePatientFollowUpOverrides() {
     loadPatientFollowUpOverridesMap(),
   );
 
+  // Listen for changes made by other hook instances on this page
+  useEffect(() => {
+    return onLocalChange(SYNC_KEY, () => {
+      setRecordsByPatientId(loadPatientFollowUpOverridesMap());
+    });
+  }, []);
+
   const updateMap = useCallback((updater: (current: PatientFollowUpOverrideMap) => PatientFollowUpOverrideMap) => {
     setRecordsByPatientId((current) => {
       const next = updater(current);
       savePatientFollowUpOverridesMap(next);
+      notifyChange(SYNC_KEY);
       return next;
     });
   }, []);
