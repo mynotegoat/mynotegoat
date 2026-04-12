@@ -3709,7 +3709,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 imagingPanelsOpen.xray ? "max-h-36 text-xs" : "max-h-56 text-sm"
               }`}
             >
-              {xrayReferrals.length === 0 && <p className="text-[var(--text-muted)]">No X-Ray sent entries yet.</p>}
+              {xrayReferrals.length === 0 && (
+                <p className="text-[var(--text-muted)]">
+                  {xrayFollowUpOverride.completedPriorCare
+                    ? "Completed Prior Care"
+                    : xrayFollowUpOverride.patientRefused
+                      ? "Patient Refused"
+                      : xrayFollowUpOverride.notNeeded
+                        ? "No X-Ray"
+                        : "No X-Ray sent entries yet."}
+                </p>
+              )}
               {xrayReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
                   <p className="font-semibold">
@@ -3893,7 +3903,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 imagingPanelsOpen.mri ? "max-h-36 text-xs" : "max-h-56 text-sm"
               }`}
             >
-              {mriReferrals.length === 0 && <p className="text-[var(--text-muted)]">No MRI / CT sent entries yet.</p>}
+              {mriReferrals.length === 0 && (
+                <p className="text-[var(--text-muted)]">
+                  {mriCtFollowUpOverride.completedPriorCare
+                    ? "Completed Prior Care"
+                    : mriCtFollowUpOverride.patientRefused
+                      ? "Patient Refused"
+                      : mriCtFollowUpOverride.notNeeded
+                        ? "No MRI / CT"
+                        : "No MRI / CT sent entries yet."}
+                </p>
+              )}
               {mriReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
                   <p className="font-semibold">
@@ -4023,7 +4043,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               }`}
             >
               {specialistReferrals.length === 0 && (
-                <p className="text-[var(--text-muted)]">No specialist referrals added yet.</p>
+                <p className="text-[var(--text-muted)]">
+                  {specialistFollowUpOverride.completedPriorCare
+                    ? "Completed Prior Care"
+                    : specialistFollowUpOverride.patientRefused
+                      ? "Patient Refused"
+                      : specialistFollowUpOverride.notNeeded
+                        ? "No Specialist"
+                        : "No specialist referrals added yet."}
+                </p>
               )}
               {specialistReferrals.map((entry) => (
                 <div key={entry.id} className="rounded-lg border border-[var(--line-soft)] p-2">
