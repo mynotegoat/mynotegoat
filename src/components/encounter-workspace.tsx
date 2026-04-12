@@ -2140,39 +2140,45 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   </div>
                 </div>
 
-                <div className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                  <p className="text-sm font-semibold">Inserted Macro Inputs (Tap To Edit)</p>
-                  {sectionMacroRuns.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {sectionMacroRuns.map((run) => {
-                        const answerPreview = Object.values(run.answers)
-                          .flatMap((value) => (Array.isArray(value) ? value : [value]))
-                          .map((value) => value.trim())
-                          .filter((value) => value.length > 0)
-                          .slice(0, 2)
-                          .join(" • ");
-                        return (
-                          <button
-                            key={run.id}
-                            className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-left text-sm font-semibold"
-                            disabled={selectedEncounter.signed}
-                            onClick={() => handleEditExistingMacroRun(run)}
-                            type="button"
-                          >
-                            <span>{run.macroName}</span>
-                            {answerPreview && (
-                              <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">{answerPreview}</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      No macro inserts yet in this section.
-                    </p>
-                  )}
-                </div>
+                <details className="mt-3 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)]">
+                  <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold">
+                    Inserted Macro Inputs{sectionMacroRuns.length > 0 && (
+                      <span className="ml-1.5 text-xs font-medium text-[var(--text-muted)]">({sectionMacroRuns.length})</span>
+                    )}
+                  </summary>
+                  <div className="px-3 pb-3">
+                    {sectionMacroRuns.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {sectionMacroRuns.map((run) => {
+                          const answerPreview = Object.values(run.answers)
+                            .flatMap((value) => (Array.isArray(value) ? value : [value]))
+                            .map((value) => value.trim())
+                            .filter((value) => value.length > 0)
+                            .slice(0, 2)
+                            .join(" • ");
+                          return (
+                            <button
+                              key={run.id}
+                              className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-left text-sm font-semibold"
+                              disabled={selectedEncounter.signed}
+                              onClick={() => handleEditExistingMacroRun(run)}
+                              type="button"
+                            >
+                              <span>{run.macroName}</span>
+                              {answerPreview && (
+                                <span className="ml-2 text-xs font-medium text-[var(--text-muted)]">{answerPreview}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted)]">
+                        No macro inserts yet in this section.
+                      </p>
+                    )}
+                  </div>
+                </details>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {encounterSections.map((section) => (
