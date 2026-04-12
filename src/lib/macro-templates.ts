@@ -422,7 +422,7 @@ export function renderMacroTemplate(
 
   return withQuestions
     .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n{2,}/g, "\n")
     .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "")
     .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, "")
     .replace(/^(<p>\s*<\/p>\s*)+/gi, "")
@@ -452,7 +452,7 @@ export function renderMacroTemplateWithPromptSpans(
 
   return withQuestions
     .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n{2,}/g, "\n")
     .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, "")
     .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, "")
     .replace(/^(<p>\s*<\/p>\s*)+/gi, "")
