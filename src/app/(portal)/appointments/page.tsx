@@ -27,6 +27,7 @@ import {
   formatAppointmentStatusLabel,
   formatTimeLabel,
   getStatusBadgeClass,
+  isAppointmentStatusSelectable,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
@@ -2216,14 +2217,19 @@ export default function AppointmentsPage() {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {quickStatusActions.map((status) => (
+              {quickStatusActions.map((status) => {
+                const selectable = isAppointmentStatusSelectable(status, selectedAppointment?.status ?? "Scheduled");
+                return (
                 <button
                   key={`quick-status-${status}`}
                   className={`rounded-lg border px-3 py-1 text-sm font-semibold ${
-                    statusDraft === status
+                    !selectable
+                      ? "cursor-not-allowed border-[var(--line-soft)] bg-[var(--bg-soft)] text-[var(--text-muted)] opacity-50"
+                      : statusDraft === status
                       ? "border-[var(--brand-primary)] bg-[rgba(13,121,191,0.1)]"
                       : "border-[var(--line-soft)] bg-white"
                   }`}
+                  disabled={!selectable}
                   onClick={() => {
                     if (status === "Reschedule" && selectedAppointment) {
                       openRescheduleModal(selectedAppointment.id);
@@ -2231,11 +2237,13 @@ export default function AppointmentsPage() {
                     }
                     setStatusDraft(status);
                   }}
+                  title={!selectable ? "Patient must be Checked In first" : undefined}
                   type="button"
                 >
-                  {status}
+                  {formatAppointmentStatusLabel(status)}
                 </button>
-              ))}
+                );
+              })}
               {(() => {
                 const canStart = statusDraft === "Check In" || statusDraft === "Check Out";
                 return (
