@@ -4458,30 +4458,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                   Open Encounter
                                 </button>
                               ) : appointment ? (
-                                (() => {
-                                  const canStart =
-                                    appointment.status === "Check In" ||
-                                    appointment.status === "Check Out";
-                                  return (
+                                (appointment.status === "Check In") ? (
                                     <button
-                                      className={`rounded-lg border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold ${
-                                        canStart
-                                          ? "bg-white"
-                                          : "cursor-not-allowed bg-[var(--bg-soft)] text-[var(--text-muted)]"
-                                      }`}
-                                      disabled={!canStart}
+                                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
                                       onClick={() => createEncounterFromAppointment(appointment)}
-                                      title={
-                                        canStart
-                                          ? "Start encounter"
-                                          : "Patient must be Checked In before starting an encounter"
-                                      }
+                                      title="Start encounter"
                                       type="button"
                                     >
                                       + Encounter
                                     </button>
-                                  );
-                                })()
+                                ) : (
+                                  <span className="text-xs text-[var(--text-muted)]">-</span>
+                                )
                               ) : (
                                 <span className="text-xs text-[var(--text-muted)]">-</span>
                               )}
