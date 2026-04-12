@@ -348,6 +348,34 @@ export function useEncounterNotes() {
     [upsertEncounter],
   );
 
+  /** Add multiple charges in a single atomic state update (no race conditions). */
+  const addChargesBulk = useCallback(
+    (encounterId: string, inputs: Omit<EncounterChargeEntry, "id">[]) => {
+      const valid = inputs
+        .map((input) => {
+          const name = input.name.trim();
+          const procedureCode = input.procedureCode.trim().toUpperCase();
+          if (!name || !procedureCode) return null;
+          return {
+            id: createEncounterChargeId(),
+            treatmentMacroId: input.treatmentMacroId,
+            name,
+            procedureCode,
+            unitPrice: Math.max(0, Number(input.unitPrice) || 0),
+            units: Math.max(1, Math.round(Number(input.units) || 1)),
+          };
+        })
+        .filter((c): c is NonNullable<typeof c> => c !== null) as EncounterChargeEntry[];
+      if (valid.length === 0) return 0;
+      upsertEncounter(encounterId, (current) => ({
+        ...current,
+        charges: [...current.charges, ...valid],
+      }));
+      return valid.length;
+    },
+    [upsertEncounter],
+  );
+
   const updateCharge = useCallback(
     (encounterId: string, chargeId: string, patch: Partial<Omit<EncounterChargeEntry, "id">>) => {
       upsertEncounter(encounterId, (current) => ({
@@ -439,6 +467,7 @@ export function useEncounterNotes() {
     addDiagnosesBulk,
     removeDiagnosis,
     addCharge,
+    addChargesBulk,
     updateCharge,
     removeCharge,
     moveCharge,

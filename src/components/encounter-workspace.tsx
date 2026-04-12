@@ -663,6 +663,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     removeMacroRun,
     appendSoapSection,
     addCharge,
+    addChargesBulk,
     updateCharge,
     removeCharge,
     moveCharge,
@@ -983,23 +984,22 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     autoSaltedChargesRef.current = selectedEncounter.id;
     if (saltSourceEncounter.charges.length === 0) return;
 
-    let copiedCount = 0;
-    saltSourceEncounter.charges.forEach((charge) => {
-      const added = addCharge(selectedEncounter.id, {
+    const copiedCount = addChargesBulk(
+      selectedEncounter.id,
+      saltSourceEncounter.charges.map((charge) => ({
         treatmentMacroId: charge.treatmentMacroId,
         name: charge.name,
         procedureCode: charge.procedureCode,
         unitPrice: charge.unitPrice,
         units: charge.units,
-      });
-      if (added) copiedCount += 1;
-    });
+      })),
+    );
     if (copiedCount > 0) {
       setMessage(
         `Auto-Salted ${copiedCount} charge${copiedCount === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}.`,
       );
     }
-  }, [autoSaltCharges, selectedEncounter, saltSourceEncounter, addCharge]);
+  }, [autoSaltCharges, selectedEncounter, saltSourceEncounter, addChargesBulk]);
 
   const sectionMacros = useMemo(
     () =>
@@ -1423,19 +1423,16 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         return;
       }
     }
-    let copiedCount = 0;
-    saltSourceEncounter.charges.forEach((charge) => {
-      const added = addCharge(selectedEncounter.id, {
+    const copiedCount = addChargesBulk(
+      selectedEncounter.id,
+      saltSourceEncounter.charges.map((charge) => ({
         treatmentMacroId: charge.treatmentMacroId,
         name: charge.name,
         procedureCode: charge.procedureCode,
         unitPrice: charge.unitPrice,
         units: charge.units,
-      });
-      if (added) {
-        copiedCount += 1;
-      }
-    });
+      })),
+    );
     setMessage(
       `Copied ${copiedCount} charge${copiedCount === 1 ? "" : "s"} from ${saltSourceEncounter.encounterDate}.`,
     );
@@ -1720,9 +1717,19 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               const [y, m, d] = apt.date.split("-");
                               return `${m}/${d}/${y}`;
                             })();
-                            const linked = encountersByNewest.find(
+                            // Match encounter by patient + date + type first; fall back
+                            // to date-only if this is the only appointment on that day.
+                            const linkedByType = encountersByNewest.find(
+                              (e) =>
+                                e.patientId === apt.patientId &&
+                                e.encounterDate === dateUs &&
+                                e.appointmentType.toLowerCase() === apt.appointmentType.toLowerCase(),
+                            );
+                            const linkedByDate = encountersByNewest.find(
                               (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
                             );
+                            const sameDayAptCount = patientAppointments.filter((a) => a.date === apt.date).length;
+                            const linked = linkedByType ?? (sameDayAptCount === 1 ? linkedByDate : null);
                             const canStart = apt.status !== "Canceled";
                             const isLinkedToSelected = linkedAppointmentForStatus?.id === apt.id;
                             const printChecked = linked ? selectedSoapPrintEncounterIds.includes(linked.id) : false;
