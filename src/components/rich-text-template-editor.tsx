@@ -95,15 +95,22 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
-    // Never reset innerHTML while the user is focused in the editor —
-    // doing so destroys the cursor position and selection.
-    if (isFocusedRef.current) {
+    const nextHtml = normalizeIncomingValue(value);
+    // If the incoming value matches what the editor last emitted, skip —
+    // this avoids resetting the cursor on every keystroke.
+    if (editor.innerHTML === nextHtml) {
+      lastAppliedRef.current = nextHtml;
       return;
     }
-    const nextHtml = normalizeIncomingValue(value);
-    if (editor.innerHTML !== nextHtml) {
-      editor.innerHTML = nextHtml;
+    // If the editor is focused but the value changed externally
+    // (e.g., SOAP was salted/copied programmatically), we MUST update
+    // even though the user is focused — otherwise the old content
+    // sticks around and overwrites the programmatic change on blur.
+    const isExternalChange = nextHtml !== lastAppliedRef.current;
+    if (isFocusedRef.current && !isExternalChange) {
+      return;
     }
+    editor.innerHTML = nextHtml;
     lastAppliedRef.current = nextHtml;
   };
 
