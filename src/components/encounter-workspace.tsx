@@ -31,6 +31,7 @@ import {
   formatAppointmentStatusLabel,
   formatTimeLabel,
   isAppointmentStatusSelectable,
+  confirmStatusChangeIfNeeded,
   type AppointmentStatus,
 } from "@/lib/schedule-appointments";
 
@@ -1582,6 +1583,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       setMessage(`Cannot mark ${nextStatus} — patient must be Checked In first.`);
       return;
     }
+    if (!confirmStatusChangeIfNeeded(linkedAppointmentForStatus.status, nextStatus)) return;
     updateAppointment(linkedAppointmentForStatus.id, (current) => ({
       ...current,
       status: nextStatus,

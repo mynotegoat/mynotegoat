@@ -28,6 +28,7 @@ import {
   formatTimeLabel,
   getStatusBadgeClass,
   isAppointmentStatusSelectable,
+  confirmStatusChangeIfNeeded,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
@@ -723,6 +724,8 @@ export default function AppointmentsPage() {
       openRescheduleModal(appointmentId);
       return;
     }
+    const target = scheduleAppointments.find((entry) => entry.id === appointmentId);
+    if (target && !confirmStatusChangeIfNeeded(target.status, nextStatus)) return;
     updateAppointment(appointmentId, (current) => ({
       ...current,
       status: nextStatus,
@@ -2139,6 +2142,9 @@ export default function AppointmentsPage() {
                       openRescheduleModal(selectedAppointment.id);
                       return;
                     }
+                    if (selectedAppointment && !confirmStatusChangeIfNeeded(selectedAppointment.status, nextStatus)) {
+                      return;
+                    }
                     setStatusDraft(nextStatus);
                   }}
                   value={statusDraft}
@@ -2235,6 +2241,7 @@ export default function AppointmentsPage() {
                       openRescheduleModal(selectedAppointment.id);
                       return;
                     }
+                    if (selectedAppointment && !confirmStatusChangeIfNeeded(selectedAppointment.status, status)) return;
                     setStatusDraft(status);
                   }}
                   title={!selectable ? "Patient must be Checked In first" : undefined}

@@ -14,6 +14,7 @@ import {
   appointmentStatusOptions,
   formatAppointmentStatusLabel,
   isAppointmentStatusSelectable,
+  confirmStatusChangeIfNeeded,
   formatTimeLabel,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
@@ -300,7 +301,11 @@ export function EditAppointmentModal({
             <span className="text-sm font-semibold text-[var(--text-muted)]">Status</span>
             <select
               className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              onChange={(event) => setStatus(event.target.value as AppointmentStatus)}
+              onChange={(event) => {
+                const next = event.target.value as AppointmentStatus;
+                if (!confirmStatusChangeIfNeeded(appointment.status, next)) return;
+                setStatus(next);
+              }}
               value={status}
             >
               {appointmentStatusOptions.map((option) => {

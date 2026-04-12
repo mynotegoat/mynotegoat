@@ -68,6 +68,33 @@ export function isAppointmentStatusSelectable(
   return true;
 }
 
+/**
+ * Returns true if changing from `current` → `next` should show a
+ * confirmation warning. Currently warns when leaving "Canceled" or
+ * "Reschedule" status, since those are typically final.
+ */
+export function shouldWarnStatusChange(
+  current: AppointmentStatus,
+  next: AppointmentStatus,
+): boolean {
+  if (current === next) return false;
+  return current === "Canceled" || current === "Reschedule";
+}
+
+/**
+ * Shows a confirm dialog if the status transition is risky.
+ * Returns true if the change should proceed.
+ */
+export function confirmStatusChangeIfNeeded(
+  current: AppointmentStatus,
+  next: AppointmentStatus,
+): boolean {
+  if (!shouldWarnStatusChange(current, next)) return true;
+  return window.confirm(
+    `This appointment is currently "${formatAppointmentStatusLabel(current)}". Are you sure you want to change it to "${formatAppointmentStatusLabel(next)}"?`,
+  );
+}
+
 export const appointmentTypeOptions = [
   "Personal Injury Office Visit",
   "Spinal Decompression - C/S",

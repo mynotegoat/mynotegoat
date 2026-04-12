@@ -30,6 +30,7 @@ import {
   formatTimeLabel,
   getStatusBadgeClass,
   isAppointmentStatusSelectable,
+  confirmStatusChangeIfNeeded,
   type AppointmentStatus,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
@@ -2903,6 +2904,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       );
       return;
     }
+    if (target && !confirmStatusChangeIfNeeded(target.status, nextStatus)) return;
     updateAppointment(appointmentId, (current) => ({
       ...current,
       status: nextStatus,
