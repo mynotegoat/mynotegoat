@@ -26,6 +26,7 @@ export default function PortalLayout({
   const [planTier, setPlanTier] = useState<PlanTier>("complete");
   const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "error">("synced");
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapErrorDetail, setBootstrapErrorDetail] = useState<string | null>(null);
   const [syncBlocked, setSyncBlocked] = useState<{ localSize: number; remoteSize: number } | null>(null);
 
   useEffect(() => {
@@ -97,7 +98,13 @@ export default function PortalLayout({
           error instanceof CloudBootstrapError
             ? error.message
             : "Could not load your data from the cloud. Refusing to open the app to protect your records.";
+        const detail =
+          error instanceof Error
+            ? `${error.name}: ${error.message}${error.cause instanceof Error ? ` — caused by: ${error.cause.message}` : ""}`
+            : String(error);
+        console.error("[Layout] Bootstrap error detail:", error);
         setBootstrapError(message);
+        setBootstrapErrorDetail(detail);
         // Leave sync paused so nothing in this tab can push.
         return;
       }
@@ -177,18 +184,34 @@ export default function PortalLayout({
             Cloud sync failed — app is locked for your protection
           </div>
           <p className="mb-3 leading-relaxed">{bootstrapError}</p>
+          {bootstrapErrorDetail && (
+            <p className="mb-3 rounded-lg bg-red-900/50 px-3 py-2 font-mono text-xs text-red-300 break-all">
+              {bootstrapErrorDetail}
+            </p>
+          )}
           <p className="mb-4 leading-relaxed text-red-200/90">
             Your cloud data is safe. The app refuses to open until it can confirm it
             has the latest version, so a stale local copy can never overwrite the
             cloud.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => window.location.reload()}
               className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-400"
             >
               Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBootstrapError(null);
+                setBootstrapErrorDetail(null);
+                setMounted(true);
+              }}
+              className="rounded-lg border border-amber-400/60 bg-amber-900/30 px-4 py-2 font-semibold text-amber-100 hover:bg-amber-900/50"
+            >
+              Open Anyway (Offline Mode)
             </button>
             <button
               type="button"
