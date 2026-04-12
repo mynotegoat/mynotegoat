@@ -903,6 +903,7 @@ export default function SettingsPage() {
     toggleDashboardVisibility,
     setStatusColor,
     setStatusClosed,
+    setStatusAutoFolder,
     setLienLabel,
     addLienOption,
     updateLienOption,
@@ -2772,6 +2773,14 @@ export default function SettingsPage() {
                     type="checkbox"
                   />
                   Case Closed
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm" title="Automatically move patient folder into a status-named folder in My Files">
+                  <input
+                    checked={status.autoFolder ?? false}
+                    onChange={(event) => setStatusAutoFolder(status.name, event.target.checked)}
+                    type="checkbox"
+                  />
+                  Auto Folder
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm">
                   Color

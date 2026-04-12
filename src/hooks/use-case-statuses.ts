@@ -52,7 +52,7 @@ export function useCaseStatuses() {
           return current;
         }
 
-        return [...current, { name: normalizedName, showOnDashboard, color, isCaseClosed }];
+        return [...current, { name: normalizedName, showOnDashboard, color, isCaseClosed, autoFolder: false }];
       });
     },
     [updateStatuses],
@@ -96,6 +96,17 @@ export function useCaseStatuses() {
       updateStatuses((current) =>
         current.map((status) =>
           status.name.toLowerCase() === name.toLowerCase() ? { ...status, isCaseClosed } : status,
+        ),
+      );
+    },
+    [updateStatuses],
+  );
+
+  const setStatusAutoFolder = useCallback(
+    (name: string, autoFolder: boolean) => {
+      updateStatuses((current) =>
+        current.map((status) =>
+          status.name.toLowerCase() === name.toLowerCase() ? { ...status, autoFolder } : status,
         ),
       );
     },
@@ -226,6 +237,7 @@ export function useCaseStatuses() {
     toggleDashboardVisibility,
     setStatusColor,
     setStatusClosed,
+    setStatusAutoFolder,
     setLienLabel,
     addLienOption,
     updateLienOption,

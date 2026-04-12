@@ -5,6 +5,8 @@ export interface CaseStatusConfig {
   showOnDashboard: boolean;
   color: string;
   isCaseClosed: boolean;
+  /** When true, patient folders with this status are moved to a status-named folder in My Files. */
+  autoFolder: boolean;
 }
 
 export type LienLabel = "Lien" | "LOP";
@@ -92,12 +94,15 @@ function getDefaultColorForStatus(name: string, index: number) {
   return fallbackColors[index % fallbackColors.length];
 }
 
+const defaultAutoFolderNames = new Set(["dropped", "paid"]);
+
 export function getDefaultCaseStatuses(): CaseStatusConfig[] {
   return statusOptions.map((name, index) => ({
     name,
     showOnDashboard: true,
     color: getDefaultColorForStatus(name, index),
     isCaseClosed: defaultClosedStatusNames.has(name.toLowerCase()),
+    autoFolder: defaultAutoFolderNames.has(name.toLowerCase()),
   }));
 }
 
@@ -148,6 +153,10 @@ export function normalizeCaseStatuses(value: unknown): CaseStatusConfig[] {
         typeof (row as { isCaseClosed?: unknown }).isCaseClosed === "boolean"
           ? Boolean((row as { isCaseClosed?: unknown }).isCaseClosed)
           : defaultClosedStatusNames.has(name.toLowerCase()),
+      autoFolder:
+        typeof (row as { autoFolder?: unknown }).autoFolder === "boolean"
+          ? Boolean((row as { autoFolder?: unknown }).autoFolder)
+          : defaultAutoFolderNames.has(name.toLowerCase()),
     });
   });
 

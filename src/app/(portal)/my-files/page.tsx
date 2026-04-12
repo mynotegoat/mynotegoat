@@ -18,6 +18,7 @@ import {
   downloadFile,
 } from "@/lib/file-storage";
 import { loadEmailSettings, renderEmailTemplate, type EmailRenderContext } from "@/lib/email-settings";
+import { loadCaseStatuses } from "@/lib/case-statuses";
 import { loadOfficeSettings } from "@/lib/office-settings";
 import { patients as patientRecords } from "@/lib/mock-data";
 
@@ -99,6 +100,7 @@ function isPdfMime(mime: string) {
 export default function MyFilesPage() {
   const searchParams = useSearchParams();
   const patients = patientRecords;
+  const [caseStatuses] = useState(() => loadCaseStatuses());
   const {
     state,
     createFolder,
@@ -107,7 +109,7 @@ export default function MyFilesPage() {
     uploadFile,
     renameFile,
     deleteFile,
-  } = useFileManager(patients);
+  } = useFileManager(patients, caseStatuses);
 
   // Navigation state — open to specific folder if ?folder= param is present
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(() => {

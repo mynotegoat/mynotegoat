@@ -1,5 +1,6 @@
 "use client";
 
+import type { CaseStatusConfig } from "@/lib/case-statuses";
 import type { PatientRecord } from "@/lib/mock-data";
 import { buildCaseNumber, toUsDateCanonical } from "@/lib/follow-up-queue";
 
@@ -268,9 +269,15 @@ function buildPatientFolderName(patient: PatientRecord): string {
 export function syncPatientFolders(
   state: FileManagerState,
   patients: PatientRecord[],
+  caseStatuses: CaseStatusConfig[] = [],
 ): FileManagerState {
   let folders = [...state.folders];
   const now = new Date().toISOString();
+
+  // Build a lookup of status names that have autoFolder enabled
+  const autoFolderStatusNames = new Set(
+    caseStatuses.filter((s) => s.autoFolder).map((s) => s.name.toLowerCase()),
+  );
 
   // 1. Ensure root "Patient Folders" system folder exists
   let root = folders.find((f) => f.id === PATIENT_FOLDERS_ROOT_ID);
@@ -286,26 +293,66 @@ export function syncPatientFolders(
     folders.push(root);
   }
 
-  // 2. For each patient, ensure year folder + patient folder exists
+  // 2. Ensure status folders exist for every autoFolder status
+  for (const s of caseStatuses) {
+    if (!s.autoFolder) continue;
+    const statusFolderId = `SYSTEM-STATUS-${s.name.toUpperCase().replace(/\s+/g, "-")}`;
+    let statusFolder = folders.find((f) => f.id === statusFolderId);
+    if (!statusFolder) {
+      statusFolder = {
+        id: statusFolderId,
+        name: s.name,
+        parentId: PATIENT_FOLDERS_ROOT_ID,
+        isSystemFolder: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      folders.push(statusFolder);
+    } else if (statusFolder.name !== s.name) {
+      // Update name if status was renamed
+      folders = folders.map((f) =>
+        f.id === statusFolderId ? { ...f, name: s.name, updatedAt: now } : f,
+      );
+    }
+  }
+
+  // 3. For each patient, determine the correct parent folder
   for (const patient of patients) {
     const initialExamDate = patient.matrix?.initialExam ?? "";
     const year = extractYearFromDate(initialExamDate) || extractYearFromDate(patient.dateOfLoss) || new Date().getFullYear().toString();
     const dolCanonical = toUsDateCanonical(patient.dateOfLoss);
     if (!dolCanonical) continue; // skip patients with invalid DOL
 
-    // Year folder
-    const yearFolderId = `SYSTEM-YEAR-${year}`;
-    let yearFolder = folders.find((f) => f.id === yearFolderId);
-    if (!yearFolder) {
-      yearFolder = {
-        id: yearFolderId,
-        name: year,
-        parentId: PATIENT_FOLDERS_ROOT_ID,
-        isSystemFolder: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-      folders.push(yearFolder);
+    // Determine if this patient should go in a status folder or year folder
+    const patientStatusLower = (patient.caseStatus ?? "").toLowerCase();
+    const useStatusFolder = autoFolderStatusNames.has(patientStatusLower);
+
+    let targetParentId: string;
+
+    if (useStatusFolder) {
+      // Find the matching status to get its exact name for the folder ID
+      const matchedStatus = caseStatuses.find(
+        (s) => s.autoFolder && s.name.toLowerCase() === patientStatusLower,
+      );
+      targetParentId = matchedStatus
+        ? `SYSTEM-STATUS-${matchedStatus.name.toUpperCase().replace(/\s+/g, "-")}`
+        : `SYSTEM-YEAR-${year}`;
+    } else {
+      // Year folder
+      const yearFolderId = `SYSTEM-YEAR-${year}`;
+      let yearFolder = folders.find((f) => f.id === yearFolderId);
+      if (!yearFolder) {
+        yearFolder = {
+          id: yearFolderId,
+          name: year,
+          parentId: PATIENT_FOLDERS_ROOT_ID,
+          isSystemFolder: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+        folders.push(yearFolder);
+      }
+      targetParentId = yearFolderId;
     }
 
     // Patient folder
@@ -317,7 +364,7 @@ export function syncPatientFolders(
       patientFolder = {
         id: patientFolderId,
         name: expectedName,
-        parentId: yearFolderId,
+        parentId: targetParentId,
         isSystemFolder: true,
         patientId: patient.id,
         createdAt: now,
@@ -325,11 +372,11 @@ export function syncPatientFolders(
       };
       folders.push(patientFolder);
     } else {
-      // Update name if patient was renamed, or move to correct year folder
-      if (patientFolder.name !== expectedName || patientFolder.parentId !== yearFolderId) {
+      // Update name if patient was renamed, or move to correct parent folder
+      if (patientFolder.name !== expectedName || patientFolder.parentId !== targetParentId) {
         folders = folders.map((f) =>
           f.id === patientFolderId
-            ? { ...f, name: expectedName, parentId: yearFolderId, updatedAt: now }
+            ? { ...f, name: expectedName, parentId: targetParentId, updatedAt: now }
             : f,
         );
       }

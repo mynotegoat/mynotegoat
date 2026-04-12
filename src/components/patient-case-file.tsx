@@ -1430,7 +1430,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   // ── Patient Files state ────────────────────────────────────────────────
   const [fileManagerState, setFileManagerState] = useState<FileManagerState>(() => {
     const loaded = loadFileManagerState();
-    return syncPatientFolders(loaded, allPatients);
+    return syncPatientFolders(loaded, allPatients, caseStatuses);
   });
   const patientFolderId = `SYSTEM-PATIENT-${patient.id}`;
 

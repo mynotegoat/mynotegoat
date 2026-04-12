@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PatientRecord } from "@/lib/mock-data";
+import type { CaseStatusConfig } from "@/lib/case-statuses";
 import {
   type FileManagerState,
   type FileRecord,
@@ -21,16 +22,16 @@ import {
   deleteFilesFromStorage,
 } from "@/lib/file-storage";
 
-export function useFileManager(patients: PatientRecord[]) {
+export function useFileManager(patients: PatientRecord[], caseStatuses: CaseStatusConfig[] = []) {
   const [state, setState] = useState<FileManagerState>(() => {
     const loaded = loadFileManagerState();
-    return syncPatientFolders(loaded, patients);
+    return syncPatientFolders(loaded, patients, caseStatuses);
   });
 
   // Re-sync patient folders when patients change
   useEffect(() => {
     setState((current) => {
-      const synced = syncPatientFolders(current, patients);
+      const synced = syncPatientFolders(current, patients, caseStatuses);
       // Only update if folders actually changed
       if (synced.folders.length !== current.folders.length) {
         saveFileManagerState(synced);
@@ -47,7 +48,7 @@ export function useFileManager(patients: PatientRecord[]) {
       }
       return current;
     });
-  }, [patients]);
+  }, [patients, caseStatuses]);
 
   const persist = useCallback((next: FileManagerState) => {
     saveFileManagerState(next);
