@@ -1642,7 +1642,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         }}
       />
 
-      <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <section className="grid gap-4 xl:grid-cols-[minmax(360px,420px)_1fr]">
         <aside className="space-y-4">
           <article className="panel-card p-4">
             <div className="flex flex-wrap items-end gap-2">
