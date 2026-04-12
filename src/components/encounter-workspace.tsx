@@ -692,6 +692,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const [printSelectionByPatient, setPrintSelectionByPatient] = useState<Record<string, string[]>>({});
   const [openChargesPanel, setOpenChargesPanel] = useState(false);
   const [chargeSearch, setChargeSearch] = useState("");
+  const [aptDateSort, setAptDateSort] = useState<"newest" | "oldest">("newest");
+  const [hiddenAptTypes, setHiddenAptTypes] = useState<Set<string>>(new Set());
   const [showPriorChargesPreview, setShowPriorChargesPreview] = useState(false);
 
   const [runMacroId, setRunMacroId] = useState<string | null>(null);
@@ -816,12 +818,23 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   );
   const filteredEncounterPatientId = filteredEncounterList[0]?.patientId ?? null;
   const filteredEncounterPatientName = filteredEncounterList[0]?.patientName ?? "";
-  const patientAppointments = useMemo(() => {
+  const allPatientAppointments = useMemo(() => {
     if (!filteredEncounterPatientId) return [];
-    return scheduleAppointments
-      .filter((a) => a.patientId === filteredEncounterPatientId)
-      .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime));
+    return scheduleAppointments.filter((a) => a.patientId === filteredEncounterPatientId);
   }, [filteredEncounterPatientId, scheduleAppointments]);
+
+  const patientAptTypes = useMemo(() => {
+    const types = new Set<string>();
+    allPatientAppointments.forEach((a) => types.add(a.appointmentType));
+    return [...types].sort((a, b) => a.localeCompare(b));
+  }, [allPatientAppointments]);
+
+  const patientAppointments = useMemo(() => {
+    const dir = aptDateSort === "newest" ? -1 : 1;
+    return allPatientAppointments
+      .filter((a) => !hiddenAptTypes.has(a.appointmentType))
+      .sort((a, b) => dir * a.date.localeCompare(b.date) || dir * a.startTime.localeCompare(b.startTime));
+  }, [allPatientAppointments, aptDateSort, hiddenAptTypes]);
   const appointmentTypeOptions = useMemo(() => {
     const names = appointmentTypes.map((entry) => entry.name);
     if (selectedEncounter && !names.includes(selectedEncounter.appointmentType)) {
@@ -1732,11 +1745,44 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
             </div>
           </article>
 
-          {filteredEncounterPatientId && patientAppointments.length > 0 && (
+          {filteredEncounterPatientId && allPatientAppointments.length > 0 && (
             <article className="panel-card p-4">
-              <h4 className="text-sm font-semibold">
-                Appointments for {filteredEncounterPatientName}
-              </h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">
+                  Appointments for {filteredEncounterPatientName}
+                </h4>
+                <button
+                  className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold hover:bg-[var(--bg-soft)]"
+                  onClick={() => setAptDateSort((prev) => (prev === "newest" ? "oldest" : "newest"))}
+                  title={`Sort by date: ${aptDateSort === "newest" ? "Newest first" : "Oldest first"}`}
+                  type="button"
+                >
+                  Date {aptDateSort === "newest" ? "↓" : "↑"}
+                </button>
+              </div>
+              {patientAptTypes.length > 1 && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">Hide:</span>
+                  {patientAptTypes.map((type) => (
+                    <label key={type} className="flex cursor-pointer items-center gap-1 text-xs select-none">
+                      <input
+                        type="checkbox"
+                        className="accent-[var(--brand-primary)]"
+                        checked={hiddenAptTypes.has(type)}
+                        onChange={(e) => {
+                          setHiddenAptTypes((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(type);
+                            else next.delete(type);
+                            return next;
+                          });
+                        }}
+                      />
+                      {type}
+                    </label>
+                  ))}
+                </div>
+              )}
               <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
                 <table className="min-w-full border-collapse text-sm">
                   <thead>
