@@ -1148,7 +1148,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { tasks, addTask, toggleTaskDone } = useTasks();
-  const patientFlowItems = useMemo(() => buildFollowUpItems([patient]), [patient]);
+  // patientFlowItems moved below usePatientFollowUpOverrides so overrides are available
   const patientTasks = useMemo(
     () => tasks.filter((task) => task.patientId === patient.id),
     [tasks, patient.id],
@@ -1156,8 +1156,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge, deleteEncounter } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
-  const { getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
+  const { recordsByPatientId: followUpOverridesByPatientId, getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
     usePatientFollowUpOverrides();
+  const patientFlowItems = useMemo(
+    () => buildFollowUpItems([patient], { followUpOverrides: followUpOverridesByPatientId }),
+    [patient, followUpOverridesByPatientId],
+  );
   const patientBillingRecord = getPatientBillingRecord(patient.id);
   const currentPlanTier = usePlanTier();
   const isCompletePlan = currentPlanTier === "complete";
