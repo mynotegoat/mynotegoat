@@ -2358,7 +2358,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               key={entry.id}
                               className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-2 text-left transition hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.08)]"
                               disabled={selectedEncounter.signed}
-                              onClick={() => addChargeFromTreatment(entry.id)}
+                              onClick={() => { addChargeFromTreatment(entry.id); setChargeSearch(""); }}
                               type="button"
                             >
                               <p className="text-sm font-semibold">{entry.name}</p>
