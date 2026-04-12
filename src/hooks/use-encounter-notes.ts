@@ -48,15 +48,16 @@ export function useEncounterNotes() {
     return valid;
   });
 
-  // Guard: skip reloads triggered by our own writes.
-  const selfWriteRef = useRef(false);
+  // Counter: skip reloads triggered by our own writes.  Each write
+  // increments; each notification decrements.  Only reload from LS
+  // when counter hits 0 (meaning a DIFFERENT hook instance wrote).
+  const selfWriteCountRef = useRef(0);
 
   // Listen for changes made by other hook instances on this page
   useEffect(() => {
     return onLocalChange(SYNC_KEY, () => {
-      // If WE just wrote, skip — we already have the latest state.
-      if (selfWriteRef.current) {
-        selfWriteRef.current = false;
+      if (selfWriteCountRef.current > 0) {
+        selfWriteCountRef.current--;
         return;
       }
       setEncounters(loadEncounterNoteRecords());
@@ -67,7 +68,7 @@ export function useEncounterNotes() {
     setEncounters((current) => {
       const next = updater(current);
       saveEncounterNoteRecords(next);
-      selfWriteRef.current = true;
+      selfWriteCountRef.current++;
       notifyChange(SYNC_KEY);
       return next;
     });

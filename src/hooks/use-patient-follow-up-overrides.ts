@@ -26,13 +26,13 @@ export function usePatientFollowUpOverrides() {
     loadPatientFollowUpOverridesMap(),
   );
 
-  const selfWriteRef = useRef(false);
+  const selfWriteCountRef = useRef(0);
 
   // Listen for changes made by other hook instances on this page
   useEffect(() => {
     return onLocalChange(SYNC_KEY, () => {
-      if (selfWriteRef.current) {
-        selfWriteRef.current = false;
+      if (selfWriteCountRef.current > 0) {
+        selfWriteCountRef.current--;
         return;
       }
       setRecordsByPatientId(loadPatientFollowUpOverridesMap());
@@ -43,7 +43,7 @@ export function usePatientFollowUpOverrides() {
     setRecordsByPatientId((current) => {
       const next = updater(current);
       savePatientFollowUpOverridesMap(next);
-      selfWriteRef.current = true;
+      selfWriteCountRef.current++;
       notifyChange(SYNC_KEY);
       return next;
     });
