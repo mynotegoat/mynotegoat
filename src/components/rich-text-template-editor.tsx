@@ -89,10 +89,9 @@ export const RichTextTemplateEditor = forwardRef<
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
   const isFocusedRef = useRef(false);
-  // Set to true right after a programmatic innerHTML update.
-  // While true, the next emitChange is suppressed to prevent the browser's
-  // slightly-modified innerHTML from overwriting the programmatic value.
-  const justSyncedRef = useRef(false);
+
+  // Strip HTML tags to get plain text for comparison.
+  const stripTags = (html: string) => html.replace(/<[^>]*>/g, "").trim();
 
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
@@ -116,10 +115,6 @@ export const RichTextTemplateEditor = forwardRef<
     }
     editor.innerHTML = nextHtml;
     lastAppliedRef.current = nextHtml;
-    // Mark that we just did a programmatic sync.  The browser may have
-    // normalised the HTML we set (different whitespace, self-closing tags, …),
-    // so the VERY NEXT emitChange should NOT treat that delta as a user edit.
-    justSyncedRef.current = true;
   };
 
   useEffect(() => {
@@ -132,31 +127,22 @@ export const RichTextTemplateEditor = forwardRef<
       return;
     }
 
-    // If we just programmatically set innerHTML, skip this emission.
-    // The browser may have subtly modified the HTML, and we don't want
-    // that delta to overwrite the value the parent just gave us.
-    if (justSyncedRef.current) {
-      justSyncedRef.current = false;
-      // Keep lastAppliedRef in sync with whatever the browser stored so
-      // subsequent REAL user edits won't see a phantom diff.
-      lastAppliedRef.current = normalizeOutgoingValue(editor.innerHTML);
-      return;
-    }
-
     const next = normalizeOutgoingValue(editor.innerHTML);
     if (next === lastAppliedRef.current) {
       return;
     }
 
-    // Safety guard: never emit an empty value when the parent holds real
-    // content.  This catches edge-cases where the browser temporarily
-    // clears innerHTML during rapid focus/blur cycles.
-    const incomingHasContent = normalizeIncomingValue(value).replace(/<[^>]*>/g, "").trim().length > 0;
-    const nextHasContent = next.replace(/<[^>]*>/g, "").trim().length > 0;
-    if (!nextHasContent && incomingHasContent) {
-      // Re-sync the editor to show the parent's value instead of blanking.
-      editor.innerHTML = normalizeIncomingValue(value);
-      lastAppliedRef.current = normalizeOutgoingValue(editor.innerHTML);
+    // Compare the actual text content (tags stripped) of the editor vs the
+    // parent's value.  If the text is identical it means only the HTML
+    // formatting differs (e.g. browser normalised self-closing tags or
+    // whitespace after a programmatic sync).  Treat that as a no-op so we
+    // don't overwrite the parent with a cosmetic-only diff.
+    const nextText = stripTags(next);
+    const valueText = stripTags(value);
+    if (nextText === valueText) {
+      // Keep lastAppliedRef in sync so future real edits aren't compared
+      // against stale data.
+      lastAppliedRef.current = next;
       return;
     }
 
@@ -172,7 +158,7 @@ export const RichTextTemplateEditor = forwardRef<
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
-    justSyncedRef.current = false; // real user action
+
     document.execCommand(command, false, commandValue);
     emitChange();
   };
@@ -183,7 +169,7 @@ export const RichTextTemplateEditor = forwardRef<
       return;
     }
     isFocusedRef.current = true;
-    justSyncedRef.current = false; // real user action
+
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -197,7 +183,7 @@ export const RichTextTemplateEditor = forwardRef<
       return;
     }
     isFocusedRef.current = true;
-    justSyncedRef.current = false; // real user action
+
     if (!isSelectionInsideEditor(editor)) {
       editor.focus();
     }
@@ -392,7 +378,7 @@ export const RichTextTemplateEditor = forwardRef<
         data-placeholder={placeholder}
         onFocus={() => { isFocusedRef.current = true; }}
         onBlur={() => { isFocusedRef.current = false; emitChange(); }}
-        onInput={() => { justSyncedRef.current = false; emitChange(); }}
+        onInput={emitChange}
         onPaste={(event) => {
           // Intercept paste: strip foreign HTML and insert as clean text
           // to prevent broken markup from crashing the editor or wrecking state.
@@ -405,7 +391,6 @@ export const RichTextTemplateEditor = forwardRef<
           // tags like <meta>, <style>, Word markup, etc.
           if (html && !html.includes("data-macro-run-id")) {
             event.preventDefault();
-            justSyncedRef.current = false;
             document.execCommand("insertText", false, plain || "");
             emitChange();
           }

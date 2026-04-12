@@ -1798,7 +1798,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                                       title="Start encounter"
                                       type="button"
                                     >
-                                      + Enc
+                                      <span className="whitespace-nowrap">+ Enc.</span>
                                     </button>
                                   ) : (
                                     <span className="text-xs text-[var(--text-muted)]">-</span>
@@ -1840,7 +1840,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         onClick={handlePrintSelectedSoapNotes}
                         type="button"
                       >
-                        Print SOAP
+                        Print Encounters
                         {selectedSoapPrintEncounterIds.length > 0 && (
                           <span className="ml-1 text-[10px] font-medium text-[var(--text-muted)]">({selectedSoapPrintEncounterIds.length})</span>
                         )}
