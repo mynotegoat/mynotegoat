@@ -1892,27 +1892,24 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     >
                       Save Now
                     </button>
-                    <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                      onClick={() => {
-                        if (!selectedEncounter.signed && selectedEncounter.charges.length === 0) {
-                          if (!window.confirm("This encounter has no charges. Close it anyway?")) return;
-                        }
-                        setSigned(selectedEncounter.id, !selectedEncounter.signed);
-                      }}
-                      type="button"
-                    >
-                      {selectedEncounter.signed ? "Reopen Encounter" : "Close Encounter"}
-                    </button>
-                    {!selectedEncounter.signed && (
+                    {selectedEncounter.signed ? (
                       <button
-                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:bg-[var(--bg-soft)] disabled:text-[var(--text-muted)] disabled:border-[var(--line-soft)]"
-                        disabled={!linkedAppointmentForStatus}
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
+                        onClick={() => setSigned(selectedEncounter.id, false)}
+                        type="button"
+                      >
+                        Reopen Encounter
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-all active:scale-[0.97] active:brightness-95"
                         onClick={() => {
                           if (selectedEncounter.charges.length === 0) {
                             if (!window.confirm("This encounter has no charges. Close and check out anyway?")) return;
                           }
+                          // Close encounter
                           setSigned(selectedEncounter.id, true);
+                          // Check out linked appointment (if found)
                           if (linkedAppointmentForStatus) {
                             updateAppointment(linkedAppointmentForStatus.id, (current) => ({
                               ...current,
@@ -1922,13 +1919,13 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                               `Encounter closed and ${selectedEncounter.patientName} checked out.`,
                             );
                           } else {
-                            setMessage("Encounter closed.");
+                            setMessage("Encounter closed. No linked appointment found to check out.");
                           }
                         }}
                         title={
                           linkedAppointmentForStatus
                             ? "Close encounter and mark linked appointment as Check Out"
-                            : "No linked appointment found for this encounter date"
+                            : "Close encounter (no linked appointment found for check out)"
                         }
                         type="button"
                       >
