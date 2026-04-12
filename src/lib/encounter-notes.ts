@@ -380,10 +380,44 @@ async function dualWriteEncounterNotesToCloud(
   }
 }
 
-export function replaceEncounterNotesFromCloud(records: EncounterNoteRecord[]) {
+/**
+ * Merge cloud encounter notes with local ones.  For each record keep
+ * whichever version has the newer `updatedAt`.  Records that exist
+ * only locally are KEPT (cloud may not have them yet because
+ * dual-write is async/fire-and-forget).
+ */
+export function replaceEncounterNotesFromCloud(cloudRecords: EncounterNoteRecord[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  previousNotesById = new Map(records.map((n) => [n.id, n]));
+
+  const localRecords = loadEncounterNoteRecords();
+  const cloudById = new Map(cloudRecords.map((n) => [n.id, n]));
+  const mergedById = new Map<string, EncounterNoteRecord>();
+
+  // Start with all cloud records
+  for (const note of cloudRecords) {
+    mergedById.set(note.id, note);
+  }
+
+  // Merge local records — keep local if newer or missing from cloud
+  for (const local of localRecords) {
+    const cloud = cloudById.get(local.id);
+    if (!cloud) {
+      // Only exists locally (cloud write may still be in flight) — keep it
+      mergedById.set(local.id, local);
+    } else {
+      // Both exist — keep whichever is newer
+      const localTime = Date.parse(local.updatedAt) || 0;
+      const cloudTime = Date.parse(cloud.updatedAt) || 0;
+      if (localTime > cloudTime) {
+        mergedById.set(local.id, local);
+      }
+      // else cloud version is already in mergedById
+    }
+  }
+
+  const merged = Array.from(mergedById.values());
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  previousNotesById = new Map(merged.map((n) => [n.id, n]));
 }
 
 export function createEncounterId() {
