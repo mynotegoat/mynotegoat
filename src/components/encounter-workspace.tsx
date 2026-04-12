@@ -1737,7 +1737,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
               <h4 className="text-sm font-semibold">
                 Appointments for {filteredEncounterPatientName}
               </h4>
-              <div className="mt-2 max-h-[340px] overflow-auto rounded-xl border border-[var(--line-soft)]">
+              <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
                 <table className="min-w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-[var(--bg-soft)] text-left">
