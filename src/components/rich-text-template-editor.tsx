@@ -393,6 +393,23 @@ export const RichTextTemplateEditor = forwardRef<
         onFocus={() => { isFocusedRef.current = true; }}
         onBlur={() => { isFocusedRef.current = false; emitChange(); }}
         onInput={() => { justSyncedRef.current = false; emitChange(); }}
+        onPaste={(event) => {
+          // Intercept paste: strip foreign HTML and insert as clean text
+          // to prevent broken markup from crashing the editor or wrecking state.
+          const clipboard = event.clipboardData;
+          if (!clipboard) return;
+          const html = clipboard.getData("text/html");
+          const plain = clipboard.getData("text/plain");
+          // If the paste contains HTML from an external source (not our own
+          // editor), sanitise it down to plain text to avoid layout-breaking
+          // tags like <meta>, <style>, Word markup, etc.
+          if (html && !html.includes("data-macro-run-id")) {
+            event.preventDefault();
+            justSyncedRef.current = false;
+            document.execCommand("insertText", false, plain || "");
+            emitChange();
+          }
+        }}
         onClick={(event) => {
           if (onElementClick && event.target instanceof HTMLElement) {
             onElementClick(event.target);

@@ -307,7 +307,12 @@ export function saveEncounterNoteRecords(records: EncounterNoteRecord[]) {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  } catch (err) {
+    // localStorage can throw QuotaExceededError — log but don't crash the app.
+    console.error("[encounter-notes] localStorage write failed:", err);
+  }
   void dualWriteEncounterNotesToCloud(records, previousNotesById);
   previousNotesById = new Map(records.map((n) => [n.id, n]));
 }
