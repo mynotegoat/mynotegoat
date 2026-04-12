@@ -1402,6 +1402,8 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [diagnosisListSearch, setDiagnosisListSearch] = useState("");
   const [dxDragIndex, setDxDragIndex] = useState<number | null>(null);
   const [dxDragOverIndex, setDxDragOverIndex] = useState<number | null>(null);
+  const dxTouchStartY = useRef<number | null>(null);
+  const dxTouchRowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const caseNumber = useMemo(
     () => buildCaseNumber(dateOfLoss, lastName, firstName),
     [dateOfLoss, firstName, lastName],
@@ -4703,6 +4705,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     return (
                       <tr
                         key={entry.id}
+                        ref={(el) => { dxTouchRowRefs.current[idx] = el; }}
                         className={`border-t border-[var(--line-soft)] transition-colors ${isDragging ? "opacity-40" : ""} ${isDragOver ? "bg-blue-50" : ""}`}
                         draggable
                         onDragStart={() => setDxDragIndex(idx)}
@@ -4725,9 +4728,36 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                           setDxDragIndex(null);
                           setDxDragOverIndex(null);
                         }}
+                        onTouchStart={(e) => {
+                          const grip = (e.target as HTMLElement).closest('[data-dx-grip]');
+                          if (!grip) return;
+                          dxTouchStartY.current = e.touches[0].clientY;
+                          setDxDragIndex(idx);
+                        }}
+                        onTouchMove={(e) => {
+                          if (dxDragIndex === null) return;
+                          e.preventDefault();
+                          const y = e.touches[0].clientY;
+                          const overIdx = dxTouchRowRefs.current.findIndex((row) => {
+                            if (!row) return false;
+                            const rect = row.getBoundingClientRect();
+                            return y >= rect.top && y <= rect.bottom;
+                          });
+                          if (overIdx >= 0 && overIdx !== dxDragIndex) {
+                            setDxDragOverIndex(overIdx);
+                          }
+                        }}
+                        onTouchEnd={() => {
+                          if (dxDragIndex !== null && dxDragOverIndex !== null && dxDragIndex !== dxDragOverIndex) {
+                            reorderDiagnoses(dxDragIndex, dxDragOverIndex);
+                          }
+                          setDxDragIndex(null);
+                          setDxDragOverIndex(null);
+                          dxTouchStartY.current = null;
+                        }}
                       >
-                        <td className="px-1 py-2 text-center cursor-grab active:cursor-grabbing text-[var(--text-muted)]">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 inline-block">
+                        <td className="px-1 py-2 text-center cursor-grab active:cursor-grabbing text-[var(--text-muted)] touch-none" data-dx-grip>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 inline-block pointer-events-none">
                             <path fillRule="evenodd" d="M2 4.75A.75.75 0 012.75 4h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 4.75zm0 5A.75.75 0 012.75 9h14.5a.75.75 0 010 1.5H2.75A.75.75 0 012 9.75zm0 5a.75.75 0 01.75-.75h14.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
                           </svg>
                         </td>
