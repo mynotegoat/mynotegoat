@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   createPromptTokenFromLabel,
   getDefaultNarrativeReportLibrary,
@@ -10,6 +10,8 @@ import {
   type NarrativeReportPrompt,
   type NarrativeReportTemplate,
 } from "@/lib/report-templates";
+
+const STORAGE_KEY = "casemate.report-templates.v1";
 
 function createTemplateId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -23,6 +25,17 @@ export function useReportTemplates() {
   const [reportTemplates, setReportTemplates] = useState<NarrativeReportLibrary>(() =>
     loadNarrativeReportLibrary(),
   );
+
+  // Re-read when the cloud fallback writes the template data
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        setReportTemplates(loadNarrativeReportLibrary());
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
 
   const updateLibrary = useCallback((updater: (current: NarrativeReportLibrary) => NarrativeReportLibrary) => {
     setReportTemplates((current) => {

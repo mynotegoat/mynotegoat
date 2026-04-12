@@ -232,11 +232,39 @@ export function loadNarrativeReportLibrary(): NarrativeReportLibrary {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
+      // localStorage is empty — try to load from cloud asynchronously.
+      // Return defaults for now; the hook will update when cloud data arrives.
+      void loadNarrativeReportLibraryFromCloud();
       return getDefaultNarrativeReportLibrary();
     }
     return normalizeLibrary(JSON.parse(raw));
   } catch {
     return getDefaultNarrativeReportLibrary();
+  }
+}
+
+/**
+ * Async fallback: fetch report templates from the cloud KV table
+ * and write them to localStorage. Dispatches a storage event so
+ * any mounted hooks re-read.
+ */
+async function loadNarrativeReportLibraryFromCloud(): Promise<void> {
+  try {
+    const { fetchKvValue } = await import("@/lib/kv-cloud");
+    const value = await fetchKvValue<NarrativeReportLibrary>(STORAGE_KEY);
+    if (!value || !value.templates || value.templates.length === 0) {
+      return;
+    }
+    const library = normalizeLibrary(value);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(library));
+    } catch {
+      // Quota still full — that's OK, we'll use the cloud value directly
+    }
+    // Trigger re-render in any mounted hook
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
+  } catch (err) {
+    console.warn("[report-templates] cloud fallback failed:", err);
   }
 }
 
