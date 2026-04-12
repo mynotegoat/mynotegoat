@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createEncounterChargeId,
   createEncounterDiagnosisId,
@@ -16,6 +16,9 @@ import {
   type EncounterSection,
 } from "@/lib/encounter-notes";
 import { patients } from "@/lib/mock-data";
+import { notifyChange, onLocalChange } from "@/lib/local-sync";
+
+const SYNC_KEY = "casemate.encounter-notes.v1";
 
 type NewEncounterDraft = {
   patientId: string;
@@ -45,10 +48,18 @@ export function useEncounterNotes() {
     return valid;
   });
 
+  // Listen for changes made by other hook instances on this page
+  useEffect(() => {
+    return onLocalChange(SYNC_KEY, () => {
+      setEncounters(loadEncounterNoteRecords());
+    });
+  }, []);
+
   const updateRecords = useCallback((updater: (current: EncounterNoteRecord[]) => EncounterNoteRecord[]) => {
     setEncounters((current) => {
       const next = updater(current);
       saveEncounterNoteRecords(next);
+      notifyChange(SYNC_KEY);
       return next;
     });
   }, []);

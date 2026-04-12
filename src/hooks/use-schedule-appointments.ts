@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   loadScheduleAppointments,
   saveScheduleAppointments,
   type ScheduleAppointmentRecord,
 } from "@/lib/schedule-appointments";
+import { notifyChange, onLocalChange } from "@/lib/local-sync";
+
+const SYNC_KEY = "casemate.schedule-appointments.v1";
 
 function compareAppointments(left: ScheduleAppointmentRecord, right: ScheduleAppointmentRecord) {
   const leftKey = `${left.date} ${left.startTime}`;
@@ -18,11 +21,19 @@ export function useScheduleAppointments() {
     loadScheduleAppointments(),
   );
 
+  // Listen for changes made by other hook instances on this page
+  useEffect(() => {
+    return onLocalChange(SYNC_KEY, () => {
+      setScheduleAppointments(loadScheduleAppointments());
+    });
+  }, []);
+
   const updateScheduleAppointments = useCallback(
     (updater: (current: ScheduleAppointmentRecord[]) => ScheduleAppointmentRecord[]) => {
       setScheduleAppointments((current) => {
         const next = updater(current).sort(compareAppointments);
         saveScheduleAppointments(next);
+        notifyChange(SYNC_KEY);
         return next;
       });
     },
