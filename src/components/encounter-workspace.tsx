@@ -693,7 +693,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
   const [openChargesPanel, setOpenChargesPanel] = useState(false);
   const [chargeSearch, setChargeSearch] = useState("");
   const [aptDateSort, setAptDateSort] = useState<"newest" | "oldest">("newest");
-  const [hiddenAptTypes, setHiddenAptTypes] = useState<Set<string>>(new Set());
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [showPriorChargesPreview, setShowPriorChargesPreview] = useState(false);
 
   const [runMacroId, setRunMacroId] = useState<string | null>(null);
@@ -823,18 +823,29 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     return scheduleAppointments.filter((a) => a.patientId === filteredEncounterPatientId);
   }, [filteredEncounterPatientId, scheduleAppointments]);
 
-  const patientAptTypes = useMemo(() => {
-    const types = new Set<string>();
-    allPatientAppointments.forEach((a) => types.add(a.appointmentType));
-    return [...types].sort((a, b) => a.localeCompare(b));
-  }, [allPatientAppointments]);
-
   const patientAppointments = useMemo(() => {
     const dir = aptDateSort === "newest" ? -1 : 1;
     return allPatientAppointments
-      .filter((a) => !hiddenAptTypes.has(a.appointmentType))
+      .filter((apt) => {
+        if (!hideCompleted) return true;
+        // "Completed" = Check Out AND encounter is closed (signed)
+        if (apt.status === "Check Out") {
+          const dateUs = (() => {
+            const [y, m, d] = apt.date.split("-");
+            return `${m}/${d}/${y}`;
+          })();
+          const linked = encountersByNewest.find(
+            (e) => e.patientId === apt.patientId && e.encounterDate === dateUs,
+          );
+          // Only hide if encounter exists AND is signed (fully done)
+          if (linked?.signed) return false;
+        }
+        // Also hide cancelled/no-show if hiding completed
+        if (apt.status === "Canceled" || apt.status === "No Show") return false;
+        return true;
+      })
       .sort((a, b) => dir * a.date.localeCompare(b.date) || dir * a.startTime.localeCompare(b.startTime));
-  }, [allPatientAppointments, aptDateSort, hiddenAptTypes]);
+  }, [allPatientAppointments, aptDateSort, hideCompleted, encountersByNewest]);
   const appointmentTypeOptions = useMemo(() => {
     const names = appointmentTypes.map((entry) => entry.name);
     if (selectedEncounter && !names.includes(selectedEncounter.appointmentType)) {
@@ -1760,29 +1771,18 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                   Date {aptDateSort === "newest" ? "↓" : "↑"}
                 </button>
               </div>
-              {patientAptTypes.length > 1 && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="text-xs font-semibold text-[var(--text-muted)]">Hide:</span>
-                  {patientAptTypes.map((type) => (
-                    <label key={type} className="flex cursor-pointer items-center gap-1 text-xs select-none">
-                      <input
-                        type="checkbox"
-                        className="accent-[var(--brand-primary)]"
-                        checked={hiddenAptTypes.has(type)}
-                        onChange={(e) => {
-                          setHiddenAptTypes((prev) => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.add(type);
-                            else next.delete(type);
-                            return next;
-                          });
-                        }}
-                      />
-                      {type}
-                    </label>
-                  ))}
-                </div>
-              )}
+              <div className="mt-2">
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-[var(--brand-primary)]"
+                    checked={hideCompleted}
+                    onChange={(e) => setHideCompleted(e.target.checked)}
+                  />
+                  Hide completed
+                  <span className="font-normal text-[var(--text-muted)]">(closed + checked out)</span>
+                </label>
+              </div>
               <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--line-soft)]">
                 <table className="min-w-full border-collapse text-sm">
                   <thead>
