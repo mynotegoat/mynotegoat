@@ -1913,17 +1913,17 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                     <button
                       className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 transition-all active:scale-[0.97]"
                       onClick={async () => {
-                        setMessage("Saving all encounters...");
-                        const result = await forceSaveAll();
+                        setMessage("Saving encounters...");
+                        const result = await forceSaveAll(selectedEncounter.patientId);
                         if (result.ok) {
-                          setMessage(`All encounters saved (${result.count} total).${result.error ? ` Note: ${result.error}` : ""}`);
+                          setMessage(`Encounters saved (${result.count}).${result.error ? ` Note: ${result.error}` : ""}`);
                         } else {
                           setMessage(`Save failed: ${result.error || "Unknown error"}`);
                         }
                       }}
                       type="button"
                     >
-                      Save All
+                      Save Encounters
                     </button>
                     {selectedEncounter.signed ? (
                       <button

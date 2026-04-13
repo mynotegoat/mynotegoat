@@ -174,11 +174,14 @@ function formatDateLabel(value: string) {
   if (!parsed) {
     return value;
   }
+  // Use UTC to match parseIsoDate which creates dates at UTC midnight.
+  // Without this, US timezones shift the weekday name by -1 day.
   return parsed.toLocaleDateString(undefined, {
     weekday: "long",
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

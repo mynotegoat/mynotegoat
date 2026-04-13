@@ -468,9 +468,10 @@ export function useEncounterNotes() {
     [encounters],
   );
 
-  /** Force-save all encounters to localStorage + cloud (bulk upsert). */
-  const forceSaveAll = useCallback(async (): Promise<{ ok: boolean; count: number; error?: string }> => {
-    return forceSaveAllEncountersToCloud(encounters);
+  /** Force-save encounters to localStorage + cloud. If patientId is given, only saves that patient's encounters. */
+  const forceSaveAll = useCallback(async (patientId?: string): Promise<{ ok: boolean; count: number; error?: string }> => {
+    const toSave = patientId ? encounters.filter((e) => e.patientId === patientId) : encounters;
+    return forceSaveAllEncountersToCloud(toSave);
   }, [encounters]);
 
   return {
