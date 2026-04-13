@@ -15,7 +15,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
 import { PlanTierProvider } from "@/lib/plan-context";
-import { GlobalTimerAlerts } from "@/components/global-timer-alerts";
+import dynamic from "next/dynamic";
+const GlobalTimerAlerts = dynamic(() => import("@/components/global-timer-alerts").then((m) => ({ default: m.GlobalTimerAlerts })), { ssr: false });
 
 export default function PortalLayout({
   children,
