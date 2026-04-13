@@ -86,7 +86,7 @@ function saveColumnOrder(order: ListColumnId[]) {
   window.localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order));
 }
 
-type PatientView = "list" | "detail" | "caseFlow" | "toDo";
+type PatientView = "list" | "detail" | "caseFlow" | "toDo" | "birthdays";
 
 type DetailRow = {
   label: string;
@@ -920,6 +920,92 @@ export default function PatientsPage() {
     setTaskMessage("Task updated."); cancelEditingTask();
   };
 
+  // ── Birthday helpers ──
+  const birthdayEntries = useMemo(() => {
+    const today = new Date();
+    const todayMonth = today.getMonth();
+    const todayDate = today.getDate();
+    const todayDay = today.getDay(); // 0=Sun
+
+    // Compute start of the week (Sunday) and end (Saturday)
+    const weekStart = new Date(today);
+    weekStart.setDate(todayDate - todayDay);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const wsMonth = weekStart.getMonth();
+    const wsDate = weekStart.getDate();
+    const weMonth = weekEnd.getMonth();
+    const weDate = weekEnd.getDate();
+
+    type BirthdayEntry = {
+      id: string;
+      fullName: string;
+      dob: string;
+      birthdayMonth: number;
+      birthdayDay: number;
+      isToday: boolean;
+    };
+
+    const entries: BirthdayEntry[] = [];
+    for (const p of patients) {
+      if (!p.dob) continue;
+      // dob is ISO yyyy-mm-dd
+      const match = p.dob.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) continue;
+      const bMonth = Number(match[2]) - 1; // 0-based
+      const bDay = Number(match[3]);
+
+      // Check if birthday falls within this week (month+day only)
+      // Handle cross-month weeks
+      let inWeek = false;
+      if (wsMonth === weMonth) {
+        inWeek = bMonth === wsMonth && bDay >= wsDate && bDay <= weDate;
+      } else {
+        // Week spans two months
+        inWeek =
+          (bMonth === wsMonth && bDay >= wsDate) ||
+          (bMonth === weMonth && bDay <= weDate);
+      }
+
+      if (inWeek) {
+        entries.push({
+          id: p.id,
+          fullName: p.fullName,
+          dob: p.dob,
+          birthdayMonth: bMonth,
+          birthdayDay: bDay,
+          isToday: bMonth === todayMonth && bDay === todayDate,
+        });
+      }
+    }
+
+    // Sort: today first, then by day of week
+    entries.sort((a, b) => {
+      if (a.isToday && !b.isToday) return -1;
+      if (!a.isToday && b.isToday) return 1;
+      // Sort by month then day
+      if (a.birthdayMonth !== b.birthdayMonth) return a.birthdayMonth - b.birthdayMonth;
+      return a.birthdayDay - b.birthdayDay;
+    });
+
+    return entries;
+  }, []);
+
+  const birthdayWeekLabel = useMemo(() => {
+    const today = new Date();
+    const todayDay = today.getDay();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - todayDay);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${fmt(weekStart)} - ${fmt(weekEnd)}, ${weekEnd.getFullYear()}`;
+  }, []);
+
   return (
     <div className="space-y-5">
       <section className="panel-card p-4">
@@ -942,7 +1028,7 @@ export default function PatientsPage() {
             onClick={() => setView("list")}
             type="button"
           >
-            List View
+            List
           </button>
           <button
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${
@@ -951,7 +1037,7 @@ export default function PatientsPage() {
             onClick={() => setView("detail")}
             type="button"
           >
-            Detail View
+            Detail
           </button>
           <button
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${
@@ -970,6 +1056,16 @@ export default function PatientsPage() {
             type="button"
           >
             To Do
+          </button>
+          <button
+            className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold ${
+              view === "birthdays" ? "bg-[var(--brand-primary)] text-white" : "bg-[var(--bg-soft)]"
+            }`}
+            onClick={() => setView("birthdays")}
+            type="button"
+          >
+            <span className="text-base leading-none">&#127874;</span>
+            Birthdays
           </button>
         </div>
 
@@ -1469,6 +1565,82 @@ export default function PatientsPage() {
               )}
             </div>
           </section>
+        </div>
+      )}
+
+      {view === "birthdays" && (
+        <div className="space-y-4">
+          <section className="panel-card p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">&#127874;</span>
+              <div>
+                <h4 className="text-lg font-semibold">Patient Birthdays This Week</h4>
+                <p className="text-sm text-[var(--text-muted)]">{birthdayWeekLabel}</p>
+              </div>
+            </div>
+          </section>
+
+          {birthdayEntries.length === 0 ? (
+            <section className="panel-card p-6 text-center">
+              <p className="text-4xl">&#127880;</p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                No patient birthdays this week.
+              </p>
+            </section>
+          ) : (
+            <section className="panel-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
+                  <thead>
+                    <tr className="bg-[var(--bg-soft)] text-left text-sm">
+                      <th className="px-4 py-3">Patient</th>
+                      <th className="px-4 py-3">Birthday</th>
+                      <th className="px-4 py-3">Age</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {birthdayEntries.map((entry) => {
+                      const [y, m, d] = entry.dob.split("-").map(Number);
+                      const birthdayDate = new Date(new Date().getFullYear(), entry.birthdayMonth, entry.birthdayDay);
+                      const dayLabel = birthdayDate.toLocaleDateString("en-US", { weekday: "long" });
+                      const dateLabel = `${String(entry.birthdayMonth + 1).padStart(2, "0")}/${String(entry.birthdayDay).padStart(2, "0")}`;
+                      const age = new Date().getFullYear() - y;
+                      return (
+                        <tr
+                          key={entry.id}
+                          className={`border-t border-[var(--line-soft)] ${entry.isToday ? "bg-amber-50" : ""}`}
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              className="font-semibold text-[var(--brand-primary)] hover:underline"
+                              href={`/patients/${entry.id}`}
+                            >
+                              {entry.fullName}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-semibold">{dayLabel}, {dateLabel}</span>
+                            {entry.isToday && (
+                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+                                &#127881; Today!
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-[var(--text-muted)]">
+                            Turning {age}
+                          </td>
+                          <td className="px-4 py-3 text-lg">
+                            {entry.isToday ? "&#127874;" : "&#127873;"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </div>
       )}
 
