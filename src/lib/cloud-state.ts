@@ -645,6 +645,7 @@ async function bootstrapTableBackedEntities() {
           "casemate.schedule-settings.v1",
           "casemate.schedule-rooms.v1",
           "casemate.schedule-appointment-types.v1",
+          "casemate.room-timer-presets.v1",
         ],
         contacts: [
           "casemate.contact-directory.v1",

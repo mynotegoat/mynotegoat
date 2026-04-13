@@ -78,6 +78,20 @@ function saveRoomPresets(map: RoomPresetsMap) {
   try {
     window.localStorage.setItem(ROOM_PRESETS_KEY, JSON.stringify(map));
   } catch {}
+  // Sync to cloud so presets appear on all devices
+  void import("@/lib/kv-cloud").then((m) =>
+    m.dualWriteKv(ROOM_PRESETS_KEY, "schedulingSettings", map),
+  );
+}
+
+async function loadRoomPresetsFromCloud(): Promise<RoomPresetsMap | null> {
+  try {
+    const { fetchKvValue } = await import("@/lib/kv-cloud");
+    const val = await fetchKvValue<RoomPresetsMap>(ROOM_PRESETS_KEY);
+    return val ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /* ─── Audio ─── */
@@ -197,6 +211,30 @@ export default function TimersPage() {
   const finishedIdsRef = useRef<Set<string>>(new Set());
   const stopChimeRef = useRef<(() => void) | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Pull presets from cloud on mount ──
+  useEffect(() => {
+    void loadRoomPresetsFromCloud().then((cloud) => {
+      if (!cloud) return;
+      // Merge: cloud wins for any room that has presets there
+      setRoomPresets((local) => {
+        const merged = { ...local };
+        let changed = false;
+        for (const [roomId, cloudList] of Object.entries(cloud)) {
+          const localList = local[roomId] ?? [];
+          if (cloudList.length > 0 && JSON.stringify(cloudList) !== JSON.stringify(localList)) {
+            merged[roomId] = cloudList;
+            changed = true;
+          }
+        }
+        if (changed) {
+          try { window.localStorage.setItem(ROOM_PRESETS_KEY, JSON.stringify(merged)); } catch {}
+          return merged;
+        }
+        return local;
+      });
+    });
+  }, []);
 
   // ── Poll cloud for timer state ──
   const refreshTimers = useCallback(async () => {
