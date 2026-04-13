@@ -418,6 +418,46 @@ async function dualWriteEncounterNotesToCloud(
 }
 
 /**
+ * Score how "full" an encounter is — used to pick the best copy
+ * when deduplicating records that share patient + date + type.
+ */
+function encounterContentScore(r: EncounterNoteRecord): number {
+  let score = 0;
+  if (r.soap.subjective.trim()) score += 1;
+  if (r.soap.objective.trim()) score += 1;
+  if (r.soap.assessment.trim()) score += 1;
+  if (r.soap.plan.trim()) score += 1;
+  score += r.charges.length;
+  score += r.diagnoses.length;
+  score += r.macroRuns.length;
+  return score;
+}
+
+/**
+ * Remove duplicate encounters that share the same patient + date + type.
+ * Keeps the copy with more SOAP/charges/diagnoses content; on tie keeps
+ * the newer `updatedAt`.
+ */
+function deduplicateEncounters(records: EncounterNoteRecord[]): EncounterNoteRecord[] {
+  const seen = new Map<string, EncounterNoteRecord>();
+  for (const rec of records) {
+    const key = `${rec.patientId}||${rec.encounterDate}||${rec.appointmentType.toLowerCase()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, rec);
+      continue;
+    }
+    // Keep the one with more content; tie-break by updatedAt
+    const existingScore = encounterContentScore(existing);
+    const newScore = encounterContentScore(rec);
+    if (newScore > existingScore || (newScore === existingScore && rec.updatedAt > existing.updatedAt)) {
+      seen.set(key, rec);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+/**
  * Merge cloud encounter notes with local ones.  For each record keep
  * whichever version has the newer `updatedAt`.  Records that exist
  * only locally are KEPT (cloud may not have them yet because
@@ -452,9 +492,14 @@ export function replaceEncounterNotesFromCloud(cloudRecords: EncounterNoteRecord
     }
   }
 
-  const merged = Array.from(mergedById.values());
+  // ── Deduplicate by patient + date + type ──
+  // When the same encounter was created independently on two devices
+  // (e.g. tablet + desktop), the cloud merge can end up with two records
+  // that represent the same visit.  Keep the one with more content.
+  const deduped = deduplicateEncounters(Array.from(mergedById.values()));
+
   // Only cache recent encounters locally to avoid filling the 5 MB quota
-  const localSubset = pruneForLocalStorage(merged);
+  const localSubset = pruneForLocalStorage(deduped);
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(localSubset));
   } catch {
@@ -462,7 +507,7 @@ export function replaceEncounterNotesFromCloud(cloudRecords: EncounterNoteRecord
     // the in-memory previousNotesById so dual-write diffs work correctly.
     console.warn("[encounter-notes] localStorage quota exceeded during cloud merge");
   }
-  previousNotesById = new Map(merged.map((n) => [n.id, n]));
+  previousNotesById = new Map(deduped.map((n) => [n.id, n]));
 }
 
 /**

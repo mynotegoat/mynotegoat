@@ -2998,8 +2998,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
   const createEncounterFromAppointment = (appointment: ScheduleAppointmentRecord) => {
     const appointmentDate = toUsDate(appointment.date);
+    // Check for existing encounter matching this appointment (by date + type first, then date only)
+    const existingByType =
+      patientEncounterRecords.find(
+        (entry) =>
+          entry.encounterDate === appointmentDate &&
+          entry.appointmentType.toLowerCase() === appointment.appointmentType.toLowerCase(),
+      ) ?? null;
     const existingEncounter =
-      patientEncounterRecords.find((entry) => entry.encounterDate === appointmentDate) ?? null;
+      existingByType ?? patientEncounterRecords.find((entry) => entry.encounterDate === appointmentDate) ?? null;
 
     if (existingEncounter) {
       setEncounterMessage(`Opened existing encounter on ${existingEncounter.encounterDate}.`);

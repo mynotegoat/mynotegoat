@@ -109,6 +109,26 @@ export function useEncounterNotes() {
         return null;
       }
 
+      // ── Duplicate guard ──
+      // If an encounter already exists for this patient + date + type,
+      // return its id instead of creating a duplicate.
+      let existingId: string | null = null;
+      setEncounters((current) => {
+        const existing = current.find(
+          (e) =>
+            e.patientId === patientId &&
+            e.encounterDate === encounterDate &&
+            e.appointmentType.toLowerCase() === appointmentType.toLowerCase(),
+        );
+        if (existing) {
+          existingId = existing.id;
+        }
+        return current; // no mutation — just a read
+      });
+      if (existingId) {
+        return existingId;
+      }
+
       const timestamp = nowIso();
       const newId = createEncounterId();
       const newRecord: EncounterNoteRecord = {
@@ -133,8 +153,21 @@ export function useEncounterNotes() {
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      updateRecords((current) => [newRecord, ...current]);
-      return newId;
+      updateRecords((current) => {
+        // Double-check inside updater (fresh state) to prevent race conditions
+        const alreadyExists = current.find(
+          (e) =>
+            e.patientId === patientId &&
+            e.encounterDate === encounterDate &&
+            e.appointmentType.toLowerCase() === appointmentType.toLowerCase(),
+        );
+        if (alreadyExists) {
+          existingId = alreadyExists.id;
+          return current; // no mutation
+        }
+        return [newRecord, ...current];
+      });
+      return existingId ?? newId;
     },
     [updateRecords],
   );
