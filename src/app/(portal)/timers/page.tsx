@@ -96,14 +96,51 @@ async function loadRoomPresetsFromCloud(): Promise<RoomPresetsMap | null> {
 
 /* ─── Audio ─── */
 
+/** Shared AudioContext — created once on first user interaction to bypass browser autoplay policy */
+let sharedAudioCtx: AudioContext | null = null;
+
+function getOrCreateAudioCtx(): AudioContext | null {
+  if (sharedAudioCtx && sharedAudioCtx.state !== "closed") {
+    // Resume if suspended (happens after tab goes idle)
+    if (sharedAudioCtx.state === "suspended") {
+      void sharedAudioCtx.resume();
+    }
+    return sharedAudioCtx;
+  }
+  try {
+    const AudioCtxClass =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxClass) return null;
+    sharedAudioCtx = new AudioCtxClass();
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+/** Warm up audio on first user interaction so chimes work later */
+function warmUpAudio() {
+  const ctx = getOrCreateAudioCtx();
+  if (ctx && ctx.state === "suspended") {
+    void ctx.resume();
+  }
+  // Only need to do this once
+  window.removeEventListener("click", warmUpAudio);
+  window.removeEventListener("touchstart", warmUpAudio);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("click", warmUpAudio, { once: true });
+  window.addEventListener("touchstart", warmUpAudio, { once: true });
+}
+
 function playChimeOnce(): number {
   const DUR = 800;
   try {
-    const AudioCtx =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return DUR;
-    const ctx = new AudioCtx();
+    const ctx = getOrCreateAudioCtx();
+    if (!ctx) return DUR;
+    if (ctx.state === "suspended") void ctx.resume();
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
@@ -118,7 +155,6 @@ function playChimeOnce(): number {
       osc.start(ctx.currentTime + i * 0.15);
       osc.stop(ctx.currentTime + i * 0.15 + 0.6);
     });
-    setTimeout(() => ctx.close(), 2000);
   } catch {}
   return DUR;
 }
@@ -212,29 +248,26 @@ export default function TimersPage() {
   const stopChimeRef = useRef<(() => void) | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Pull presets from cloud on mount ──
-  useEffect(() => {
-    void loadRoomPresetsFromCloud().then((cloud) => {
-      if (!cloud) return;
-      // Merge: cloud wins for any room that has presets there
-      setRoomPresets((local) => {
-        const merged = { ...local };
-        let changed = false;
-        for (const [roomId, cloudList] of Object.entries(cloud)) {
-          const localList = local[roomId] ?? [];
-          if (cloudList.length > 0 && JSON.stringify(cloudList) !== JSON.stringify(localList)) {
-            merged[roomId] = cloudList;
-            changed = true;
-          }
-        }
-        if (changed) {
-          try { window.localStorage.setItem(ROOM_PRESETS_KEY, JSON.stringify(merged)); } catch {}
-          return merged;
-        }
-        return local;
-      });
+  // ── Pull presets from cloud on mount + poll for changes ──
+  const refreshPresets = useCallback(async () => {
+    const cloud = await loadRoomPresetsFromCloud();
+    if (!cloud || Object.keys(cloud).length === 0) return;
+    setRoomPresets((local) => {
+      const cloudStr = JSON.stringify(cloud);
+      const localStr = JSON.stringify(local);
+      if (cloudStr === localStr) return local;
+      // Cloud wins — update localStorage too
+      try { window.localStorage.setItem(ROOM_PRESETS_KEY, cloudStr); } catch {}
+      return cloud;
     });
   }, []);
+
+  useEffect(() => {
+    void refreshPresets();
+    // Poll for preset changes every 10 seconds (lightweight single-key fetch)
+    const iv = setInterval(refreshPresets, 10_000);
+    return () => clearInterval(iv);
+  }, [refreshPresets]);
 
   // ── Poll cloud for timer state ──
   const refreshTimers = useCallback(async () => {
@@ -524,7 +557,7 @@ export default function TimersPage() {
             <section key={room.id} className="panel-card overflow-hidden">
               {/* Room header */}
               <div
-                className="flex items-center gap-2 px-4 py-3 text-white"
+                className="flex items-center gap-2 px-4 py-3 text-black"
                 style={{ backgroundColor: room.color || "#0d79bf" }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -532,7 +565,7 @@ export default function TimersPage() {
                 </svg>
                 <h3 className="text-lg font-bold">{room.name}</h3>
                 {roomTimers.filter((t) => !t.finished && t.paused_remaining === 0).length > 0 && (
-                  <span className="ml-auto rounded-full bg-white/25 px-2 py-0.5 text-xs font-semibold">
+                  <span className="ml-auto rounded-full bg-black/15 px-2 py-0.5 text-xs font-semibold">
                     {roomTimers.filter((t) => !t.finished && t.paused_remaining === 0).length} active
                   </span>
                 )}
