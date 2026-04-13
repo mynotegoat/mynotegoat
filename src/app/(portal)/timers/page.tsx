@@ -2,56 +2,96 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useScheduleRooms } from "@/hooks/use-schedule-rooms";
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 /* ─── Types ─── */
 
-type ActiveTimer = {
+type CloudTimer = {
   id: string;
-  roomId: string;
-  roomName: string;
-  roomColor: string;
+  room_id: string;
+  room_name: string;
+  room_color: string;
   label: string;
-  totalSeconds: number;
-  remaining: number;
-  running: boolean;
+  total_seconds: number;
+  /** ISO timestamp when the timer will finish (set on start/resume) */
+  ends_at: string;
+  /** Seconds remaining when paused (0 = running) */
+  paused_remaining: number;
   finished: boolean;
+  dismissed: boolean;
 };
+
+type TimerPreset = { id: string; label: string; minutes: number };
+
+type SoundRepeat = "1" | "3" | "5" | "until-off";
+
+/* ─── Constants ─── */
+
+const TABLE = "room_timers";
+const PRESETS_KEY = "casemate.timer-presets.v1";
+const SOUND_REPEAT_KEY = "casemate.timer-sound-repeat.v1";
+const POLL_MS = 2000;
 
 /* ─── Helpers ─── */
 
 function formatTime(totalSecs: number): string {
-  const mins = Math.floor(Math.abs(totalSecs) / 60);
-  const secs = Math.abs(totalSecs) % 60;
+  const s = Math.max(0, Math.round(totalSecs));
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-function createTimerId() {
-  return `tmr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function createId(prefix = "tmr") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-type SoundRepeat = "1" | "3" | "5" | "until-off";
-
-const SOUND_REPEAT_KEY = "casemate.timer-sound-repeat.v1";
+function remainingSeconds(t: CloudTimer): number {
+  if (t.finished) return 0;
+  if (t.paused_remaining > 0) return t.paused_remaining;
+  const diff = (new Date(t.ends_at).getTime() - Date.now()) / 1000;
+  return Math.max(0, diff);
+}
 
 function loadSoundRepeat(): SoundRepeat {
-  if (typeof window === "undefined") return "1";
+  if (typeof window === "undefined") return "3";
   const v = window.localStorage.getItem(SOUND_REPEAT_KEY);
   if (v === "1" || v === "3" || v === "5" || v === "until-off") return v;
-  return "1";
+  return "3";
 }
 
-/**
- * Play a single chime using the Web Audio API.
- * Returns duration in ms so callers can schedule repeats.
- */
-function playChimeOnce(): number {
-  const CHIME_DURATION = 800; // ms
+function loadPresets(): TimerPreset[] {
+  if (typeof window === "undefined") return [];
   try {
-    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return CHIME_DURATION;
-    const ctx = new AudioCtx();
+    const raw = window.localStorage.getItem(PRESETS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p: unknown): p is TimerPreset =>
+        !!p && typeof p === "object" && "id" in p && "label" in p && "minutes" in p,
+    );
+  } catch {
+    return [];
+  }
+}
 
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+function savePresets(presets: TimerPreset[]) {
+  try {
+    window.localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  } catch {}
+}
+
+/* ─── Audio ─── */
+
+function playChimeOnce(): number {
+  const DUR = 800;
+  try {
+    const AudioCtx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return DUR;
+    const ctx = new AudioCtx();
+    const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -65,36 +105,77 @@ function playChimeOnce(): number {
       osc.start(ctx.currentTime + i * 0.15);
       osc.stop(ctx.currentTime + i * 0.15 + 0.6);
     });
-
     setTimeout(() => ctx.close(), 2000);
-  } catch {
-    // AudioContext not supported — fail silently
-  }
-  return CHIME_DURATION;
+  } catch {}
+  return DUR;
 }
 
-/**
- * Play the chime a given number of times, with a pause between.
- * Returns a stop function for "until-off" mode.
- */
-function playChimeRepeated(
-  count: number | "forever",
-  onStop?: () => void,
-): () => void {
+function playChimeRepeated(count: number | "forever"): () => void {
   let stopped = false;
   let played = 0;
-  const gap = 1200; // ms between chimes
-
+  const gap = 1200;
   const next = () => {
-    if (stopped) { onStop?.(); return; }
-    if (count !== "forever" && played >= count) { onStop?.(); return; }
+    if (stopped) return;
+    if (count !== "forever" && played >= count) return;
     played++;
     const dur = playChimeOnce();
     setTimeout(next, dur + gap);
   };
   next();
+  return () => {
+    stopped = true;
+  };
+}
 
-  return () => { stopped = true; };
+/* ─── Supabase helpers ─── */
+
+async function getWorkspaceId(): Promise<string | null> {
+  try {
+    const sb = getSupabaseBrowserClient();
+    if (!sb) return null;
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (!user) return null;
+    const officeId =
+      (typeof process !== "undefined" &&
+        (process.env.NEXT_PUBLIC_CASEMATE_OFFICE_ID?.trim() ||
+          process.env.NEXT_PUBLIC_CASEMATE_WORKSPACE_ID?.trim())) ||
+      "main-office";
+    return `${user.id}:${officeId}`;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchTimers(): Promise<CloudTimer[]> {
+  const wsId = await getWorkspaceId();
+  if (!wsId) return [];
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return [];
+  const { data } = await sb
+    .from(TABLE)
+    .select("*")
+    .eq("workspace_id", wsId)
+    .eq("dismissed", false)
+    .order("created_at", { ascending: true });
+  return (data as CloudTimer[] | null) ?? [];
+}
+
+async function upsertTimer(timer: CloudTimer): Promise<void> {
+  const wsId = await getWorkspaceId();
+  if (!wsId) return;
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return;
+  await sb.from(TABLE).upsert({ ...timer, workspace_id: wsId }, { onConflict: "id" });
+}
+
+async function deleteTimer(id: string): Promise<void> {
+  const wsId = await getWorkspaceId();
+  if (!wsId) return;
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return;
+  await sb.from(TABLE).delete().eq("workspace_id", wsId).eq("id", id);
 }
 
 /* ─── Component ─── */
@@ -106,51 +187,49 @@ export default function TimersPage() {
     [scheduleRooms.rooms],
   );
 
-  const [timers, setTimers] = useState<ActiveTimer[]>([]);
-  const [finishedBanner, setFinishedBanner] = useState<ActiveTimer | null>(null);
+  const [timers, setTimers] = useState<CloudTimer[]>([]);
+  const [finishedBanner, setFinishedBanner] = useState<CloudTimer | null>(null);
   const [customMinutes, setCustomMinutes] = useState<Record<string, string>>({});
   const [soundRepeat, setSoundRepeat] = useState<SoundRepeat>(loadSoundRepeat);
+  const [presets, setPresets] = useState<TimerPreset[]>(loadPresets);
+  const [newPresetLabel, setNewPresetLabel] = useState("");
+  const [newPresetMinutes, setNewPresetMinutes] = useState("");
+  const [showPresetEditor, setShowPresetEditor] = useState(false);
 
-  const intervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const finishedIdsRef = useRef<Set<string>>(new Set());
   const stopChimeRef = useRef<(() => void) | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Tick logic ──
-  const tick = useCallback((timerId: string) => {
-    setTimers((prev) =>
-      prev.map((t) => {
-        if (t.id !== timerId || !t.running || t.finished) return t;
-        const next = t.remaining - 1;
-        if (next <= 0) {
-          return { ...t, remaining: 0, running: false, finished: true };
-        }
-        return { ...t, remaining: next };
-      }),
-    );
+  // ── Poll cloud for timer state ──
+  const refreshTimers = useCallback(async () => {
+    try {
+      const cloud = await fetchTimers();
+      setTimers(cloud);
+    } catch {}
   }, []);
 
-  // ── Detect finished timers and show banner + play sound ──
   useEffect(() => {
-    const justFinished = timers.find(
-      (t) => t.finished && !finishedIdsRef.current.has(t.id),
-    );
-    if (justFinished) {
-      finishedIdsRef.current.add(justFinished.id);
-      setFinishedBanner(justFinished);
+    void refreshTimers();
+    pollRef.current = setInterval(refreshTimers, POLL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [refreshTimers]);
 
-      // Stop any previous repeating chime
-      stopChimeRef.current?.();
-
-      const count = soundRepeat === "until-off" ? "forever" : Number(soundRepeat);
-      stopChimeRef.current = playChimeRepeated(count, () => {
-        stopChimeRef.current = null;
-      });
-
-      // Clear the tick interval
-      const interval = intervalsRef.current.get(justFinished.id);
-      if (interval) {
-        clearInterval(interval);
-        intervalsRef.current.delete(justFinished.id);
+  // ── Detect newly finished timers ──
+  useEffect(() => {
+    for (const t of timers) {
+      const rem = remainingSeconds(t);
+      if (rem <= 0 && !t.finished && t.paused_remaining === 0) {
+        // Mark finished in cloud
+        void upsertTimer({ ...t, finished: true });
+      }
+      if ((t.finished || rem <= 0) && !finishedIdsRef.current.has(t.id)) {
+        finishedIdsRef.current.add(t.id);
+        setFinishedBanner(t);
+        stopChimeRef.current?.();
+        const count = soundRepeat === "until-off" ? "forever" : Number(soundRepeat);
+        stopChimeRef.current = playChimeRepeated(count);
       }
     }
   }, [timers, soundRepeat]);
@@ -158,79 +237,74 @@ export default function TimersPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      intervalsRef.current.forEach((interval) => clearInterval(interval));
       stopChimeRef.current?.();
     };
   }, []);
 
+  // ── Timer actions ──
   const startTimer = useCallback(
-    (roomId: string, roomName: string, roomColor: string, seconds: number, label: string) => {
-      const id = createTimerId();
-      const timer: ActiveTimer = {
-        id,
-        roomId,
-        roomName,
-        roomColor,
+    async (roomId: string, roomName: string, roomColor: string, seconds: number, label: string) => {
+      const timer: CloudTimer = {
+        id: createId(),
+        room_id: roomId,
+        room_name: roomName,
+        room_color: roomColor,
         label,
-        totalSeconds: seconds,
-        remaining: seconds,
-        running: true,
+        total_seconds: seconds,
+        ends_at: new Date(Date.now() + seconds * 1000).toISOString(),
+        paused_remaining: 0,
         finished: false,
+        dismissed: false,
       };
       setTimers((prev) => [...prev, timer]);
-      const interval = setInterval(() => tick(id), 1000);
-      intervalsRef.current.set(id, interval);
+      await upsertTimer(timer);
     },
-    [tick],
+    [],
   );
 
-  const pauseTimer = useCallback((timerId: string) => {
-    setTimers((prev) =>
-      prev.map((t) => (t.id === timerId ? { ...t, running: false } : t)),
-    );
-    const interval = intervalsRef.current.get(timerId);
-    if (interval) {
-      clearInterval(interval);
-      intervalsRef.current.delete(timerId);
-    }
+  const pauseTimer = useCallback(async (timer: CloudTimer) => {
+    const rem = Math.max(0, Math.round(remainingSeconds(timer)));
+    const updated = { ...timer, paused_remaining: rem };
+    setTimers((prev) => prev.map((t) => (t.id === timer.id ? updated : t)));
+    await upsertTimer(updated);
   }, []);
 
-  const resumeTimer = useCallback(
-    (timerId: string) => {
-      setTimers((prev) =>
-        prev.map((t) => (t.id === timerId ? { ...t, running: true } : t)),
-      );
-      const interval = setInterval(() => tick(timerId), 1000);
-      intervalsRef.current.set(timerId, interval);
-    },
-    [tick],
-  );
+  const resumeTimer = useCallback(async (timer: CloudTimer) => {
+    const updated = {
+      ...timer,
+      ends_at: new Date(Date.now() + timer.paused_remaining * 1000).toISOString(),
+      paused_remaining: 0,
+    };
+    setTimers((prev) => prev.map((t) => (t.id === timer.id ? updated : t)));
+    await upsertTimer(updated);
+  }, []);
 
-  const resetTimer = useCallback((timerId: string) => {
-    const interval = intervalsRef.current.get(timerId);
-    if (interval) {
-      clearInterval(interval);
-      intervalsRef.current.delete(timerId);
-    }
-    setTimers((prev) =>
-      prev.map((t) =>
-        t.id === timerId
-          ? { ...t, remaining: t.totalSeconds, running: false, finished: false }
-          : t,
-      ),
-    );
+  const resetTimerAction = useCallback(async (timer: CloudTimer) => {
+    const updated = {
+      ...timer,
+      ends_at: new Date(Date.now() + timer.total_seconds * 1000).toISOString(),
+      paused_remaining: 0,
+      finished: false,
+    };
+    finishedIdsRef.current.delete(timer.id);
+    setTimers((prev) => prev.map((t) => (t.id === timer.id ? updated : t)));
+    await upsertTimer(updated);
+  }, []);
+
+  const dismissTimer = useCallback(async (timerId: string) => {
     finishedIdsRef.current.delete(timerId);
-  }, []);
-
-  const removeTimer = useCallback((timerId: string) => {
-    const interval = intervalsRef.current.get(timerId);
-    if (interval) {
-      clearInterval(interval);
-      intervalsRef.current.delete(timerId);
-    }
     setTimers((prev) => prev.filter((t) => t.id !== timerId));
-    finishedIdsRef.current.delete(timerId);
+    await deleteTimer(timerId);
   }, []);
+
+  const dismissBanner = useCallback(() => {
+    if (finishedBanner) {
+      void dismissTimer(finishedBanner.id);
+    }
+    setFinishedBanner(null);
+    stopChimeRef.current?.();
+    stopChimeRef.current = null;
+  }, [finishedBanner, dismissTimer]);
 
   const handleCustomStart = useCallback(
     (roomId: string, roomName: string, roomColor: string) => {
@@ -238,26 +312,55 @@ export default function TimersPage() {
       const mins = parseFloat(raw);
       if (!mins || mins <= 0 || mins > 999) return;
       const secs = Math.round(mins * 60);
-      startTimer(roomId, roomName, roomColor, secs, `${raw} min`);
+      void startTimer(roomId, roomName, roomColor, secs, `${raw} min`);
       setCustomMinutes((prev) => ({ ...prev, [roomId]: "" }));
     },
     [customMinutes, startTimer],
   );
 
-  // Group active timers by room
+  // ── Preset management ──
+  const addPreset = useCallback(() => {
+    const label = newPresetLabel.trim();
+    const mins = parseFloat(newPresetMinutes);
+    if (!label || !mins || mins <= 0) return;
+    const next = [...presets, { id: createId("pre"), label, minutes: mins }];
+    setPresets(next);
+    savePresets(next);
+    setNewPresetLabel("");
+    setNewPresetMinutes("");
+  }, [newPresetLabel, newPresetMinutes, presets]);
+
+  const removePreset = useCallback(
+    (presetId: string) => {
+      const next = presets.filter((p) => p.id !== presetId);
+      setPresets(next);
+      savePresets(next);
+    },
+    [presets],
+  );
+
+  // Group timers by room
   const timersByRoom = useMemo(() => {
-    const map = new Map<string, ActiveTimer[]>();
+    const map = new Map<string, CloudTimer[]>();
     for (const t of timers) {
-      const arr = map.get(t.roomId) ?? [];
+      const arr = map.get(t.room_id) ?? [];
       arr.push(t);
-      map.set(t.roomId, arr);
+      map.set(t.room_id, arr);
     }
     return map;
   }, [timers]);
 
-  // Progress percentage
-  const getProgress = (t: ActiveTimer) =>
-    t.totalSeconds > 0 ? ((t.totalSeconds - t.remaining) / t.totalSeconds) * 100 : 0;
+  // Force re-render every second for countdown display
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const getProgress = (t: CloudTimer) => {
+    const rem = remainingSeconds(t);
+    return t.total_seconds > 0 ? ((t.total_seconds - rem) / t.total_seconds) * 100 : 0;
+  };
 
   return (
     <div className="space-y-4">
@@ -265,21 +368,17 @@ export default function TimersPage() {
       {finishedBanner && (
         <div
           className="fixed inset-x-0 top-0 z-[70] flex items-center justify-center gap-3 px-4 py-4 text-white shadow-xl animate-pulse"
-          style={{ backgroundColor: finishedBanner.roomColor || "#0d79bf" }}
+          style={{ backgroundColor: finishedBanner.room_color || "#0d79bf" }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-6 w-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
           <span className="text-lg font-bold">
-            {finishedBanner.roomName} — {finishedBanner.label} timer is done!
+            {finishedBanner.room_name} — {finishedBanner.label} timer is done!
           </span>
           <button
             className="ml-4 rounded-lg bg-white/20 px-3 py-1 text-sm font-semibold backdrop-blur hover:bg-white/30 active:scale-95"
-            onClick={() => {
-              setFinishedBanner(null);
-              stopChimeRef.current?.();
-              stopChimeRef.current = null;
-            }}
+            onClick={dismissBanner}
             type="button"
           >
             Dismiss
@@ -293,28 +392,90 @@ export default function TimersPage() {
           <div>
             <h2 className="text-2xl font-semibold">Room Timers</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Set countdown timers for each treatment room. A chime will sound when time is up.
+              Timers sync across all your devices. Set on desktop, dismiss on tablet.
             </p>
           </div>
-          <label className="grid gap-1">
-            <span className="text-xs font-semibold text-[var(--text-muted)]">Sound Repeat</span>
-            <select
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
-              value={soundRepeat}
-              onChange={(e) => {
-                const v = e.target.value as SoundRepeat;
-                setSoundRepeat(v);
-                try { window.localStorage.setItem(SOUND_REPEAT_KEY, v); } catch {}
-              }}
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="grid gap-1">
+              <span className="text-xs font-semibold text-[var(--text-muted)]">Sound Repeat</span>
+              <select
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                value={soundRepeat}
+                onChange={(e) => {
+                  const v = e.target.value as SoundRepeat;
+                  setSoundRepeat(v);
+                  try { window.localStorage.setItem(SOUND_REPEAT_KEY, v); } catch {}
+                }}
+              >
+                <option value="1">1 time</option>
+                <option value="3">3 times</option>
+                <option value="5">5 times</option>
+                <option value="until-off">Until dismissed</option>
+              </select>
+            </label>
+            <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold transition-all hover:bg-[var(--bg-soft)] active:scale-95"
+              onClick={() => setShowPresetEditor(!showPresetEditor)}
+              type="button"
             >
-              <option value="1">1 time</option>
-              <option value="3">3 times</option>
-              <option value="5">5 times</option>
-              <option value="until-off">Until dismissed</option>
-            </select>
-          </label>
+              {showPresetEditor ? "Hide Presets" : "Edit Presets"}
+            </button>
+          </div>
         </div>
       </section>
+
+      {/* ── Preset Editor ── */}
+      {showPresetEditor && (
+        <section className="panel-card p-4">
+          <h3 className="text-base font-semibold">My Timer Presets</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Create quick-start presets that appear on every room card.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              className="w-36 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              onChange={(e) => setNewPresetLabel(e.target.value)}
+              placeholder="Label (e.g. Decompression)"
+              value={newPresetLabel}
+            />
+            <input
+              className="w-24 rounded-lg border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+              inputMode="decimal"
+              onChange={(e) => setNewPresetMinutes(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addPreset(); }}
+              placeholder="Minutes"
+              value={newPresetMinutes}
+            />
+            <button
+              className="rounded-lg bg-[var(--brand-primary)] px-4 py-2 text-sm font-semibold text-white transition-all active:scale-95"
+              onClick={addPreset}
+              type="button"
+            >
+              Add Preset
+            </button>
+          </div>
+          {presets.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {presets.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--bg-soft)] px-3 py-1"
+                >
+                  <span className="text-sm font-semibold">{p.label}</span>
+                  <span className="text-xs text-[var(--text-muted)]">{p.minutes}m</span>
+                  <button
+                    className="ml-1 text-xs text-red-400 hover:text-red-600"
+                    onClick={() => removePreset(p.id)}
+                    type="button"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── No Rooms ── */}
       {activeRooms.length === 0 && (
@@ -334,10 +495,7 @@ export default function TimersPage() {
         {activeRooms.map((room) => {
           const roomTimers = timersByRoom.get(room.id) ?? [];
           return (
-            <section
-              key={room.id}
-              className="panel-card overflow-hidden"
-            >
+            <section key={room.id} className="panel-card overflow-hidden">
               {/* Room header */}
               <div
                 className="flex items-center gap-2 px-4 py-3 text-white"
@@ -347,14 +505,32 @@ export default function TimersPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
                 <h3 className="text-lg font-bold">{room.name}</h3>
-                {roomTimers.filter((t) => t.running).length > 0 && (
+                {roomTimers.filter((t) => !t.finished && t.paused_remaining === 0).length > 0 && (
                   <span className="ml-auto rounded-full bg-white/25 px-2 py-0.5 text-xs font-semibold">
-                    {roomTimers.filter((t) => t.running).length} active
+                    {roomTimers.filter((t) => !t.finished && t.paused_remaining === 0).length} active
                   </span>
                 )}
               </div>
 
               <div className="space-y-3 p-4">
+                {/* Preset buttons */}
+                {presets.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {presets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-xs font-semibold transition-all hover:bg-[var(--bg-soft)] active:scale-95"
+                        onClick={() =>
+                          void startTimer(room.id, room.name, room.color, Math.round(preset.minutes * 60), preset.label)
+                        }
+                        type="button"
+                      >
+                        {preset.label} ({preset.minutes}m)
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Custom timer */}
                 <div className="flex gap-1.5">
                   <input
@@ -381,92 +557,96 @@ export default function TimersPage() {
                 {/* Active timers */}
                 {roomTimers.length > 0 && (
                   <div className="space-y-2 border-t border-[var(--line-soft)] pt-3">
-                    {roomTimers.map((timer) => (
-                      <div
-                        key={timer.id}
-                        className={`rounded-xl border p-3 ${
-                          timer.finished
-                            ? "border-green-300 bg-green-50"
-                            : "border-[var(--line-soft)] bg-white"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-[var(--text-muted)]">
-                            {timer.label}
-                          </span>
-                          <span
-                            className={`font-mono text-2xl font-bold tabular-nums ${
-                              timer.finished
-                                ? "text-green-600"
-                                : timer.remaining <= 60
-                                  ? "text-red-500"
-                                  : "text-[var(--text-main)]"
-                            }`}
-                          >
-                            {formatTime(timer.remaining)}
-                          </span>
-                        </div>
-
-                        {/* Progress bar */}
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
-                          <div
-                            className="h-full rounded-full transition-all duration-1000"
-                            style={{
-                              width: `${getProgress(timer)}%`,
-                              backgroundColor: timer.finished
-                                ? "#16a34a"
-                                : timer.remaining <= 60
-                                  ? "#ef4444"
-                                  : room.color || "#0d79bf",
-                            }}
-                          />
-                        </div>
-
-                        {/* Controls */}
-                        <div className="mt-2 flex gap-1.5">
-                          {!timer.finished && timer.running && (
-                            <button
-                              className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 active:scale-95"
-                              onClick={() => pauseTimer(timer.id)}
-                              type="button"
-                            >
-                              Pause
-                            </button>
-                          )}
-                          {!timer.finished && !timer.running && (
-                            <button
-                              className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 active:scale-95"
-                              onClick={() => resumeTimer(timer.id)}
-                              type="button"
-                            >
-                              Resume
-                            </button>
-                          )}
-                          <button
-                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold active:scale-95"
-                            onClick={() => resetTimer(timer.id)}
-                            type="button"
-                          >
-                            Reset
-                          </button>
-                          <button
-                            className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 active:scale-95"
-                            onClick={() => removeTimer(timer.id)}
-                            type="button"
-                          >
-                            Remove
-                          </button>
-                          {timer.finished && (
-                            <span className="ml-auto flex items-center gap-1 text-xs font-bold text-green-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                              </svg>
-                              Done
+                    {roomTimers.map((timer) => {
+                      const rem = remainingSeconds(timer);
+                      const isPaused = timer.paused_remaining > 0;
+                      const isRunning = !timer.finished && !isPaused;
+                      const isDone = timer.finished || (rem <= 0 && !isPaused);
+                      return (
+                        <div
+                          key={timer.id}
+                          className={`rounded-xl border p-3 ${
+                            isDone
+                              ? "border-green-300 bg-green-50"
+                              : "border-[var(--line-soft)] bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-[var(--text-muted)]">
+                              {timer.label}
                             </span>
-                          )}
+                            <span
+                              className={`font-mono text-2xl font-bold tabular-nums ${
+                                isDone
+                                  ? "text-green-600"
+                                  : rem <= 60
+                                    ? "text-red-500"
+                                    : "text-[var(--text-main)]"
+                              }`}
+                            >
+                              {formatTime(rem)}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+                            <div
+                              className="h-full rounded-full transition-all duration-1000"
+                              style={{
+                                width: `${getProgress(timer)}%`,
+                                backgroundColor: isDone
+                                  ? "#16a34a"
+                                  : rem <= 60
+                                    ? "#ef4444"
+                                    : room.color || "#0d79bf",
+                              }}
+                            />
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {isRunning && !isDone && (
+                              <button
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 active:scale-95"
+                                onClick={() => void pauseTimer(timer)}
+                                type="button"
+                              >
+                                Pause
+                              </button>
+                            )}
+                            {isPaused && !isDone && (
+                              <button
+                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 active:scale-95"
+                                onClick={() => void resumeTimer(timer)}
+                                type="button"
+                              >
+                                Resume
+                              </button>
+                            )}
+                            <button
+                              className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold active:scale-95"
+                              onClick={() => void resetTimerAction(timer)}
+                              type="button"
+                            >
+                              Reset
+                            </button>
+                            <button
+                              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 active:scale-95"
+                              onClick={() => void dismissTimer(timer.id)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                            {isDone && (
+                              <span className="ml-auto flex items-center gap-1 text-xs font-bold text-green-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                </svg>
+                                Done
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

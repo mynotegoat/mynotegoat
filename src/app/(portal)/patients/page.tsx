@@ -943,6 +943,7 @@ export default function PatientsPage() {
     type BirthdayEntry = {
       id: string;
       fullName: string;
+      phone: string;
       dob: string;
       birthdayMonth: number;
       birthdayDay: number;
@@ -952,19 +953,15 @@ export default function PatientsPage() {
     const entries: BirthdayEntry[] = [];
     for (const p of patients) {
       if (!p.dob) continue;
-      // dob is ISO yyyy-mm-dd
       const match = p.dob.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (!match) continue;
-      const bMonth = Number(match[2]) - 1; // 0-based
+      const bMonth = Number(match[2]) - 1;
       const bDay = Number(match[3]);
 
-      // Check if birthday falls within this week (month+day only)
-      // Handle cross-month weeks
       let inWeek = false;
       if (wsMonth === weMonth) {
         inWeek = bMonth === wsMonth && bDay >= wsDate && bDay <= weDate;
       } else {
-        // Week spans two months
         inWeek =
           (bMonth === wsMonth && bDay >= wsDate) ||
           (bMonth === weMonth && bDay <= weDate);
@@ -974,6 +971,7 @@ export default function PatientsPage() {
         entries.push({
           id: p.id,
           fullName: p.fullName,
+          phone: p.phone || "",
           dob: p.dob,
           birthdayMonth: bMonth,
           birthdayDay: bDay,
@@ -1572,9 +1570,9 @@ export default function PatientsPage() {
         <div className="space-y-4">
           <section className="panel-card p-4">
             <div className="flex items-center gap-3">
-              <span className="text-3xl">&#127874;</span>
+              <span className="text-2xl" role="img" aria-label="cake">🎂</span>
               <div>
-                <h4 className="text-lg font-semibold">Patient Birthdays This Week</h4>
+                <h4 className="text-lg font-semibold">Birthdays This Week</h4>
                 <p className="text-sm text-[var(--text-muted)]">{birthdayWeekLabel}</p>
               </div>
             </div>
@@ -1582,64 +1580,55 @@ export default function PatientsPage() {
 
           {birthdayEntries.length === 0 ? (
             <section className="panel-card p-6 text-center">
-              <p className="text-4xl">&#127880;</p>
+              <p className="text-3xl" role="img" aria-label="party">🎉</p>
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 No patient birthdays this week.
               </p>
             </section>
           ) : (
-            <section className="panel-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
-                  <thead>
-                    <tr className="bg-[var(--bg-soft)] text-left text-sm">
-                      <th className="px-4 py-3">Patient</th>
-                      <th className="px-4 py-3">Birthday</th>
-                      <th className="px-4 py-3">Age</th>
-                      <th className="px-4 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {birthdayEntries.map((entry) => {
-                      const [y, m, d] = entry.dob.split("-").map(Number);
-                      const birthdayDate = new Date(new Date().getFullYear(), entry.birthdayMonth, entry.birthdayDay);
-                      const dayLabel = birthdayDate.toLocaleDateString("en-US", { weekday: "long" });
-                      const dateLabel = `${String(entry.birthdayMonth + 1).padStart(2, "0")}/${String(entry.birthdayDay).padStart(2, "0")}`;
-                      const age = new Date().getFullYear() - y;
-                      return (
-                        <tr
-                          key={entry.id}
-                          className={`border-t border-[var(--line-soft)] ${entry.isToday ? "bg-amber-50" : ""}`}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {birthdayEntries.map((entry) => {
+                const birthYear = Number(entry.dob.split("-")[0]);
+                const birthdayDate = new Date(new Date().getFullYear(), entry.birthdayMonth, entry.birthdayDay);
+                const dayLabel = birthdayDate.toLocaleDateString("en-US", { weekday: "long" });
+                const dateLabel = `${String(entry.birthdayMonth + 1).padStart(2, "0")}/${String(entry.birthdayDay).padStart(2, "0")}`;
+                const age = new Date().getFullYear() - birthYear;
+                return (
+                  <article
+                    key={entry.id}
+                    className={`panel-card overflow-hidden ${entry.isToday ? "ring-2 ring-amber-400" : ""}`}
+                  >
+                    {entry.isToday && (
+                      <div className="bg-amber-400 px-3 py-1 text-center text-xs font-bold text-amber-900">
+                        🎉 Today!
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3 p-4">
+                      <span className="text-2xl leading-none" role="img" aria-label="birthday">{entry.isToday ? "🎂" : "🎁"}</span>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          className="text-base font-bold text-[var(--brand-primary)] hover:underline"
+                          href={`/patients/${entry.id}`}
                         >
-                          <td className="px-4 py-3">
-                            <Link
-                              className="font-semibold text-[var(--brand-primary)] hover:underline"
-                              href={`/patients/${entry.id}`}
-                            >
-                              {entry.fullName}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="font-semibold">{dayLabel}, {dateLabel}</span>
-                            {entry.isToday && (
-                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
-                                &#127881; Today!
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-[var(--text-muted)]">
+                          {entry.fullName}
+                        </Link>
+                        {entry.phone && (
+                          <p className="mt-0.5 text-sm text-[var(--text-muted)]">{entry.phone}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1 font-semibold">
+                            {dayLabel}, {dateLabel}
+                          </span>
+                          <span className="rounded-full bg-[var(--bg-soft)] px-2.5 py-1 font-semibold text-[var(--text-muted)]">
                             Turning {age}
-                          </td>
-                          <td className="px-4 py-3 text-lg">
-                            {entry.isToday ? "&#127874;" : "&#127873;"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
