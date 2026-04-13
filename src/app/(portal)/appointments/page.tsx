@@ -6,6 +6,7 @@ import { ContactGapPrompt, findContactByName, type ContactGap } from "@/componen
 import { RescheduleAppointmentModal } from "@/components/reschedule-appointment-modal";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
+import { useOfficeSettings } from "@/hooks/use-office-settings";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
 import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
 import { useScheduleRooms } from "@/hooks/use-schedule-rooms";
@@ -403,6 +404,7 @@ export default function AppointmentsPage() {
   const router = useRouter();
   const { scheduleAppointments, addAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { encountersByNewest, createEncounter, deleteEncounter } = useEncounterNotes();
+  const { officeSettings } = useOfficeSettings();
   const { appointmentTypes } = useScheduleAppointmentTypes();
   const { scheduleRooms } = useScheduleRooms();
   const { scheduleSettings } = useScheduleSettings();
@@ -839,7 +841,7 @@ export default function AppointmentsPage() {
     const createdEncounterId = createEncounter({
       patientId: resolvedPatient.id,
       patientName: resolvedPatient.fullName,
-      provider: appointment.provider || defaultScheduleProvider,
+      provider: appointment.provider || officeSettings.doctorName || defaultScheduleProvider,
       appointmentType: appointment.appointmentType || "Personal Injury Office Visit",
       encounterDate,
     });

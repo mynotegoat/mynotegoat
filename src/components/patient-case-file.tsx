@@ -3020,7 +3020,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const newEncounterId = createEncounter({
       patientId: patient.id,
       patientName: patientDisplayName || patient.fullName,
-      provider: appointment.provider || "Galstyan, Mike (Dr. Mike)",
+      provider: appointment.provider || officeSettings.doctorName || "Provider",
       appointmentType: appointment.appointmentType || "Personal Injury Office Visit",
       encounterDate: appointmentDate,
     });

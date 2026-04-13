@@ -18,6 +18,7 @@ export default function LoginClient({ verifyNotice }: LoginClientProps) {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   const supabaseMissing = useMemo(() => !getSupabaseBrowserClient(), []);
 
@@ -101,6 +102,37 @@ export default function LoginClient({ verifyNotice }: LoginClientProps) {
     setMessage("Verification email sent. Open your inbox, verify, then log in.");
   };
 
+  const forgotPassword = async () => {
+    setError("");
+    setMessage("");
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setError("Supabase is not configured.");
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("Enter your email first so we know where to send the reset link.");
+      return;
+    }
+
+    setLoading(true);
+    const redirectTo = `${window.location.origin}/auth/login`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email.trim(),
+      { redirectTo },
+    );
+    setLoading(false);
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+
+    setMessage("Password reset email sent. Check your inbox for the reset link.");
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -160,32 +192,58 @@ export default function LoginClient({ verifyNotice }: LoginClientProps) {
           />
         </label>
 
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <button
-            type="submit"
-            disabled={loading || supabaseMissing}
-            className="rounded-[14px] bg-[var(--brand-primary)] px-5 py-3 text-base font-semibold text-white disabled:opacity-50"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-
-          <button
-            type="button"
-            onClick={resendVerification}
-            disabled={loading || supabaseMissing}
-            className="rounded-[14px] border border-[var(--line-strong)] bg-white px-5 py-3 text-sm font-semibold text-[var(--text-main)] disabled:opacity-50"
-          >
-            Resend Verification
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={loading || supabaseMissing}
+          className="w-full rounded-[14px] bg-[var(--brand-primary)] px-5 py-3 text-base font-semibold text-white disabled:opacity-50"
+        >
+          {loading ? "Signing in..." : "Sign In"}
+        </button>
       </form>
 
-      <p className="text-sm text-[var(--text-muted)]">
-        No account yet?{" "}
-        <Link className="font-semibold text-[var(--brand-primary)]" href="/auth/signup">
-          Create one
-        </Link>
-      </p>
+      <div className="space-y-2 text-sm">
+        <p className="text-[var(--text-muted)]">
+          No account yet?{" "}
+          <Link className="font-semibold text-[var(--brand-primary)]" href="/auth/signup">
+            Create one
+          </Link>
+        </p>
+        <p className="text-[var(--text-muted)]">
+          <button
+            type="button"
+            onClick={() => setShowRecovery(!showRecovery)}
+            className="font-semibold text-[var(--brand-primary)] hover:underline"
+          >
+            Password Recovery
+          </button>
+        </p>
+      </div>
+
+      {showRecovery && (
+        <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-4 space-y-3">
+          <p className="text-xs text-[var(--text-muted)]">
+            Enter your email above, then choose an option below.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={forgotPassword}
+              disabled={loading || supabaseMissing}
+              className="rounded-[14px] border border-[var(--line-strong)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] disabled:opacity-50"
+            >
+              Forgot Password
+            </button>
+            <button
+              type="button"
+              onClick={resendVerification}
+              disabled={loading || supabaseMissing}
+              className="rounded-[14px] border border-[var(--line-strong)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] disabled:opacity-50"
+            >
+              Resend Verification
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
