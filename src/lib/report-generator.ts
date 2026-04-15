@@ -87,6 +87,45 @@ export interface NarrativeReportBuildInput {
   promptValues?: Record<string, string>;
 }
 
+/**
+ * Convert HTML (from the rich-text editor / macro prompt spans) into plain
+ * text suitable for a plain-text report template. Without this, report
+ * tokens like {{FIRST_OBJECTIVE}} would dump raw HTML (including
+ * `<span class="macro-prompt" data-macro-run-id="..." ...>`) into the
+ * rendered document because `renderDocumentTemplate` escapes every value
+ * with `escapeHtml`.
+ *
+ * Conversion rules:
+ *  - Block boundaries (`</p>`, `</div>`, `<br>`) → newlines
+ *  - All other tags stripped
+ *  - Common HTML entities decoded (&amp; &lt; &gt; &quot; &nbsp; &#39;)
+ *  - Collapse 3+ consecutive newlines → 2 (one blank line max)
+ */
+function htmlToPlainText(html: string): string {
+  if (!html) return "";
+  let text = html;
+  // Normalise self-closing <br /> variants
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  // Block closers → newline
+  text = text.replace(/<\/p>/gi, "\n");
+  text = text.replace(/<\/div>/gi, "\n");
+  text = text.replace(/<\/li>/gi, "\n");
+  text = text.replace(/<\/tr>/gi, "\n");
+  // Strip all remaining tags
+  text = text.replace(/<[^>]*>/g, "");
+  // Decode common entities
+  text = text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  // Collapse excessive newlines (3+ → 2)
+  text = text.replace(/\n{3,}/g, "\n\n");
+  return text.trim();
+}
+
 function parseUsDate(value: string) {
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!match) {
@@ -141,7 +180,7 @@ function formatSoapRollup(encounters: EncounterNoteRecord[], section: EncounterS
     .map((entry) => ({
       date: entry.encounterDate,
       appointmentType: entry.appointmentType,
-      value: entry.soap[section].trim(),
+      value: htmlToPlainText(entry.soap[section]),
     }))
     .filter((entry) => entry.value);
 
@@ -161,7 +200,7 @@ function formatMacroRollup(encounters: EncounterNoteRecord[], section: Encounter
       .map((run) => ({
         date: entry.encounterDate,
         macroName: run.macroName,
-        value: run.generatedText.trim(),
+        value: htmlToPlainText(run.generatedText),
       })),
   );
 
@@ -507,15 +546,15 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     FIRST_ENCOUNTER_DATE: toUsDate(firstEncounter?.encounterDate ?? "-"),
     LATEST_ENCOUNTER_DATE: toUsDate(latestEncounter?.encounterDate ?? "-"),
 
-    FIRST_SUBJECTIVE: firstEncounter?.soap.subjective.trim() || "-",
-    FIRST_OBJECTIVE: firstEncounter?.soap.objective.trim() || "-",
-    FIRST_ASSESSMENT: firstEncounter?.soap.assessment.trim() || "-",
-    FIRST_PLAN: firstEncounter?.soap.plan.trim() || "-",
+    FIRST_SUBJECTIVE: htmlToPlainText(firstEncounter?.soap.subjective ?? "") || "-",
+    FIRST_OBJECTIVE: htmlToPlainText(firstEncounter?.soap.objective ?? "") || "-",
+    FIRST_ASSESSMENT: htmlToPlainText(firstEncounter?.soap.assessment ?? "") || "-",
+    FIRST_PLAN: htmlToPlainText(firstEncounter?.soap.plan ?? "") || "-",
 
-    LATEST_SUBJECTIVE: latestEncounter?.soap.subjective.trim() || "-",
-    LATEST_OBJECTIVE: latestEncounter?.soap.objective.trim() || "-",
-    LATEST_ASSESSMENT: latestEncounter?.soap.assessment.trim() || "-",
-    LATEST_PLAN: latestEncounter?.soap.plan.trim() || "-",
+    LATEST_SUBJECTIVE: htmlToPlainText(latestEncounter?.soap.subjective ?? "") || "-",
+    LATEST_OBJECTIVE: htmlToPlainText(latestEncounter?.soap.objective ?? "") || "-",
+    LATEST_ASSESSMENT: htmlToPlainText(latestEncounter?.soap.assessment ?? "") || "-",
+    LATEST_PLAN: htmlToPlainText(latestEncounter?.soap.plan ?? "") || "-",
 
     ALL_SUBJECTIVE: formatSoapRollup(encountersAsc, "subjective"),
     ALL_OBJECTIVE: formatSoapRollup(encountersAsc, "objective"),
@@ -566,10 +605,10 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
   for (let i = 0; i < 20; i++) {
     const n = i + 1;
     const enc = encountersAsc[i] ?? null;
-    context[`ENCOUNTER_${n}_SUBJECTIVE`] = enc?.soap.subjective.trim() || "-";
-    context[`ENCOUNTER_${n}_OBJECTIVE`] = enc?.soap.objective.trim() || "-";
-    context[`ENCOUNTER_${n}_ASSESSMENT`] = enc?.soap.assessment.trim() || "-";
-    context[`ENCOUNTER_${n}_PLAN`] = enc?.soap.plan.trim() || "-";
+    context[`ENCOUNTER_${n}_SUBJECTIVE`] = htmlToPlainText(enc?.soap.subjective ?? "") || "-";
+    context[`ENCOUNTER_${n}_OBJECTIVE`] = htmlToPlainText(enc?.soap.objective ?? "") || "-";
+    context[`ENCOUNTER_${n}_ASSESSMENT`] = htmlToPlainText(enc?.soap.assessment ?? "") || "-";
+    context[`ENCOUNTER_${n}_PLAN`] = htmlToPlainText(enc?.soap.plan ?? "") || "-";
     context[`ENCOUNTER_${n}_DATE`] = toUsDate(enc?.encounterDate ?? "-");
     context[`ENCOUNTER_${n}_TYPE`] = enc?.appointmentType ?? "-";
   }
@@ -587,10 +626,10 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     for (let i = 0; i < Math.min(group.length, 20); i++) {
       const n = i + 1;
       const enc = group[i];
-      context[`${typeKey}_${n}_SUBJECTIVE`] = enc.soap.subjective.trim() || "-";
-      context[`${typeKey}_${n}_OBJECTIVE`] = enc.soap.objective.trim() || "-";
-      context[`${typeKey}_${n}_ASSESSMENT`] = enc.soap.assessment.trim() || "-";
-      context[`${typeKey}_${n}_PLAN`] = enc.soap.plan.trim() || "-";
+      context[`${typeKey}_${n}_SUBJECTIVE`] = htmlToPlainText(enc.soap.subjective) || "-";
+      context[`${typeKey}_${n}_OBJECTIVE`] = htmlToPlainText(enc.soap.objective) || "-";
+      context[`${typeKey}_${n}_ASSESSMENT`] = htmlToPlainText(enc.soap.assessment) || "-";
+      context[`${typeKey}_${n}_PLAN`] = htmlToPlainText(enc.soap.plan) || "-";
       context[`${typeKey}_${n}_DATE`] = toUsDate(enc.encounterDate);
       context[`${typeKey}_${n}_TYPE`] = enc.appointmentType;
     }
@@ -601,9 +640,9 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
 
   encounterSections.forEach((section) => {
     context[`FIRST_${section.toUpperCase()}`] =
-      firstEncounter?.soap[section].trim() || context[`FIRST_${section.toUpperCase()}`] || "-";
+      htmlToPlainText(firstEncounter?.soap[section] ?? "") || context[`FIRST_${section.toUpperCase()}`] || "-";
     context[`LATEST_${section.toUpperCase()}`] =
-      latestEncounter?.soap[section].trim() || context[`LATEST_${section.toUpperCase()}`] || "-";
+      htmlToPlainText(latestEncounter?.soap[section] ?? "") || context[`LATEST_${section.toUpperCase()}`] || "-";
     context[`ALL_${section.toUpperCase()}`] =
       context[`ALL_${section.toUpperCase()}`] || formatSoapRollup(encountersAsc, section);
     context[`MACRO_${section.toUpperCase()}`] =

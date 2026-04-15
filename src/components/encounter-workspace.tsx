@@ -224,10 +224,13 @@ function formatSoapText(text: string) {
   const trimmed = text.trim();
   if (!trimmed) return "-";
   // The SOAP sections are stored as HTML from the rich-text editor.
-  // Render the HTML directly for print but strip any interactive elements
-  // (inline-prompt spans, editable macro pills). Keep basic formatting
-  // like <b>, <u>, <br>, <p>, <div>, <span>.
-  return trimmed;
+  // Render the HTML directly for print but neutralise the interactive
+  // macro-prompt spans — strip their wrapper tags while keeping the
+  // visible answer text inside so the print looks clean.
+  return trimmed.replace(
+    /<span\s+class="macro-prompt"[^>]*>([\s\S]*?)<\/span>/gi,
+    "$1",
+  );
 }
 
 function buildSoapPrintHtml(config: {
