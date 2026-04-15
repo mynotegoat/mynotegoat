@@ -318,39 +318,53 @@ export function saveScheduleAppointments(records: ScheduleAppointmentRecord[]) {
   const next = [...records].sort(compareAppointments);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 
-  // Phase-2 dual-write — same fire-and-forget pattern as patients.
-  void dualWriteAppointmentsToCloud(next, previousAppointmentsById);
+  // Phase-2 dual-write. Async — now awaits every op and reports failures
+  // via reportCloudWriteError (which flips the UI sync indicator to "error").
+  // `.catch` on the call below is just to prevent unhandled-rejection warnings.
+  dualWriteAppointmentsToCloud(next, previousAppointmentsById).catch(() => {
+    /* already reported via reportCloudWriteError inside dualWrite */
+  });
   previousAppointmentsById = new Map(next.map((a) => [a.id, a]));
 }
 
 async function dualWriteAppointmentsToCloud(
   nextRecords: ScheduleAppointmentRecord[],
   prevById: Map<string, ScheduleAppointmentRecord>,
-) {
-  try {
-    const [{ isCloudEntityEnabled }, { upsertAppointmentToTable, deleteAppointmentFromTable }] =
-      await Promise.all([
-        import("@/lib/feature-flags"),
-        import("@/lib/appointments-cloud"),
-      ]);
-    if (!isCloudEntityEnabled("scheduleAppointments")) return;
+): Promise<void> {
+  const [{ isCloudEntityEnabled }, { upsertAppointmentToTable, deleteAppointmentFromTable }, { reportCloudWriteError }] =
+    await Promise.all([
+      import("@/lib/feature-flags"),
+      import("@/lib/appointments-cloud"),
+      import("@/lib/storage-sync-interceptor"),
+    ]);
+  if (!isCloudEntityEnabled("scheduleAppointments")) return;
 
-    const nextById = new Map(nextRecords.map((a) => [a.id, a]));
+  const nextById = new Map(nextRecords.map((a) => [a.id, a]));
+  const ops: Promise<unknown>[] = [];
 
-    for (const appt of nextRecords) {
-      const prev = prevById.get(appt.id);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(appt)) {
-        void upsertAppointmentToTable(appt);
-      }
+  for (const appt of nextRecords) {
+    const prev = prevById.get(appt.id);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(appt)) {
+      ops.push(upsertAppointmentToTable(appt));
     }
-    for (const prevId of prevById.keys()) {
-      if (!nextById.has(prevId)) {
-        void deleteAppointmentFromTable(prevId);
-      }
-    }
-  } catch (error) {
-    console.error("[schedule-appointments] dual-write failed:", error);
   }
+  for (const prevId of prevById.keys()) {
+    if (!nextById.has(prevId)) {
+      ops.push(deleteAppointmentFromTable(prevId));
+    }
+  }
+  if (ops.length === 0) return;
+
+  const results = await Promise.allSettled(ops);
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failures.length === 0) return;
+
+  const aggregate = new Error(
+    `[schedule-appointments] ${failures.length} of ${ops.length} cloud op(s) failed — ` +
+      `first reason: ${failures[0].reason instanceof Error ? failures[0].reason.message : String(failures[0].reason)}`,
+  );
+  reportCloudWriteError("appointments dual-write", aggregate);
+  throw aggregate;
 }
 
 /**

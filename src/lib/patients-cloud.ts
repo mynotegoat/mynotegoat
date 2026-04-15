@@ -23,6 +23,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getActiveWorkspaceIdSync } from "@/lib/workspace-storage";
+import { reportCloudWriteError } from "@/lib/storage-sync-interceptor";
 import type {
   CaseStatus,
   PatientMatrixField,
@@ -112,6 +113,42 @@ function getActiveWorkspaceOrNull(): string | null {
 }
 
 /**
+ * Assert that the workspace_id we're about to write under actually belongs
+ * to the currently-authenticated user. Without this, a stale workspace_id
+ * in localStorage makes the RLS policy on `patients` silently reject every
+ * insert (policy checks split_part(workspace_id, ':', 1) = auth.uid()).
+ * That silent-reject path is how we lost 94 encounters — same shape bug
+ * could eat patient data the same way.
+ */
+async function resolveValidatedWorkspaceId(source: string): Promise<string> {
+  const workspaceId = getActiveWorkspaceOrNull();
+  if (!workspaceId) {
+    throw new Error(`[patients-cloud] ${source}: no active workspace id in localStorage`);
+  }
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) {
+    throw new Error(`[patients-cloud] ${source}: supabase client not configured`);
+  }
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    throw new Error(`[patients-cloud] ${source}: auth.getUser failed: ${error.message}`);
+  }
+  const userId = data.user?.id;
+  if (!userId) {
+    throw new Error(`[patients-cloud] ${source}: no authenticated user`);
+  }
+  const prefix = workspaceId.split(":")[0];
+  if (prefix !== userId) {
+    throw new Error(
+      `[patients-cloud] ${source}: workspace/user mismatch — ` +
+        `workspace_id prefix="${prefix}" does not match auth.uid="${userId}". ` +
+        `Refusing to write (would be silently rejected by RLS).`,
+    );
+  }
+  return workspaceId;
+}
+
+/**
  * Fetch every patient row for the active workspace. Returns null if Supabase
  * isn't configured, the user isn't signed in, or the table doesn't exist yet
  * (e.g. user hasn't run the SQL migration). Callers must treat null as "fall
@@ -136,15 +173,19 @@ export async function fetchAllPatientsFromTable(): Promise<PatientRecord[] | nul
 }
 
 /**
- * Upsert a single patient. Fire-and-forget — caller does NOT await.
- * Errors are logged but never thrown so a cloud hiccup can't take down a
- * local edit. The legacy blob write still runs synchronously alongside.
+ * Upsert a single patient. THROWS on failure — callers must handle errors
+ * (or route them through reportCloudWriteError). The previous behavior
+ * (silent console.error + return void) is the exact pattern that caused
+ * silent RLS-rejected encounter writes. Don't repeat that here.
  */
 export async function upsertPatientToTable(patient: PatientRecord): Promise<void> {
+  const workspaceId = await resolveValidatedWorkspaceId(`upsert(${patient.id})`);
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return;
-  const workspaceId = getActiveWorkspaceOrNull();
-  if (!workspaceId) return;
+  if (!supabase) {
+    const err = new Error(`[patients-cloud] upsert(${patient.id}): supabase client not configured`);
+    reportCloudWriteError("patients upsert", err);
+    throw err;
+  }
 
   const row = patientToRow(patient, workspaceId);
   const { error } = await supabase
@@ -152,7 +193,11 @@ export async function upsertPatientToTable(patient: PatientRecord): Promise<void
     .upsert(row, { onConflict: "workspace_id,id" });
 
   if (error) {
-    console.error("[patients-cloud] upsert failed:", error.message, "patient:", patient.id);
+    const wrapped = new Error(
+      `[patients-cloud] upsert(${patient.id}) failed: ${error.message}`,
+    );
+    reportCloudWriteError("patients upsert", wrapped);
+    throw wrapped;
   }
 }
 
@@ -183,10 +228,13 @@ export async function bulkUpsertPatientsToTable(patientsList: PatientRecord[]): 
 }
 
 export async function deletePatientFromTable(patientId: string): Promise<void> {
+  const workspaceId = await resolveValidatedWorkspaceId(`delete(${patientId})`);
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return;
-  const workspaceId = getActiveWorkspaceOrNull();
-  if (!workspaceId) return;
+  if (!supabase) {
+    const err = new Error(`[patients-cloud] delete(${patientId}): supabase client not configured`);
+    reportCloudWriteError("patients delete", err);
+    throw err;
+  }
 
   const { error } = await supabase
     .from("patients")
@@ -195,7 +243,11 @@ export async function deletePatientFromTable(patientId: string): Promise<void> {
     .eq("id", patientId);
 
   if (error) {
-    console.error("[patients-cloud] delete failed:", error.message, "patient:", patientId);
+    const wrapped = new Error(
+      `[patients-cloud] delete(${patientId}) failed: ${error.message}`,
+    );
+    reportCloudWriteError("patients delete", wrapped);
+    throw wrapped;
   }
 }
 
