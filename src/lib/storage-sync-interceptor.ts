@@ -42,18 +42,30 @@ export function resumeSync() {
   paused = false;
 }
 
-// Sync status callback for UI indicator
-type SyncStatusCallback = (status: "syncing" | "synced" | "error") => void;
+// Sync status callback for UI indicator.
+// Callbacks now receive an optional detail payload (error message or a
+// "saved-at" timestamp) so the UI can show the actual reason for a failure
+// and flash a green "Cloud Saved!" confirmation after a successful push.
+export type SyncStatus = "syncing" | "synced" | "error";
+export interface SyncStatusDetail {
+  /** Source that reported the status — used for log correlation. */
+  source?: string;
+  /** Human-readable error message (error only). */
+  errorMessage?: string;
+  /** Timestamp (ms since epoch) of the event. */
+  at: number;
+}
+type SyncStatusCallback = (status: SyncStatus, detail: SyncStatusDetail) => void;
 let statusCallback: SyncStatusCallback | null = null;
 
 export function onSyncStatusChange(callback: SyncStatusCallback) {
   statusCallback = callback;
 }
 
-function notifyStatus(status: "syncing" | "synced" | "error") {
+function notifyStatus(status: SyncStatus, detail: Partial<SyncStatusDetail> = {}) {
   if (statusCallback) {
     try {
-      statusCallback(status);
+      statusCallback(status, { at: Date.now(), ...detail });
     } catch {
       // ignore
     }
@@ -70,7 +82,7 @@ export function reportCloudWriteError(source: string, error: unknown) {
   syncErrorCount += 1;
   const msg = error instanceof Error ? error.message : String(error);
   console.error(`[Cloud Write] ${source} failed:`, msg);
-  notifyStatus("error");
+  notifyStatus("error", { source, errorMessage: msg });
 }
 
 function doSync(): Promise<void> {
@@ -82,17 +94,18 @@ function doSync(): Promise<void> {
   if (inflightSync) {
     return inflightSync;
   }
-  notifyStatus("syncing");
+  notifyStatus("syncing", { source: "blob autosave" });
   inflightSync = (async () => {
     try {
       await pushLocalStateToCloud();
       lastSyncAt = Date.now();
       syncErrorCount = 0;
-      notifyStatus("synced");
+      notifyStatus("synced", { source: "blob autosave" });
     } catch (error) {
       syncErrorCount += 1;
+      const msg = error instanceof Error ? error.message : String(error);
       console.error("[Storage Sync] Cloud push failed:", error);
-      notifyStatus("error");
+      notifyStatus("error", { source: "blob autosave", errorMessage: msg });
     } finally {
       inflightSync = null;
     }

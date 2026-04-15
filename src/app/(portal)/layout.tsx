@@ -38,6 +38,13 @@ export default function PortalLayout({
   const [mounted, setMounted] = useState(false);
   const [planTier, setPlanTier] = useState<PlanTier>("complete");
   const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "error">("synced");
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+  // When syncStatus flips to "synced" we flash a green "Cloud Saved!" pill for
+  // a few seconds so the user has positive confirmation that their work made
+  // it to the cloud. The flash is driven by a setTimeout started inside the
+  // sync-status callback (not an effect), because each successful sync should
+  // re-arm the 2.5s window rather than let it expire mid-flash.
+  const [showSavedFlash, setShowSavedFlash] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapErrorDetail, setBootstrapErrorDetail] = useState<string | null>(null);
   const [syncBlocked, setSyncBlocked] = useState<{ localSize: number; remoteSize: number } | null>(null);
@@ -92,9 +99,37 @@ export default function PortalLayout({
       // Install interceptor paused so bootstrap writes don't trigger syncs
       pauseSync();
       installStorageSyncInterceptor();
-      onSyncStatusChange((status) => {
-        if (active) {
-          setSyncStatus(status);
+      let savedFlashTimer: ReturnType<typeof setTimeout> | null = null;
+      onSyncStatusChange((status, detail) => {
+        if (!active) return;
+        setSyncStatus(status);
+        if (status === "error") {
+          // Preserve the actual failure reason so the UI can show the user
+          // something more useful than a generic "retrying" message. The
+          // previous version gave no diagnostic clue at all — this made
+          // legitimate bugs (RLS rejects, schema mismatches) indistinguishable
+          // from transient network blips.
+          setSyncErrorMessage(detail?.errorMessage ?? "Unknown error");
+          setShowSavedFlash(false);
+          if (savedFlashTimer) {
+            clearTimeout(savedFlashTimer);
+            savedFlashTimer = null;
+          }
+        } else if (status === "synced") {
+          // Clear any stale error message once we get a clean push through,
+          // and flash the green confirmation for 2.5s. A rapid burst of
+          // successful syncs re-arms the timer so the flash stays on screen
+          // until the burst quiets down — this avoids a flickery toast when
+          // several saves fire in quick succession (common during SOAP edits).
+          setSyncErrorMessage(null);
+          setShowSavedFlash(true);
+          if (savedFlashTimer) {
+            clearTimeout(savedFlashTimer);
+          }
+          savedFlashTimer = setTimeout(() => {
+            if (active) setShowSavedFlash(false);
+            savedFlashTimer = null;
+          }, 2500);
         }
       });
 
@@ -256,16 +291,31 @@ export default function PortalLayout({
   return (
     <PlanTierProvider planTier={planTier}>
       <AppShell planTier={planTier}>
-        {/* Sync status indicator */}
-        <div className="pointer-events-none fixed bottom-3 right-3 z-50">
+        {/* Sync status indicator.
+            Priority: error > syncing > saved-flash. An "error" state is
+            sticky until a subsequent successful sync clears it — the
+            interceptor flips us back to "synced" on the next successful
+            push, which both drops the red pill and triggers the green
+            flash so the user has unambiguous confirmation. */}
+        <div className="pointer-events-none fixed bottom-3 right-3 z-50 flex flex-col items-end gap-2">
+          {syncStatus === "error" && (
+            <div className="pointer-events-auto max-w-sm rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white shadow-lg">
+              <div>Cloud sync failed — retrying</div>
+              {syncErrorMessage && (
+                <div className="mt-1 max-h-24 overflow-hidden break-all font-mono text-[10px] font-normal text-red-100/90">
+                  {syncErrorMessage}
+                </div>
+              )}
+            </div>
+          )}
           {syncStatus === "syncing" && (
             <div className="pointer-events-auto rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
               Saving to cloud...
             </div>
           )}
-          {syncStatus === "error" && (
-            <div className="pointer-events-auto rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-              Cloud sync failed — retrying
+          {syncStatus === "synced" && showSavedFlash && (
+            <div className="pointer-events-auto rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
+              ✓ Cloud Saved!
             </div>
           )}
         </div>
