@@ -3617,19 +3617,31 @@ export default function SettingsPage() {
                   // First try the direct client-side recovery
                   let recovered = await recoverFromRemote();
                   if (!recovered) {
-                    // Fall back to the server-side recovery API that uses service role key
+                    // Fall back to the server-side recovery API. The endpoint
+                    // REQUIRES a bearer token and rejects workspace ids whose
+                    // prefix doesn't match the caller — so we must have a
+                    // session AND a properly-prefixed workspace_id. Previously
+                    // we fell back to the bare string "main-office" when no
+                    // session was found, which let the server return the
+                    // legacy cross-user blob. We now short-circuit with a
+                    // clear error instead.
                     const { getSupabaseBrowserClient } = await import("@/lib/supabase-browser");
                     const supabase = getSupabaseBrowserClient();
-                    let workspaceId = "main-office";
-                    if (supabase) {
-                      const { data: { session } } = await supabase.auth.getSession();
-                      if (session?.user?.id) {
-                        workspaceId = `${session.user.id}:main-office`;
-                      }
+                    const { data: { session } } = supabase
+                      ? await supabase.auth.getSession()
+                      : { data: { session: null } };
+                    if (!session?.user?.id || !session.access_token) {
+                      setRecoveryError("You must be signed in to recover from the cloud.");
+                      setRecoveryLoading(false);
+                      return;
                     }
+                    const workspaceId = `${session.user.id}:main-office`;
                     const res = await fetch("/api/recover-snapshot", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session.access_token}`,
+                      },
                       body: JSON.stringify({ workspaceId }),
                     });
                     if (res.ok) {
