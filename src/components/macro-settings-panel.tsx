@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useMemo, useState } from "react";
+import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useMacroTemplates } from "@/hooks/use-macro-templates";
 import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/components/rich-text-template-editor";
 import {
@@ -87,6 +88,17 @@ export function MacroSettingsPanel() {
   } = useMacroTemplates();
 
   const editorRef = useRef<RichTextTemplateEditorHandle>(null);
+
+  // Source of truth for the linked-charge picker: the same Billing Macro
+  // treatment list the encounter workspace uses. Keeping this in sync means
+  // a CPT/price change in Billing Macros automatically flows through to
+  // anything this macro links to — no duplicate typing, no drift.
+  const { billingMacros } = useBillingMacros();
+  const activeTreatments = useMemo(
+    () => billingMacros.treatments.filter((t) => t.active),
+    [billingMacros.treatments],
+  );
+  const [chargePickerSearch, setChargePickerSearch] = useState("");
   const [activeSection, setActiveSection] = useState<MacroSection>("subjective");
   const [selectedMacroId, setSelectedMacroId] = useState<string | null>(null);
   const [questionLabelDraft, setQuestionLabelDraft] = useState("");
@@ -567,114 +579,118 @@ export function MacroSettingsPanel() {
                   a matching charge to the encounter's billing list. The
                   charge is de-duplicated by procedureCode — tapping the
                   macro multiple times (or for multiple regions) will NOT
-                  add duplicate rows or double units. Units stay manual. */}
+                  add duplicate rows or double units. Units stay manual.
+
+                  The picker is driven off Billing Macros → Treatments, so
+                  CPT / name / price are authored in one place (no retyping,
+                  no drift). Search by name or CPT, click to link. */}
               <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold">Linked Encounter Charge</p>
-                  {selectedMacro.linkedCharge ? (
+                  {selectedMacro.linkedCharge && (
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-heading)]"
-                      onClick={() =>
+                      onClick={() => {
                         updateMacro(selectedMacro.id, (current) => {
                           const next = { ...current };
                           delete next.linkedCharge;
                           return next;
-                        })
-                      }
+                        });
+                        setChargePickerSearch("");
+                      }}
                       type="button"
                     >
                       Remove Link
                     </button>
-                  ) : (
-                    <button
-                      className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold"
-                      onClick={() =>
-                        updateMacro(selectedMacro.id, (current) => ({
-                          ...current,
-                          linkedCharge: { procedureCode: "", name: "", unitPrice: 0 },
-                        }))
-                      }
-                      type="button"
-                    >
-                      + Add Linked Charge
-                    </button>
                   )}
                 </div>
-                {selectedMacro.linkedCharge && (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Running this macro inside an encounter automatically adds this
+                  charge to billing — once per encounter. Units start at 1 and
+                  must be adjusted manually.
+                </p>
+                {selectedMacro.linkedCharge ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--brand-primary)] bg-white px-3 py-2">
+                    <span className="rounded bg-[#e9f4fb] px-2 py-0.5 font-mono text-xs font-semibold text-[var(--brand-primary)]">
+                      {selectedMacro.linkedCharge.procedureCode}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {selectedMacro.linkedCharge.name}
+                    </span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      ${selectedMacro.linkedCharge.unitPrice.toFixed(2)} / unit
+                    </span>
+                  </div>
+                ) : (
                   <>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      Running this macro inside an encounter automatically adds this
-                      charge to billing — once per encounter. Units start at 1 and
-                      must be adjusted manually.
-                    </p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                      <label className="grid gap-1">
-                        <span className="text-xs font-semibold text-[var(--text-muted)]">
-                          CPT / HCPCS Code
-                        </span>
+                    {activeTreatments.length === 0 ? (
+                      <p className="mt-2 rounded-lg border border-dashed border-[var(--line-soft)] bg-white px-3 py-2 text-xs text-[var(--text-muted)]">
+                        No treatment charges yet. Add them in{" "}
+                        <strong>Settings → Billing Macro Settings → Treatments</strong>,
+                        then come back here to link one.
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
                         <input
-                          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-mono"
-                          onChange={(event) =>
-                            updateMacro(selectedMacro.id, (current) => ({
-                              ...current,
-                              linkedCharge: {
-                                procedureCode: event.target.value.toUpperCase(),
-                                name: current.linkedCharge?.name ?? "",
-                                unitPrice: current.linkedCharge?.unitPrice ?? 0,
-                              },
-                            }))
-                          }
-                          placeholder="97124"
-                          value={selectedMacro.linkedCharge.procedureCode}
+                          className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                          onChange={(event) => setChargePickerSearch(event.target.value)}
+                          placeholder="Search treatments by name or CPT..."
+                          value={chargePickerSearch}
                         />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="text-xs font-semibold text-[var(--text-muted)]">
-                          Charge Name
-                        </span>
-                        <input
-                          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                          onChange={(event) =>
-                            updateMacro(selectedMacro.id, (current) => ({
-                              ...current,
-                              linkedCharge: {
-                                procedureCode: current.linkedCharge?.procedureCode ?? "",
-                                name: event.target.value,
-                                unitPrice: current.linkedCharge?.unitPrice ?? 0,
-                              },
-                            }))
-                          }
-                          placeholder="Therapeutic Massage"
-                          value={selectedMacro.linkedCharge.name}
-                        />
-                      </label>
-                      <label className="grid gap-1">
-                        <span className="text-xs font-semibold text-[var(--text-muted)]">
-                          Unit Price ($)
-                        </span>
-                        <input
-                          className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                          inputMode="decimal"
-                          onChange={(event) => {
-                            const parsed = Number(event.target.value);
-                            const safe = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-                            updateMacro(selectedMacro.id, (current) => ({
-                              ...current,
-                              linkedCharge: {
-                                procedureCode: current.linkedCharge?.procedureCode ?? "",
-                                name: current.linkedCharge?.name ?? "",
-                                unitPrice: safe,
-                              },
-                            }));
-                          }}
-                          placeholder="0.00"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={selectedMacro.linkedCharge.unitPrice}
-                        />
-                      </label>
-                    </div>
+                        <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--line-soft)] bg-white">
+                          {(() => {
+                            const q = chargePickerSearch.trim().toLowerCase();
+                            const filtered = q
+                              ? activeTreatments.filter(
+                                  (t) =>
+                                    t.name.toLowerCase().includes(q) ||
+                                    t.procedureCode.toLowerCase().includes(q),
+                                )
+                              : activeTreatments;
+                            if (!filtered.length) {
+                              return (
+                                <p className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                                  No treatments match &ldquo;{chargePickerSearch}&rdquo;.
+                                </p>
+                              );
+                            }
+                            return filtered.map((treatment) => (
+                              <button
+                                className="flex w-full items-center gap-2 border-b border-[var(--line-soft)] px-3 py-2 text-left text-sm last:border-b-0 hover:bg-[#e9f4fb]"
+                                key={treatment.id}
+                                onClick={() => {
+                                  updateMacro(selectedMacro.id, (current) => ({
+                                    ...current,
+                                    linkedCharge: {
+                                      procedureCode: treatment.procedureCode
+                                        .trim()
+                                        .toUpperCase(),
+                                      name: treatment.name.trim(),
+                                      unitPrice: Math.max(
+                                        0,
+                                        Number(treatment.unitPrice) || 0,
+                                      ),
+                                    },
+                                  }));
+                                  setChargePickerSearch("");
+                                }}
+                                type="button"
+                              >
+                                <span className="rounded bg-[var(--bg-soft)] px-2 py-0.5 font-mono text-xs font-semibold">
+                                  {treatment.procedureCode}
+                                </span>
+                                <span className="flex-1 truncate font-semibold">
+                                  {treatment.name}
+                                </span>
+                                <span className="text-xs text-[var(--text-muted)]">
+                                  ${treatment.unitPrice.toFixed(2)}
+                                </span>
+                              </button>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
