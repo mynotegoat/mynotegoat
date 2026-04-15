@@ -17,6 +17,7 @@ import {
   macroSections,
   renderMacroTemplate,
   type MacroAnswerMap,
+  type MacroQuestion,
   type MacroSection,
 } from "@/lib/macro-templates";
 
@@ -105,6 +106,37 @@ export function MacroSettingsPanel() {
     { questionId: string; option: string } | null
   >(null);
   const [chargePickerSearch, setChargePickerSearch] = useState("");
+  // Clipboard for question "Copy Prompt" → "Paste Prompt". Lets the user set
+  // up one Treatments Performed: question with all its option→charge links,
+  // then paste it into other region macros without re-linking every option.
+  // Stored in sessionStorage so it survives navigating between macros and
+  // page refreshes within the same browser tab. Cleared when the tab closes
+  // (matches normal OS clipboard behavior).
+  const [copiedQuestion, setCopiedQuestion] = useState<MacroQuestion | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem("casemate.macro-question-clipboard");
+      return raw ? (JSON.parse(raw) as MacroQuestion) : null;
+    } catch {
+      return null;
+    }
+  });
+  const writeClipboard = (q: MacroQuestion | null) => {
+    setCopiedQuestion(q);
+    if (typeof window === "undefined") return;
+    try {
+      if (q) {
+        window.sessionStorage.setItem(
+          "casemate.macro-question-clipboard",
+          JSON.stringify(q),
+        );
+      } else {
+        window.sessionStorage.removeItem("casemate.macro-question-clipboard");
+      }
+    } catch {
+      // Ignore quota / private-mode errors — state still works.
+    }
+  };
   const [activeSection, setActiveSection] = useState<MacroSection>("subjective");
   const [selectedMacroId, setSelectedMacroId] = useState<string | null>(null);
   const [questionLabelDraft, setQuestionLabelDraft] = useState("");
@@ -274,6 +306,49 @@ export function MacroSettingsPanel() {
     setQuestionLabelDraft("");
     setQuestionOptionsDraft("");
     setQuestionMultiSelectDraft(false);
+  };
+
+  /**
+   * Paste the most recently "Copy Prompt"ed question into the current macro.
+   * A fresh question id is generated so the paste survives alongside the
+   * original (same macro or different). All per-option linked-charge data
+   * travels with it, which is the whole point — users set up one region's
+   * Treatments Performed: and spread it across Head / Cervical / Thoracic /
+   * Lumbar / etc. without re-picking every CPT.
+   *
+   * If the pasted label already exists in this macro, we append "(copy)" so
+   * the user can see at-a-glance that this is a pasted clone and rename as
+   * needed.
+   */
+  const handlePasteQuestion = () => {
+    if (!selectedMacro || !copiedQuestion) {
+      return;
+    }
+    const originalLabel = copiedQuestion.label.trim() || "Question";
+    const duplicate = selectedMacro.questions.some(
+      (q) => q.label.trim().toLowerCase() === originalLabel.toLowerCase(),
+    );
+    const label = duplicate ? `${originalLabel} (copy)` : originalLabel;
+    const newId = createQuestionId(label);
+    const pasted: MacroQuestion = {
+      id: newId,
+      label,
+      options: [...copiedQuestion.options],
+      ...(copiedQuestion.multiSelect ? { multiSelect: true } : {}),
+      ...(copiedQuestion.linksCharges ? { linksCharges: true } : {}),
+      ...(copiedQuestion.optionCharges
+        ? {
+            optionCharges: Object.fromEntries(
+              Object.entries(copiedQuestion.optionCharges).map(([k, v]) => [
+                k,
+                { ...v },
+              ]),
+            ),
+          }
+        : {}),
+    };
+    addQuestion(selectedMacro.id, pasted);
+    appendToBody(insertQuestionToken(newId));
   };
 
   const openRunModal = () => {
@@ -626,7 +701,43 @@ export function MacroSettingsPanel() {
               </div>
 
               <div className="rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
-                <p className="text-sm font-semibold">Question Prompts</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">Question Prompts</p>
+                  {/* Paste Prompt: appears whenever the clipboard holds a
+                      question. Creates a new question with a fresh id but
+                      keeps label, options, multi-select, linksCharges, and
+                      all per-option CPT links. Perfect for replicating a
+                      fully-wired "Treatments Performed:" across multiple
+                      region macros without re-picking every charge. */}
+                  {copiedQuestion && (
+                    <div className="flex items-center gap-2">
+                      <span className="max-w-[220px] truncate rounded-lg border border-dashed border-[var(--line-soft)] bg-white px-2 py-1 text-xs text-[var(--text-muted)]">
+                        Clipboard: <strong className="text-[var(--text-main)]">{copiedQuestion.label}</strong>
+                        {copiedQuestion.optionCharges &&
+                          Object.keys(copiedQuestion.optionCharges).length > 0 && (
+                            <span className="ml-1 rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-800">
+                              {Object.keys(copiedQuestion.optionCharges).length} $ links
+                            </span>
+                          )}
+                      </span>
+                      <button
+                        className="rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                        onClick={handlePasteQuestion}
+                        type="button"
+                      >
+                        Paste Prompt
+                      </button>
+                      <button
+                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[#b43b34]"
+                        onClick={() => writeClipboard(null)}
+                        title="Clear clipboard"
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
                   <input
                     className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -748,6 +859,19 @@ export function MacroSettingsPanel() {
                           type="button"
                         >
                           Insert Token
+                        </button>
+                        {/* Copy Prompt: snapshot this question's label,
+                            options, multi-select flag, linksCharges flag,
+                            and optionCharges into the sessionStorage
+                            clipboard. Paste from any macro's question list
+                            to re-create it there with a fresh id. */}
+                        <button
+                          className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-0.5 text-xs font-semibold text-[var(--brand-primary)] hover:bg-[var(--bg-soft)]"
+                          onClick={() => writeClipboard(question)}
+                          title="Copy this prompt (label, options, and linked charges) so you can paste it into other macros"
+                          type="button"
+                        >
+                          Copy Prompt
                         </button>
                         <button
                           className="rounded-lg border border-[var(--line-soft)] px-2 py-0.5 text-xs text-[#b43b34]"
