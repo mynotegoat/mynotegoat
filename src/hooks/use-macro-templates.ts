@@ -148,6 +148,34 @@ export function useMacroTemplates() {
     [updateMacro],
   );
 
+  /**
+   * Move macro `sourceId` so it sits immediately before `targetId` in the
+   * templates array. Only reorders within the same section + folder —
+   * cross-folder drags are ignored (those need a folder reassignment,
+   * which is a different flow). This is what drives drag-to-reorder of
+   * the macro chips shown while writing an encounter: new macros no
+   * longer have to stay pinned at the end of the list.
+   */
+  const reorderMacroInSection = useCallback(
+    (sourceId: string, targetId: string) => {
+      updateLibrary((current) => {
+        if (sourceId === targetId) return current;
+        const source = current.templates.find((t) => t.id === sourceId);
+        const target = current.templates.find((t) => t.id === targetId);
+        if (!source || !target) return current;
+        if (source.section !== target.section) return current;
+        if ((source.folder ?? "") !== (target.folder ?? "")) return current;
+        const without = current.templates.filter((t) => t.id !== sourceId);
+        const targetIdx = without.findIndex((t) => t.id === targetId);
+        if (targetIdx < 0) return current;
+        const next = [...without];
+        next.splice(targetIdx, 0, source);
+        return { ...current, templates: next };
+      });
+    },
+    [updateLibrary],
+  );
+
   const resetToDefaults = useCallback(() => {
     const defaults = getDefaultMacroLibrary();
     setMacroLibrary(defaults);
@@ -184,6 +212,7 @@ export function useMacroTemplates() {
     updateQuestion,
     removeQuestion,
     moveQuestion,
+    reorderMacroInSection,
     resetToDefaults,
   };
 }

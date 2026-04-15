@@ -656,7 +656,12 @@ function AppointmentsOverview({
 }
 
 export function EncounterWorkspace({ initialPatientId, initialEncounterId }: EncounterWorkspaceProps) {
-  const { macroLibrary } = useMacroTemplates();
+  const { macroLibrary, reorderMacroInSection } = useMacroTemplates();
+  // Tracks the macro id being dragged so the drop target knows what to
+  // move. null outside an active drag. Per-chip drop handlers only accept
+  // drops from within the same section + folder (enforced server-side in
+  // reorderMacroInSection too).
+  const [draggedMacroId, setDraggedMacroId] = useState<string | null>(null);
   const { billingMacros } = useBillingMacros();
   const { officeSettings } = useOfficeSettings();
   const { appointmentTypes } = useScheduleAppointmentTypes();
@@ -2224,16 +2229,53 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                           )}
                           {!isCollapsed && (
                             <div className="flex flex-wrap gap-2">
-                              {group.macros.map((macro) => (
-                                <button
-                                  key={macro.id}
-                                  className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold"
-                                  onClick={() => handleRunMacroClick(macro)}
-                                  type="button"
-                                >
-                                  {macro.buttonName}
-                                </button>
-                              ))}
+                              {group.macros.map((macro) => {
+                                // Native HTML5 drag-and-drop. Making the
+                                // button itself `draggable` still lets
+                                // clicks fire normally (browsers only
+                                // suppress the click if a drag actually
+                                // started), so "click to run" keeps
+                                // working alongside grab-to-reorder.
+                                const isDragging = draggedMacroId === macro.id;
+                                return (
+                                  <button
+                                    key={macro.id}
+                                    draggable
+                                    className={`rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold transition-opacity ${
+                                      isDragging ? "opacity-40" : ""
+                                    } ${draggedMacroId && !isDragging ? "cursor-grab" : ""}`}
+                                    onClick={() => handleRunMacroClick(macro)}
+                                    onDragStart={(event) => {
+                                      setDraggedMacroId(macro.id);
+                                      event.dataTransfer.effectAllowed = "move";
+                                      // Required for Firefox to initiate a drag.
+                                      try {
+                                        event.dataTransfer.setData("text/plain", macro.id);
+                                      } catch {
+                                        // Some browsers throw on setData in
+                                        // restricted contexts — drag still works.
+                                      }
+                                    }}
+                                    onDragOver={(event) => {
+                                      if (!draggedMacroId || draggedMacroId === macro.id) return;
+                                      event.preventDefault();
+                                      event.dataTransfer.dropEffect = "move";
+                                    }}
+                                    onDrop={(event) => {
+                                      event.preventDefault();
+                                      if (draggedMacroId && draggedMacroId !== macro.id) {
+                                        reorderMacroInSection(draggedMacroId, macro.id);
+                                      }
+                                      setDraggedMacroId(null);
+                                    }}
+                                    onDragEnd={() => setDraggedMacroId(null)}
+                                    title="Click to run • Drag to reorder"
+                                    type="button"
+                                  >
+                                    {macro.buttonName}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
