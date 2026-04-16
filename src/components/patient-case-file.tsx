@@ -6061,7 +6061,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Recommendations</span>
                 <textarea
-                  className="min-h-[100px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  className="min-h-[140px] w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                   onChange={(event) =>
                     setEditingSpecialist((current) =>
                       current ? { ...current, recommendations: event.target.value } : current,
@@ -6217,7 +6217,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Findings</span>
                 <textarea
-                  className="min-h-[120px] rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  className="min-h-[160px] w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                   onChange={(event) =>
                     setEditingImagingReferral((current) =>
                       current ? { ...current, findings: event.target.value } : current,

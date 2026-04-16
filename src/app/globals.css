@@ -121,7 +121,8 @@ textarea:focus {
 textarea {
   line-height: 1.55;
   letter-spacing: 0.002em;
-  resize: vertical;
+  resize: both;
+  overflow: auto;
 }
 
 select {
