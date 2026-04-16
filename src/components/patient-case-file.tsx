@@ -1433,7 +1433,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     const loaded = loadFileManagerState();
     return syncPatientFolders(loaded, allPatients, caseStatuses);
   });
-  const patientFolderId = `SYSTEM-PATIENT-${patient.id}`;
+  // Look up the patient's folder by its patientId field instead of
+  // constructing the ID — after orphan-folder recovery the folder ID may
+  // not follow the SYSTEM-PATIENT-<id> pattern.
+  const patientFolderId = useMemo(() => {
+    const folder = fileManagerState.folders.find(
+      (f) => f.patientId === patient.id && f.isSystemFolder && !f.deleted,
+    );
+    return folder?.id ?? `SYSTEM-PATIENT-${patient.id}`;
+  }, [fileManagerState.folders, patient.id]);
 
   // Collect all files in the patient folder + any subfolders
   const patientFiles = useMemo(() => {

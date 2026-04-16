@@ -447,22 +447,30 @@ export function syncPatientFolders(
       );
       if (orphan) {
         const oldFolderId = orphan.id;
+        const newFolderId = `SYSTEM-PATIENT-${patient.id}`;
         // Restore the orphan folder + all its descendants and their files,
-        // and reattach to the new patient.
-        folders = folders.map((f) =>
-          f.id === oldFolderId
-            ? {
-                ...f,
-                deleted: undefined,
-                deletedAt: undefined,
-                patientId: patient.id,
-                name: expectedName,
-                parentId: targetParentId,
-                updatedAt: now,
-              }
-            : f,
-        );
-        const descendantIds = collectDescendantFolderIds(folders, oldFolderId);
+        // and reattach to the new patient. Also migrate the folder ID so
+        // code that constructs SYSTEM-PATIENT-<id> can still find it.
+        folders = folders.map((f) => {
+          if (f.id === oldFolderId) {
+            return {
+              ...f,
+              id: newFolderId,
+              deleted: undefined,
+              deletedAt: undefined,
+              patientId: patient.id,
+              name: expectedName,
+              parentId: targetParentId,
+              updatedAt: now,
+            };
+          }
+          // Reparent any direct children that pointed at the old ID
+          if (f.parentId === oldFolderId) {
+            return { ...f, parentId: newFolderId };
+          }
+          return f;
+        });
+        const descendantIds = collectDescendantFolderIds(folders, newFolderId);
         if (descendantIds.size > 0) {
           folders = folders.map((f) =>
             descendantIds.has(f.id) && f.deleted
@@ -470,12 +478,21 @@ export function syncPatientFolders(
               : f,
           );
         }
-        const restoredFolderIds = new Set<string>([oldFolderId, ...descendantIds]);
-        files = files.map((f) =>
-          restoredFolderIds.has(f.folderId) && f.deleted
-            ? { ...f, deleted: undefined, deletedAt: undefined }
-            : f,
-        );
+        const restoredFolderIds = new Set<string>([newFolderId, ...descendantIds]);
+        // Update file references from old folder ID to new, and restore
+        files = files.map((f) => {
+          if (f.folderId === oldFolderId) {
+            return {
+              ...f,
+              folderId: newFolderId,
+              ...(f.deleted ? { deleted: undefined, deletedAt: undefined } : {}),
+            };
+          }
+          if (restoredFolderIds.has(f.folderId) && f.deleted) {
+            return { ...f, deleted: undefined, deletedAt: undefined };
+          }
+          return f;
+        });
         continue; // patient handled
       }
     }
