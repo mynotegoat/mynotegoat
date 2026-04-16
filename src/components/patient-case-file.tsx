@@ -2726,16 +2726,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     // Build billing statement if attached
     let billingPagesHtml = "";
     if (narrativeAttachBilling) {
-      // Collect all encounter charge lines
-      const allCharges = patientEncounterRecords.flatMap((enc) =>
-        enc.charges.map((ch) => ({
-          encounterDate: enc.encounterDate,
-          procedureCode: ch.procedureCode,
-          description: ch.name,
-          units: ch.units,
-          lineTotal: ch.unitPrice * ch.units,
-        })),
-      );
+      // Collect all encounter charge lines sorted oldest → newest
+      // (matches the Print Bill order in the billing page).
+      const allCharges = [...patientEncounterRecords]
+        .sort((a, b) => toSortStampFromUsDate(a.encounterDate) - toSortStampFromUsDate(b.encounterDate))
+        .flatMap((enc) =>
+          enc.charges.map((ch) => ({
+            encounterDate: enc.encounterDate,
+            procedureCode: ch.procedureCode,
+            description: ch.name,
+            units: ch.units,
+            lineTotal: ch.unitPrice * ch.units,
+          })),
+        );
       if (allCharges.length > 0) {
         billingPagesHtml = buildBillingStatementHtmlForNarrative({
           officeName: officeSettings.officeName,
