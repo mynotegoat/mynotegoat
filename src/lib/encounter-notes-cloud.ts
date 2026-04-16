@@ -8,6 +8,10 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getActiveWorkspaceIdSync } from "@/lib/workspace-storage";
 import { reportCloudWriteError } from "@/lib/storage-sync-interceptor";
+import {
+  resolveValidatedWorkspaceId as resolveValidatedWorkspaceIdShared,
+  withLockStealRetry,
+} from "@/lib/cloud-auth";
 import type { EncounterNoteRecord } from "@/lib/encounter-notes";
 
 interface EncounterNoteRow {
@@ -84,41 +88,14 @@ function getActiveWorkspaceOrNull(): string | null {
 }
 
 /**
- * Assert that the workspace_id we're about to write under actually belongs
- * to the currently-authenticated user. If it doesn't, the RLS policy on
- * encounter_notes would silently reject the insert (policy checks
- * split_part(workspace_id, ':', 1) = auth.uid()). A silent rejection is
- * how we lost 94 encounters — this guard makes that impossible going
- * forward by throwing loudly BEFORE the write goes out.
- *
- * Returns the (validated) workspace id. Throws if anything's wrong.
+ * Validate workspace_id prefix matches auth.uid() BEFORE writing. Uses the
+ * shared cloud-auth helper so validations are deduped across every
+ * *-cloud module (prevents navigator.locks auth-lock contention during
+ * bulk write bursts — the same lock-steal AbortError that caused the
+ * "cm-patient-597 upsert failed" report).
  */
 async function resolveValidatedWorkspaceId(source: string): Promise<string> {
-  const workspaceId = getActiveWorkspaceOrNull();
-  if (!workspaceId) {
-    throw new Error(`[encounter-notes-cloud] ${source}: no active workspace id in localStorage`);
-  }
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    throw new Error(`[encounter-notes-cloud] ${source}: supabase client not configured`);
-  }
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    throw new Error(`[encounter-notes-cloud] ${source}: auth.getUser failed: ${error.message}`);
-  }
-  const userId = data.user?.id;
-  if (!userId) {
-    throw new Error(`[encounter-notes-cloud] ${source}: no authenticated user`);
-  }
-  const prefix = workspaceId.split(":")[0];
-  if (prefix !== userId) {
-    throw new Error(
-      `[encounter-notes-cloud] ${source}: workspace/user mismatch — ` +
-        `workspace_id prefix="${prefix}" does not match auth.uid="${userId}". ` +
-        `Refusing to write (would be silently rejected by RLS).`,
-    );
-  }
-  return workspaceId;
+  return resolveValidatedWorkspaceIdShared("[encounter-notes-cloud]", source);
 }
 
 export async function fetchAllEncounterNotesFromTable(): Promise<EncounterNoteRecord[] | null> {
@@ -169,47 +146,57 @@ export async function bulkUpsertEncounterNotesToTable(
  * safe in localStorage until a device switch or flag flip.
  */
 export async function upsertEncounterNoteToTable(note: EncounterNoteRecord): Promise<void> {
-  const workspaceId = await resolveValidatedWorkspaceId(`upsert(${note.id})`);
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    const err = new Error(`[encounter-notes-cloud] upsert(${note.id}): supabase client not configured`);
-    reportCloudWriteError("encounter-notes upsert", err);
-    throw err;
-  }
-
-  const row = noteToRow(note, workspaceId);
-  const { error } = await supabase
-    .from("encounter_notes")
-    .upsert(row, { onConflict: "workspace_id,id" });
-
-  if (error) {
-    const wrapped = new Error(
-      `[encounter-notes-cloud] upsert(${note.id}) failed: ${error.message}`,
-    );
+  try {
+    await withLockStealRetry(async () => {
+      const workspaceId = await resolveValidatedWorkspaceId(`upsert(${note.id})`);
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        throw new Error(`[encounter-notes-cloud] upsert(${note.id}): supabase client not configured`);
+      }
+      const row = noteToRow(note, workspaceId);
+      const { error } = await supabase
+        .from("encounter_notes")
+        .upsert(row, { onConflict: "workspace_id,id" });
+      if (error) {
+        throw new Error(
+          `[encounter-notes-cloud] upsert(${note.id}) failed: ${error.message}`,
+        );
+      }
+    });
+  } catch (err) {
+    const wrapped =
+      err instanceof Error
+        ? err
+        : new Error(`[encounter-notes-cloud] upsert(${note.id}) failed: ${String(err)}`);
     reportCloudWriteError("encounter-notes upsert", wrapped);
     throw wrapped;
   }
 }
 
 export async function deleteEncounterNoteFromTable(noteId: string): Promise<void> {
-  const workspaceId = await resolveValidatedWorkspaceId(`delete(${noteId})`);
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    const err = new Error(`[encounter-notes-cloud] delete(${noteId}): supabase client not configured`);
-    reportCloudWriteError("encounter-notes delete", err);
-    throw err;
-  }
-
-  const { error } = await supabase
-    .from("encounter_notes")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", noteId);
-
-  if (error) {
-    const wrapped = new Error(
-      `[encounter-notes-cloud] delete(${noteId}) failed: ${error.message}`,
-    );
+  try {
+    await withLockStealRetry(async () => {
+      const workspaceId = await resolveValidatedWorkspaceId(`delete(${noteId})`);
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        throw new Error(`[encounter-notes-cloud] delete(${noteId}): supabase client not configured`);
+      }
+      const { error } = await supabase
+        .from("encounter_notes")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("id", noteId);
+      if (error) {
+        throw new Error(
+          `[encounter-notes-cloud] delete(${noteId}) failed: ${error.message}`,
+        );
+      }
+    });
+  } catch (err) {
+    const wrapped =
+      err instanceof Error
+        ? err
+        : new Error(`[encounter-notes-cloud] delete(${noteId}) failed: ${String(err)}`);
     reportCloudWriteError("encounter-notes delete", wrapped);
     throw wrapped;
   }

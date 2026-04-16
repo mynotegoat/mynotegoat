@@ -24,6 +24,10 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { getActiveWorkspaceIdSync } from "@/lib/workspace-storage";
 import { reportCloudWriteError } from "@/lib/storage-sync-interceptor";
+import {
+  resolveValidatedWorkspaceId as resolveValidatedWorkspaceIdShared,
+  withLockStealRetry,
+} from "@/lib/cloud-auth";
 import type {
   CaseStatus,
   PatientMatrixField,
@@ -119,33 +123,15 @@ function getActiveWorkspaceOrNull(): string | null {
  * insert (policy checks split_part(workspace_id, ':', 1) = auth.uid()).
  * That silent-reject path is how we lost 94 encounters — same shape bug
  * could eat patient data the same way.
+ *
+ * Uses the shared cloud-auth helper so patient writes, appointment writes,
+ * and encounter-notes writes all SHARE one validation cache and dedupe
+ * one in-flight auth.getUser() promise across modules. Without that, each
+ * *-cloud module would race its own auth call and trigger the navigator
+ * lock-steal AbortError on bulk write bursts.
  */
 async function resolveValidatedWorkspaceId(source: string): Promise<string> {
-  const workspaceId = getActiveWorkspaceOrNull();
-  if (!workspaceId) {
-    throw new Error(`[patients-cloud] ${source}: no active workspace id in localStorage`);
-  }
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    throw new Error(`[patients-cloud] ${source}: supabase client not configured`);
-  }
-  const { data, error } = await supabase.auth.getUser();
-  if (error) {
-    throw new Error(`[patients-cloud] ${source}: auth.getUser failed: ${error.message}`);
-  }
-  const userId = data.user?.id;
-  if (!userId) {
-    throw new Error(`[patients-cloud] ${source}: no authenticated user`);
-  }
-  const prefix = workspaceId.split(":")[0];
-  if (prefix !== userId) {
-    throw new Error(
-      `[patients-cloud] ${source}: workspace/user mismatch — ` +
-        `workspace_id prefix="${prefix}" does not match auth.uid="${userId}". ` +
-        `Refusing to write (would be silently rejected by RLS).`,
-    );
-  }
-  return workspaceId;
+  return resolveValidatedWorkspaceIdShared("[patients-cloud]", source);
 }
 
 /**
@@ -179,23 +165,28 @@ export async function fetchAllPatientsFromTable(): Promise<PatientRecord[] | nul
  * silent RLS-rejected encounter writes. Don't repeat that here.
  */
 export async function upsertPatientToTable(patient: PatientRecord): Promise<void> {
-  const workspaceId = await resolveValidatedWorkspaceId(`upsert(${patient.id})`);
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    const err = new Error(`[patients-cloud] upsert(${patient.id}): supabase client not configured`);
-    reportCloudWriteError("patients upsert", err);
-    throw err;
-  }
-
-  const row = patientToRow(patient, workspaceId);
-  const { error } = await supabase
-    .from("patients")
-    .upsert(row, { onConflict: "workspace_id,id" });
-
-  if (error) {
-    const wrapped = new Error(
-      `[patients-cloud] upsert(${patient.id}) failed: ${error.message}`,
-    );
+  try {
+    await withLockStealRetry(async () => {
+      const workspaceId = await resolveValidatedWorkspaceId(`upsert(${patient.id})`);
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        throw new Error(`[patients-cloud] upsert(${patient.id}): supabase client not configured`);
+      }
+      const row = patientToRow(patient, workspaceId);
+      const { error } = await supabase
+        .from("patients")
+        .upsert(row, { onConflict: "workspace_id,id" });
+      if (error) {
+        throw new Error(
+          `[patients-cloud] upsert(${patient.id}) failed: ${error.message}`,
+        );
+      }
+    });
+  } catch (err) {
+    const wrapped =
+      err instanceof Error
+        ? err
+        : new Error(`[patients-cloud] upsert(${patient.id}) failed: ${String(err)}`);
     reportCloudWriteError("patients upsert", wrapped);
     throw wrapped;
   }
@@ -228,24 +219,29 @@ export async function bulkUpsertPatientsToTable(patientsList: PatientRecord[]): 
 }
 
 export async function deletePatientFromTable(patientId: string): Promise<void> {
-  const workspaceId = await resolveValidatedWorkspaceId(`delete(${patientId})`);
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    const err = new Error(`[patients-cloud] delete(${patientId}): supabase client not configured`);
-    reportCloudWriteError("patients delete", err);
-    throw err;
-  }
-
-  const { error } = await supabase
-    .from("patients")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", patientId);
-
-  if (error) {
-    const wrapped = new Error(
-      `[patients-cloud] delete(${patientId}) failed: ${error.message}`,
-    );
+  try {
+    await withLockStealRetry(async () => {
+      const workspaceId = await resolveValidatedWorkspaceId(`delete(${patientId})`);
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        throw new Error(`[patients-cloud] delete(${patientId}): supabase client not configured`);
+      }
+      const { error } = await supabase
+        .from("patients")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("id", patientId);
+      if (error) {
+        throw new Error(
+          `[patients-cloud] delete(${patientId}) failed: ${error.message}`,
+        );
+      }
+    });
+  } catch (err) {
+    const wrapped =
+      err instanceof Error
+        ? err
+        : new Error(`[patients-cloud] delete(${patientId}) failed: ${String(err)}`);
     reportCloudWriteError("patients delete", wrapped);
     throw wrapped;
   }
