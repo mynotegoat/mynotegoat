@@ -222,7 +222,10 @@ export default function ContactsPage() {
       </section>
 
       {showConsolidateModal && (
-        <ConsolidateAttorneysModal onClose={() => setShowConsolidateModal(false)} />
+        <ConsolidateAttorneysModal
+          addContact={addContact}
+          onClose={() => setShowConsolidateModal(false)}
+        />
       )}
 
       <section className="grid gap-3 md:grid-cols-2">

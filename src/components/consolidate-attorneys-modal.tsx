@@ -21,8 +21,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { patients as patientRecords, updatePatientRecordById } from "@/lib/mock-data";
-import { useContactDirectory } from "@/hooks/use-contact-directory";
+import { patients as patientRecords, updatePatientRecordById, type ContactRecord } from "@/lib/mock-data";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 
 // ---------- Fuzzy matching helpers ---------------------------------------
@@ -198,23 +197,56 @@ interface GroupSelection {
   selectedPatientIds: Set<string>;
   /** Create a Contact row from the target name after apply? */
   createContact: boolean;
-  /** Optional phone when createContact=true — required by contact model */
+  /** Contact-creation form fields (only read when createContact=true).
+   *  Name starts synced to targetName but the user can override it if they
+   *  want the contact label to differ from what we write into patient
+   *  records (rare, but occasionally useful). */
+  contactName: string;
   contactPhone: string;
+  contactFax: string;
+  contactEmail: string;
+  contactAddress: string;
 }
 
-export function ConsolidateAttorneysModal({ onClose }: { onClose: () => void }) {
-  const { addContact, contacts } = useContactDirectory();
+interface ConsolidateAttorneysModalProps {
+  onClose: () => void;
+  /** Bound to the PARENT Contacts page's useContactDirectory() instance so
+   *  newly-created attorney contacts appear immediately in the background
+   *  list when the modal closes. If we called useContactDirectory() inside
+   *  the modal instead, its state would be isolated from the parent's
+   *  state — localStorage would still persist correctly but the Contacts
+   *  page would appear unchanged until the next reload. */
+  addContact: (draft: {
+    name: string;
+    category: ContactRecord["category"];
+    phone: string;
+    subCategory?: string;
+    fax?: string;
+    email?: string;
+    address?: string;
+  }) => { added: true; contact: ContactRecord } | { added: false; reason: string; contact?: ContactRecord };
+}
+
+export function ConsolidateAttorneysModal({
+  onClose,
+  addContact,
+}: ConsolidateAttorneysModalProps) {
   const groups = useMemo(() => buildAttorneyGroups(), []);
 
   const [selections, setSelections] = useState<Map<string, GroupSelection>>(() => {
     const initial = new Map<string, GroupSelection>();
     for (const g of groups) {
       const biggest = g.variants[0];
+      const defaultName = biggest?.rawName ?? "";
       initial.set(g.key, {
-        targetName: biggest?.rawName ?? "",
+        targetName: defaultName,
         selectedPatientIds: new Set<string>(),
         createContact: false,
+        contactName: defaultName,
         contactPhone: "",
+        contactFax: "",
+        contactEmail: "",
+        contactAddress: "",
       });
     }
     return initial;
@@ -280,6 +312,8 @@ export function ConsolidateAttorneysModal({ onClose }: { onClose: () => void }) 
 
     let patientsTouched = 0;
     let contactsCreated = 0;
+    let contactsAlreadyExisted = 0;
+    const contactFailures: string[] = [];
 
     for (const group of groups) {
       const sel = selections.get(group.key);
@@ -299,40 +333,71 @@ export function ConsolidateAttorneysModal({ onClose }: { onClose: () => void }) 
         if (updated) patientsTouched++;
       }
 
-      // Optionally create a contact from the canonical name. Skipped if one
-      // already exists (case-insensitive name match in the Attorney category).
+      // Optionally create a contact for the firm. Uses the Name / Phone /
+      // Fax / Email / Address that the user entered in the expanded contact
+      // form — falls back to the canonical attorney name + a placeholder
+      // phone when those fields are blank. We don't skip on a pre-check:
+      // addContact's own dup detection and validation decide, and we
+      // surface its exact reason string if it refuses.
       if (sel.createContact) {
-        const already = contacts.some(
-          (c) =>
-            c.category.toLowerCase() === "attorney" &&
-            c.name.trim().toLowerCase() === target.toLowerCase(),
-        );
-        if (!already) {
-          const phone = sel.contactPhone.trim() || "(000) 000-0000";
-          const res = addContact({
-            name: target,
-            category: "Attorney",
-            phone,
-          });
-          if (res.added) contactsCreated++;
+        const name = sel.contactName.trim() || target;
+        const phone = sel.contactPhone.trim() || "(000) 000-0000";
+        const res = addContact({
+          name,
+          category: "Attorney",
+          phone,
+          fax: sel.contactFax.trim() || undefined,
+          email: sel.contactEmail.trim() || undefined,
+          address: sel.contactAddress.trim() || undefined,
+        });
+        if (res.added) {
+          contactsCreated++;
+        } else if (res.reason === "Contact already exists.") {
+          contactsAlreadyExisted++;
+        } else {
+          contactFailures.push(`${name}: ${res.reason}`);
         }
       }
     }
 
     setApplying(false);
-    if (patientsTouched === 0) {
+    if (patientsTouched === 0 && contactsCreated === 0) {
       setResultError(
-        "Nothing to apply — check at least one patient in a group and confirm the canonical name.",
+        contactFailures.length
+          ? `No patients updated. Contact creation errors: ${contactFailures.join("; ")}`
+          : "Nothing to apply — check at least one patient in a group and confirm the canonical name.",
       );
       return;
     }
-    setResultMessage(
-      `✓ Updated ${patientsTouched} patient${patientsTouched === 1 ? "" : "s"}` +
-        (contactsCreated
-          ? `, created ${contactsCreated} attorney contact${contactsCreated === 1 ? "" : "s"}`
-          : "") +
-        ".",
-    );
+
+    const parts: string[] = [];
+    if (patientsTouched > 0) {
+      parts.push(
+        `updated ${patientsTouched} patient${patientsTouched === 1 ? "" : "s"}`,
+      );
+    }
+    if (contactsCreated > 0) {
+      parts.push(
+        `created ${contactsCreated} attorney contact${
+          contactsCreated === 1 ? "" : "s"
+        }`,
+      );
+    }
+    if (contactsAlreadyExisted > 0) {
+      parts.push(
+        `${contactsAlreadyExisted} contact${
+          contactsAlreadyExisted === 1 ? " was" : "s were"
+        } already in your directory`,
+      );
+    }
+    setResultMessage(`✓ ${parts.join(", ")}.`);
+    if (contactFailures.length) {
+      setResultError(
+        `Could not create ${contactFailures.length} contact${
+          contactFailures.length === 1 ? "" : "s"
+        }: ${contactFailures.join("; ")}`,
+      );
+    }
   };
 
   return (
@@ -395,10 +460,22 @@ export function ConsolidateAttorneysModal({ onClose }: { onClose: () => void }) 
                         className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                         list={`canonical-${group.key}`}
                         onChange={(e) =>
-                          updateSelection(group.key, (s) => ({
-                            ...s,
-                            targetName: e.target.value,
-                          }))
+                          updateSelection(group.key, (s) => {
+                            const nextTarget = e.target.value;
+                            // If the user hasn't explicitly edited the contact
+                            // name yet, keep it synced to the canonical name
+                            // so they don't have to retype when they tick the
+                            // "Also create a contact" box.
+                            const contactNameWasSynced =
+                              s.contactName.trim() === s.targetName.trim();
+                            return {
+                              ...s,
+                              targetName: nextTarget,
+                              contactName: contactNameWasSynced
+                                ? nextTarget
+                                : s.contactName,
+                            };
+                          })
                         }
                         value={sel.targetName}
                       />
@@ -471,40 +548,124 @@ export function ConsolidateAttorneysModal({ onClose }: { onClose: () => void }) 
                     })}
                   </ul>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] pt-2 text-xs">
-                    <label className="inline-flex items-center gap-1.5">
-                      <input
-                        checked={sel.createContact}
-                        onChange={(e) =>
-                          updateSelection(group.key, (s) => ({
-                            ...s,
-                            createContact: e.target.checked,
-                          }))
-                        }
-                        type="checkbox"
-                      />
-                      <span className="font-semibold">
-                        Also create a contact for &ldquo;{sel.targetName}&rdquo;
+                  <div className="mt-2 border-t border-[var(--line-soft)] pt-2">
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <label className="inline-flex items-center gap-1.5">
+                        <input
+                          checked={sel.createContact}
+                          onChange={(e) =>
+                            updateSelection(group.key, (s) => ({
+                              ...s,
+                              createContact: e.target.checked,
+                              // Re-sync contact name from target when opening
+                              // the form so the user starts with the canonical
+                              // name pre-filled.
+                              contactName:
+                                e.target.checked && !s.contactName.trim()
+                                  ? s.targetName
+                                  : s.contactName,
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        <span className="font-semibold">
+                          Also create a contact for &ldquo;{sel.targetName}&rdquo;
+                        </span>
+                      </label>
+                      <span className="ml-auto font-mono text-[10px] text-[var(--text-muted)]">
+                        {totalSelected} of {totalPatients} checked
                       </span>
-                    </label>
+                    </div>
+
                     {sel.createContact ? (
-                      <input
-                        className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs"
-                        inputMode="numeric"
-                        maxLength={12}
-                        onChange={(e) =>
-                          updateSelection(group.key, (s) => ({
-                            ...s,
-                            contactPhone: formatUsPhoneInput(e.target.value),
-                          }))
-                        }
-                        placeholder="Phone (optional)"
-                        value={sel.contactPhone}
-                      />
+                      <div className="mt-2 grid gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2 sm:grid-cols-2">
+                        <label className="grid gap-0.5 sm:col-span-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            Name *
+                          </span>
+                          <input
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            onChange={(e) =>
+                              updateSelection(group.key, (s) => ({
+                                ...s,
+                                contactName: e.target.value,
+                              }))
+                            }
+                            placeholder="Firm / attorney name"
+                            value={sel.contactName}
+                          />
+                        </label>
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            Phone
+                          </span>
+                          <input
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            inputMode="numeric"
+                            maxLength={14}
+                            onChange={(e) =>
+                              updateSelection(group.key, (s) => ({
+                                ...s,
+                                contactPhone: formatUsPhoneInput(e.target.value),
+                              }))
+                            }
+                            placeholder="(555) 555-5555"
+                            value={sel.contactPhone}
+                          />
+                        </label>
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            Fax
+                          </span>
+                          <input
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            inputMode="numeric"
+                            maxLength={14}
+                            onChange={(e) =>
+                              updateSelection(group.key, (s) => ({
+                                ...s,
+                                contactFax: formatUsPhoneInput(e.target.value),
+                              }))
+                            }
+                            placeholder="Optional"
+                            value={sel.contactFax}
+                          />
+                        </label>
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            Email
+                          </span>
+                          <input
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            onChange={(e) =>
+                              updateSelection(group.key, (s) => ({
+                                ...s,
+                                contactEmail: e.target.value,
+                              }))
+                            }
+                            placeholder="Optional"
+                            type="email"
+                            value={sel.contactEmail}
+                          />
+                        </label>
+                        <label className="grid gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                            Address
+                          </span>
+                          <input
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                            onChange={(e) =>
+                              updateSelection(group.key, (s) => ({
+                                ...s,
+                                contactAddress: e.target.value,
+                              }))
+                            }
+                            placeholder="Optional"
+                            value={sel.contactAddress}
+                          />
+                        </label>
+                      </div>
                     ) : null}
-                    <span className="ml-auto font-mono text-[10px] text-[var(--text-muted)]">
-                      {totalSelected} of {totalPatients} checked
-                    </span>
                   </div>
                 </div>
               );
