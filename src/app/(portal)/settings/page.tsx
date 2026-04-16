@@ -1554,20 +1554,42 @@ function DiagnosticsSection() {
 // decides one is a real duplicate, they can open the patient and soft-delete
 // it from the patient page — we do not delete here.
 
-type DuplicateGroup = {
-  key: string;
-  reason: string;
-  patients: Array<{
-    id: string;
-    fullName: string;
-    dob: string;
-    dateOfLoss: string;
-    caseStatus: string;
-  }>;
+type DuplicateConfidence = "very_likely" | "likely" | "possible";
+
+type DuplicatePatient = {
+  id: string;
+  fullName: string;
+  dob: string;
+  dateOfLoss: string;
+  caseStatus: string;
 };
 
-function normalizeNameForDedup(name: string): string {
-  return name.trim().toLowerCase().replace(/[.,\s]+/g, " ").replace(/\s+/g, " ");
+type DuplicateGroup = {
+  key: string;
+  confidence: DuplicateConfidence;
+  reasons: string[];
+  patients: DuplicatePatient[];
+};
+
+/**
+ * Split a patient's fullName into first/last tokens. Supports both
+ * "Last, First" (the canonical storage format in this app) and "First Last"
+ * as a fallback. Lowercased and stripped of non-letter characters so
+ * "O'Brien" and "Obrien" collide.
+ */
+function splitNameForDedup(fullName: string): { first: string; last: string } {
+  const trimmed = fullName.trim();
+  if (!trimmed) return { first: "", last: "" };
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  if (trimmed.includes(",")) {
+    const [last = "", first = ""] = trimmed.split(",", 2).map((s) => s.trim());
+    return { first: normalize(first), last: normalize(last) };
+  }
+  const parts = trimmed.split(/\s+/);
+  return {
+    first: normalize(parts[0] ?? ""),
+    last: normalize(parts.slice(1).join("")),
+  };
 }
 
 function normalizeDateForDedup(value: string): string {
@@ -1585,6 +1607,49 @@ function normalizeDateForDedup(value: string): string {
   return t;
 }
 
+/**
+ * Classic Levenshtein edit distance between two strings. Used for catching
+ * misspelled first names like "Jhon" vs "John" or "Sahak" vs "Sahaak".
+ */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) row[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(
+        row[j] + 1,
+        row[j - 1] + 1,
+        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+/** Two first names are "similar" if exact, one is a prefix of the other
+ *  (Sara vs Sarah), or they're within 2 edits of each other AND differ by
+ *  less than 35% of the longer name (keeps "Bob" from matching "Tom"). */
+function firstNamesSimilar(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen < 4) return false; // too short — too many false positives
+  const dist = levenshtein(a, b);
+  return dist <= 2 && dist / maxLen < 0.35;
+}
+
+function confidenceRank(c: DuplicateConfidence): number {
+  return c === "very_likely" ? 3 : c === "likely" ? 2 : 1;
+}
+
 function DuplicatePatientsSubsection() {
   const [expanded, setExpanded] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -1592,48 +1657,183 @@ function DuplicatePatientsSubsection() {
 
   const runScan = async () => {
     const { patients } = await import("@/lib/mock-data");
-    const byNameDob = new Map<string, DuplicateGroup>();
-    const byNameDol = new Map<string, DuplicateGroup>();
 
-    for (const p of patients) {
-      if (p.deleted) continue;
-      const name = normalizeNameForDedup(p.fullName);
-      if (!name) continue;
-      const dob = normalizeDateForDedup(p.dob);
-      const dol = normalizeDateForDedup(p.dateOfLoss);
-      const entry = {
+    // Precompute normalized keys once — avoids O(n²) string manipulation.
+    const indexed = patients
+      .filter((p) => !p.deleted)
+      .map((p) => ({
         id: p.id,
         fullName: p.fullName,
         dob: p.dob,
         dateOfLoss: p.dateOfLoss,
         caseStatus: p.caseStatus,
-      };
+        name: splitNameForDedup(p.fullName),
+        dobKey: normalizeDateForDedup(p.dob),
+        dolKey: normalizeDateForDedup(p.dateOfLoss),
+      }));
 
-      if (dob) {
-        const key = `${name}|${dob}`;
-        const existing = byNameDob.get(key);
-        if (existing) existing.patients.push(entry);
-        else byNameDob.set(key, { key, reason: "Same name + DOB", patients: [entry] });
-      }
-      if (dol) {
-        const key = `${name}|${dol}`;
-        const existing = byNameDol.get(key);
-        if (existing) existing.patients.push(entry);
-        else byNameDol.set(key, { key, reason: "Same name + date of loss", patients: [entry] });
-      }
+    // Bucket by last name first so we only compare people with the same
+    // surname. A full n² scan over thousands of patients would be slow,
+    // but within a last-name bucket it's cheap.
+    const byLastName = new Map<string, typeof indexed>();
+    for (const entry of indexed) {
+      if (!entry.name.last) continue;
+      const bucket = byLastName.get(entry.name.last) ?? [];
+      bucket.push(entry);
+      byLastName.set(entry.name.last, bucket);
     }
 
-    const all: DuplicateGroup[] = [];
-    byNameDob.forEach((g) => { if (g.patients.length > 1) all.push(g); });
-    byNameDol.forEach((g) => {
-      if (g.patients.length <= 1) return;
-      // Skip if this exact set of IDs was already added under the DOB reason
-      const ids = g.patients.map((x) => x.id).sort().join(",");
-      const alreadyAdded = all.some((x) => x.patients.map((y) => y.id).sort().join(",") === ids);
-      if (!alreadyAdded) all.push(g);
+    type Pair = {
+      aId: string;
+      bId: string;
+      confidence: DuplicateConfidence;
+      reason: string;
+    };
+    const pairs: Pair[] = [];
+    const seen = new Set<string>();
+
+    byLastName.forEach((bucket) => {
+      if (bucket.length < 2) return;
+      for (let i = 0; i < bucket.length; i++) {
+        for (let j = i + 1; j < bucket.length; j++) {
+          const a = bucket[i];
+          const b = bucket[j];
+          const pairKey = [a.id, b.id].sort().join("|");
+          if (seen.has(pairKey)) continue;
+
+          const firstMatches = Boolean(a.name.first) && a.name.first === b.name.first;
+          const firstSimilar = !firstMatches && firstNamesSimilar(a.name.first, b.name.first);
+          const dobMatches = Boolean(a.dobKey) && a.dobKey === b.dobKey;
+          const dolMatches = Boolean(a.dolKey) && a.dolKey === b.dolKey;
+
+          let confidence: DuplicateConfidence | null = null;
+          let reason = "";
+
+          // Very likely: exact name + DOB + DOL
+          if (firstMatches && dobMatches && dolMatches) {
+            confidence = "very_likely";
+            reason = "Same name + DOB + DOL";
+          }
+          // Likely: exact name + one strong identifier
+          else if (firstMatches && dobMatches) {
+            confidence = "likely";
+            reason = "Same name + DOB";
+          } else if (firstMatches && dolMatches) {
+            confidence = "likely";
+            reason = "Same name + DOL";
+          }
+          // Possible: misspelled first name + DOB + DOL (very strong signal)
+          else if (firstSimilar && dobMatches && dolMatches) {
+            confidence = "possible";
+            reason = "Similar name (misspelling?) + DOB + DOL";
+          }
+          // Possible: misspelled first name + DOB (same person, different injury?)
+          else if (firstSimilar && dobMatches) {
+            confidence = "possible";
+            reason = "Similar name (misspelling?) + DOB";
+          }
+          // Possible: misspelled first name + DOL (same person, wrong DOB?)
+          else if (firstSimilar && dolMatches) {
+            confidence = "possible";
+            reason = "Similar name (misspelling?) + DOL";
+          }
+
+          if (confidence) {
+            pairs.push({ aId: a.id, bId: b.id, confidence, reason });
+            seen.add(pairKey);
+          }
+        }
+      }
     });
 
-    setGroups(all);
+    if (pairs.length === 0) {
+      setGroups([]);
+      setScanned(true);
+      return;
+    }
+
+    // Union-find: if A matches B and B matches C, treat {A,B,C} as one
+    // cluster. The user almost always wants to see all members of a
+    // duplicate cluster together, not as fragmented pairs.
+    const parent = new Map<string, string>();
+    const find = (x: string): string => {
+      let root = x;
+      while (parent.get(root) !== root) root = parent.get(root) ?? root;
+      // Path compression
+      let cur = x;
+      while (parent.get(cur) !== root) {
+        const next = parent.get(cur) ?? cur;
+        parent.set(cur, root);
+        cur = next;
+      }
+      return root;
+    };
+    const union = (a: string, b: string) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent.set(ra, rb);
+    };
+
+    for (const pair of pairs) {
+      if (!parent.has(pair.aId)) parent.set(pair.aId, pair.aId);
+      if (!parent.has(pair.bId)) parent.set(pair.bId, pair.bId);
+      union(pair.aId, pair.bId);
+    }
+
+    // Collect members + reasons per cluster
+    const clusters = new Map<
+      string,
+      { confidence: DuplicateConfidence; reasons: Set<string>; memberIds: Set<string> }
+    >();
+    for (const pair of pairs) {
+      const root = find(pair.aId);
+      const cluster = clusters.get(root) ?? {
+        confidence: pair.confidence,
+        reasons: new Set<string>(),
+        memberIds: new Set<string>(),
+      };
+      cluster.reasons.add(pair.reason);
+      cluster.memberIds.add(pair.aId);
+      cluster.memberIds.add(pair.bId);
+      if (confidenceRank(pair.confidence) > confidenceRank(cluster.confidence)) {
+        cluster.confidence = pair.confidence;
+      }
+      clusters.set(root, cluster);
+    }
+
+    const byId = new Map(indexed.map((p) => [p.id, p]));
+    const result: DuplicateGroup[] = [];
+    clusters.forEach((cluster, root) => {
+      const patients: DuplicatePatient[] = [];
+      cluster.memberIds.forEach((id) => {
+        const src = byId.get(id);
+        if (!src) return;
+        patients.push({
+          id: src.id,
+          fullName: src.fullName,
+          dob: src.dob,
+          dateOfLoss: src.dateOfLoss,
+          caseStatus: src.caseStatus,
+        });
+      });
+      // Sort cluster members alphabetically so the UI is stable
+      patients.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      result.push({
+        key: root,
+        confidence: cluster.confidence,
+        reasons: Array.from(cluster.reasons),
+        patients,
+      });
+    });
+
+    // Sort groups: very_likely first, then larger clusters first
+    result.sort((a, b) => {
+      const rc = confidenceRank(b.confidence) - confidenceRank(a.confidence);
+      if (rc !== 0) return rc;
+      return b.patients.length - a.patients.length;
+    });
+
+    setGroups(result);
     setScanned(true);
   };
 
@@ -1667,28 +1867,46 @@ function DuplicatePatientsSubsection() {
                 each patient from the Patients page to compare and decide which to keep.
               </p>
               <ul className="space-y-2">
-                {groups.map((g) => (
-                  <li key={g.key} className="rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2">
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
-                      {g.reason}
-                    </div>
-                    <ul className="space-y-1">
-                      {g.patients.map((p) => (
-                        <li
-                          key={p.id}
-                          className="flex items-center justify-between gap-2 text-xs"
+                {groups.map((g) => {
+                  const badge =
+                    g.confidence === "very_likely"
+                      ? { label: "VERY LIKELY", classes: "bg-red-500/20 text-red-300 border-red-500/40" }
+                      : g.confidence === "likely"
+                        ? { label: "LIKELY", classes: "bg-amber-500/20 text-amber-300 border-amber-500/40" }
+                        : { label: "POSSIBLE", classes: "bg-sky-500/20 text-sky-300 border-sky-500/40" };
+                  return (
+                    <li
+                      key={g.key}
+                      className="rounded border border-[var(--border-subtle)] bg-[var(--surface-base)] p-2"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.classes}`}
                         >
-                          <span className="font-medium text-[var(--text-primary)]">
-                            {p.fullName}
-                          </span>
-                          <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                            DOB {p.dob || "—"} · DOL {p.dateOfLoss || "—"} · {p.caseStatus}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
+                          {badge.label}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-muted)]">
+                          {g.reasons.join(" · ")}
+                        </span>
+                      </div>
+                      <ul className="space-y-1">
+                        {g.patients.map((p) => (
+                          <li
+                            key={p.id}
+                            className="flex items-center justify-between gap-2 text-xs"
+                          >
+                            <span className="font-medium text-[var(--text-primary)]">
+                              {p.fullName}
+                            </span>
+                            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                              DOB {p.dob || "—"} · DOL {p.dateOfLoss || "—"} · {p.caseStatus}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  );
+                })}
               </ul>
               <div className="flex justify-end">
                 <button
