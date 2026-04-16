@@ -5,6 +5,7 @@ import { useContactCategories } from "@/hooks/use-contact-categories";
 import { useContactDirectory } from "@/hooks/use-contact-directory";
 import type { ContactRecord } from "@/lib/mock-data";
 import { formatUsPhoneInput } from "@/lib/phone-format";
+import { ConsolidateAttorneysModal } from "@/components/consolidate-attorneys-modal";
 
 type ContactFormState = {
   name: string;
@@ -53,6 +54,7 @@ export default function ContactsPage() {
   const [contactSearch, setContactSearch] = useState("");
   const defaultCategory = useMemo<ContactRecord["category"]>(() => "Attorney", []);
 
+  const [showConsolidateModal, setShowConsolidateModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [addContactError, setAddContactError] = useState("");
   const [addContactForm, setAddContactForm] = useState<ContactFormState>(() =>
@@ -200,6 +202,15 @@ export default function ContactsPage() {
             </label>
 
             <button
+              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--text-muted)] transition-all hover:text-[var(--brand-primary)] active:scale-[0.97] active:shadow-inner"
+              onClick={() => setShowConsolidateModal(true)}
+              title="Find patients with similar attorney names and merge them onto one canonical name"
+              type="button"
+            >
+              Consolidate Attorneys
+            </button>
+
+            <button
               className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={openAddModal}
               type="button"
@@ -209,6 +220,10 @@ export default function ContactsPage() {
           </div>
         </div>
       </section>
+
+      {showConsolidateModal && (
+        <ConsolidateAttorneysModal onClose={() => setShowConsolidateModal(false)} />
+      )}
 
       <section className="grid gap-3 md:grid-cols-2">
         {filteredContacts.length === 0 && (
