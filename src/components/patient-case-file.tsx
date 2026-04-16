@@ -2525,7 +2525,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     template: NonNullable<typeof selectedNarrativeTemplate>,
     promptValues: Record<string, string>,
   ) => {
-    const context = buildNarrativeReportContext({
+    const { context, rawHtmlTokens } = buildNarrativeReportContext({
       office: {
         officeName: officeSettings.officeName,
         address: officeSettings.address,
@@ -2618,9 +2618,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     });
 
     const renderedHeader = documentTemplates.header.active
-      ? renderDocumentTemplate(documentTemplates.header.body, context)
+      ? renderDocumentTemplate(documentTemplates.header.body, context, rawHtmlTokens)
       : "";
-    const renderedBody = renderNarrativeReportBody(template.body, context);
+    const renderedBody = renderNarrativeReportBody(template.body, context, rawHtmlTokens);
     return {
       title: template.name,
       fontFamily: template.fontFamily,

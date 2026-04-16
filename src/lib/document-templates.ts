@@ -379,10 +379,24 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-export function renderDocumentTemplate(body: string, context: Record<string, string>) {
+/**
+ * Replace `{{TOKEN}}` placeholders in a template body with values from `context`.
+ *
+ * By default every value is HTML-escaped so user-entered strings (names,
+ * dates, codes) never inject unexpected markup. Tokens listed in the
+ * optional `rawHtmlTokens` set are inserted **without** escaping — use
+ * this for SOAP values that are already sanitised HTML and need to keep
+ * their `<b>`, `<u>`, `<p>` formatting intact.
+ */
+export function renderDocumentTemplate(
+  body: string,
+  context: Record<string, string>,
+  rawHtmlTokens?: Set<string>,
+) {
   return body.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_match, tokenRaw: string) => {
     const token = tokenRaw.toUpperCase();
     const value = context[token];
-    return typeof value === "string" ? escapeHtml(value) : "";
+    if (typeof value !== "string") return "";
+    return rawHtmlTokens?.has(token) ? value : escapeHtml(value);
   });
 }

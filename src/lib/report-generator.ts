@@ -88,41 +88,25 @@ export interface NarrativeReportBuildInput {
 }
 
 /**
- * Convert HTML (from the rich-text editor / macro prompt spans) into plain
- * text suitable for a plain-text report template. Without this, report
- * tokens like {{FIRST_OBJECTIVE}} would dump raw HTML (including
- * `<span class="macro-prompt" data-macro-run-id="..." ...>`) into the
- * rendered document because `renderDocumentTemplate` escapes every value
- * with `escapeHtml`.
+ * Sanitise SOAP / macro HTML for embedding into a narrative report template.
  *
- * Conversion rules:
- *  - Block boundaries (`</p>`, `</div>`, `<br>`) → newlines
- *  - All other tags stripped
- *  - Common HTML entities decoded (&amp; &lt; &gt; &quot; &nbsp; &#39;)
- *  - Collapse 3+ consecutive newlines → 2 (one blank line max)
+ * The template body itself is HTML (from the rich-text editor), so we
+ * must NOT flatten SOAP values to plain text — that would destroy bold,
+ * underline, and paragraph structure the user set up. Instead we only
+ * strip the interactive macro-prompt wrapper spans (keeping their inner
+ * answer text) and normalise edge empty paragraphs.
  */
-function htmlToPlainText(html: string): string {
+function sanitizeSoapHtml(html: string): string {
   if (!html) return "";
-  let text = html;
-  // Normalise self-closing <br /> variants
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Block closers → newline
-  text = text.replace(/<\/p>/gi, "\n");
-  text = text.replace(/<\/div>/gi, "\n");
-  text = text.replace(/<\/li>/gi, "\n");
-  text = text.replace(/<\/tr>/gi, "\n");
-  // Strip all remaining tags
-  text = text.replace(/<[^>]*>/g, "");
-  // Decode common entities
+  // Strip macro-prompt span wrappers but keep the visible answer text inside
+  let text = html.replace(
+    /<span\s+class="macro-prompt"[^>]*>([\s\S]*?)<\/span>/gi,
+    "$1",
+  );
+  // Strip leading / trailing empty paragraphs
   text = text
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'");
-  // Collapse excessive newlines (3+ → 2)
-  text = text.replace(/\n{3,}/g, "\n\n");
+    .replace(/^(?:<p>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/p>\s*)+/gi, "")
+    .replace(/(?:<p>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/p>\s*)+$/gi, "");
   return text.trim();
 }
 
@@ -180,7 +164,7 @@ function formatSoapRollup(encounters: EncounterNoteRecord[], section: EncounterS
     .map((entry) => ({
       date: entry.encounterDate,
       appointmentType: entry.appointmentType,
-      value: htmlToPlainText(entry.soap[section]),
+      value: sanitizeSoapHtml(entry.soap[section]),
     }))
     .filter((entry) => entry.value);
 
@@ -189,8 +173,8 @@ function formatSoapRollup(encounters: EncounterNoteRecord[], section: EncounterS
   }
 
   return rows
-    .map((entry) => `${toUsDate(entry.date)} (${entry.appointmentType})\n${entry.value}`)
-    .join("\n\n");
+    .map((entry) => `<b>${toUsDate(entry.date)} (${entry.appointmentType})</b><br>${entry.value}`)
+    .join("<br><br>");
 }
 
 function formatMacroRollup(encounters: EncounterNoteRecord[], section: EncounterSection) {
@@ -200,7 +184,7 @@ function formatMacroRollup(encounters: EncounterNoteRecord[], section: Encounter
       .map((run) => ({
         date: entry.encounterDate,
         macroName: run.macroName,
-        value: htmlToPlainText(run.generatedText),
+        value: sanitizeSoapHtml(run.generatedText),
       })),
   );
 
@@ -209,7 +193,7 @@ function formatMacroRollup(encounters: EncounterNoteRecord[], section: Encounter
     return "-";
   }
 
-  return nonEmpty.map((entry) => `${entry.date} • ${entry.macroName}\n${entry.value}`).join("\n\n");
+  return nonEmpty.map((entry) => `<b>${entry.date} • ${entry.macroName}</b><br>${entry.value}`).join("<br><br>");
 }
 
 function formatChargeLine(encounterDate: string, charge: EncounterChargeEntry, index: number) {
@@ -500,6 +484,10 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
         .join("\n")
     : "-";
 
+  // Tokens whose values are sanitised HTML and must NOT be escaped by
+  // renderDocumentTemplate — they keep <b>, <u>, <p> etc. intact.
+  const rawHtmlTokens = new Set<string>();
+
   const context: Record<string, string> = {
     TODAY_DATE: getTodayUsDate(),
     OFFICE_NAME: input.office.officeName,
@@ -546,15 +534,15 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     FIRST_ENCOUNTER_DATE: toUsDate(firstEncounter?.encounterDate ?? "-"),
     LATEST_ENCOUNTER_DATE: toUsDate(latestEncounter?.encounterDate ?? "-"),
 
-    FIRST_SUBJECTIVE: htmlToPlainText(firstEncounter?.soap.subjective ?? "") || "-",
-    FIRST_OBJECTIVE: htmlToPlainText(firstEncounter?.soap.objective ?? "") || "-",
-    FIRST_ASSESSMENT: htmlToPlainText(firstEncounter?.soap.assessment ?? "") || "-",
-    FIRST_PLAN: htmlToPlainText(firstEncounter?.soap.plan ?? "") || "-",
+    FIRST_SUBJECTIVE: sanitizeSoapHtml(firstEncounter?.soap.subjective ?? "") || "-",
+    FIRST_OBJECTIVE: sanitizeSoapHtml(firstEncounter?.soap.objective ?? "") || "-",
+    FIRST_ASSESSMENT: sanitizeSoapHtml(firstEncounter?.soap.assessment ?? "") || "-",
+    FIRST_PLAN: sanitizeSoapHtml(firstEncounter?.soap.plan ?? "") || "-",
 
-    LATEST_SUBJECTIVE: htmlToPlainText(latestEncounter?.soap.subjective ?? "") || "-",
-    LATEST_OBJECTIVE: htmlToPlainText(latestEncounter?.soap.objective ?? "") || "-",
-    LATEST_ASSESSMENT: htmlToPlainText(latestEncounter?.soap.assessment ?? "") || "-",
-    LATEST_PLAN: htmlToPlainText(latestEncounter?.soap.plan ?? "") || "-",
+    LATEST_SUBJECTIVE: sanitizeSoapHtml(latestEncounter?.soap.subjective ?? "") || "-",
+    LATEST_OBJECTIVE: sanitizeSoapHtml(latestEncounter?.soap.objective ?? "") || "-",
+    LATEST_ASSESSMENT: sanitizeSoapHtml(latestEncounter?.soap.assessment ?? "") || "-",
+    LATEST_PLAN: sanitizeSoapHtml(latestEncounter?.soap.plan ?? "") || "-",
 
     ALL_SUBJECTIVE: formatSoapRollup(encountersAsc, "subjective"),
     ALL_OBJECTIVE: formatSoapRollup(encountersAsc, "objective"),
@@ -589,6 +577,17 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
       formatImagingSummary(input.mriReferrals, "MRI/CT"),
     ].join("\n"),
     SPECIALIST_SUMMARY: formatSpecialistSummary(input.specialistReferrals),
+    SPECIALIST_NAME: (() => {
+      const names = input.specialistReferrals
+        .map((s) => s.specialist.trim())
+        .filter(Boolean);
+      if (!names.length) return "-";
+      // Deduplicate (same specialist referred for multiple issues)
+      const unique = [...new Set(names)];
+      if (unique.length === 1) return unique[0];
+      if (unique.length === 2) return `${unique[0]} and ${unique[1]}`;
+      return `${unique.slice(0, -1).join(", ")}, and ${unique[unique.length - 1]}`;
+    })(),
   };
 
   // ── Numbered specialist tokens (SPECIALIST_1_NAME … SPECIALIST_10_RECOMMENDATIONS) ──
@@ -605,10 +604,10 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
   for (let i = 0; i < 20; i++) {
     const n = i + 1;
     const enc = encountersAsc[i] ?? null;
-    context[`ENCOUNTER_${n}_SUBJECTIVE`] = htmlToPlainText(enc?.soap.subjective ?? "") || "-";
-    context[`ENCOUNTER_${n}_OBJECTIVE`] = htmlToPlainText(enc?.soap.objective ?? "") || "-";
-    context[`ENCOUNTER_${n}_ASSESSMENT`] = htmlToPlainText(enc?.soap.assessment ?? "") || "-";
-    context[`ENCOUNTER_${n}_PLAN`] = htmlToPlainText(enc?.soap.plan ?? "") || "-";
+    context[`ENCOUNTER_${n}_SUBJECTIVE`] = sanitizeSoapHtml(enc?.soap.subjective ?? "") || "-";
+    context[`ENCOUNTER_${n}_OBJECTIVE`] = sanitizeSoapHtml(enc?.soap.objective ?? "") || "-";
+    context[`ENCOUNTER_${n}_ASSESSMENT`] = sanitizeSoapHtml(enc?.soap.assessment ?? "") || "-";
+    context[`ENCOUNTER_${n}_PLAN`] = sanitizeSoapHtml(enc?.soap.plan ?? "") || "-";
     context[`ENCOUNTER_${n}_DATE`] = toUsDate(enc?.encounterDate ?? "-");
     context[`ENCOUNTER_${n}_TYPE`] = enc?.appointmentType ?? "-";
   }
@@ -626,10 +625,10 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     for (let i = 0; i < Math.min(group.length, 20); i++) {
       const n = i + 1;
       const enc = group[i];
-      context[`${typeKey}_${n}_SUBJECTIVE`] = htmlToPlainText(enc.soap.subjective) || "-";
-      context[`${typeKey}_${n}_OBJECTIVE`] = htmlToPlainText(enc.soap.objective) || "-";
-      context[`${typeKey}_${n}_ASSESSMENT`] = htmlToPlainText(enc.soap.assessment) || "-";
-      context[`${typeKey}_${n}_PLAN`] = htmlToPlainText(enc.soap.plan) || "-";
+      context[`${typeKey}_${n}_SUBJECTIVE`] = sanitizeSoapHtml(enc.soap.subjective) || "-";
+      context[`${typeKey}_${n}_OBJECTIVE`] = sanitizeSoapHtml(enc.soap.objective) || "-";
+      context[`${typeKey}_${n}_ASSESSMENT`] = sanitizeSoapHtml(enc.soap.assessment) || "-";
+      context[`${typeKey}_${n}_PLAN`] = sanitizeSoapHtml(enc.soap.plan) || "-";
       context[`${typeKey}_${n}_DATE`] = toUsDate(enc.encounterDate);
       context[`${typeKey}_${n}_TYPE`] = enc.appointmentType;
     }
@@ -640,9 +639,9 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
 
   encounterSections.forEach((section) => {
     context[`FIRST_${section.toUpperCase()}`] =
-      htmlToPlainText(firstEncounter?.soap[section] ?? "") || context[`FIRST_${section.toUpperCase()}`] || "-";
+      sanitizeSoapHtml(firstEncounter?.soap[section] ?? "") || context[`FIRST_${section.toUpperCase()}`] || "-";
     context[`LATEST_${section.toUpperCase()}`] =
-      htmlToPlainText(latestEncounter?.soap[section] ?? "") || context[`LATEST_${section.toUpperCase()}`] || "-";
+      sanitizeSoapHtml(latestEncounter?.soap[section] ?? "") || context[`LATEST_${section.toUpperCase()}`] || "-";
     context[`ALL_${section.toUpperCase()}`] =
       context[`ALL_${section.toUpperCase()}`] || formatSoapRollup(encountersAsc, section);
     context[`MACRO_${section.toUpperCase()}`] =
@@ -658,9 +657,35 @@ export function buildNarrativeReportContext(input: NarrativeReportBuildInput) {
     });
   }
 
-  return context;
+  // ── Mark all SOAP-derived tokens as raw HTML ──
+  // These contain sanitised HTML from the rich-text editor and must keep
+  // their <b>, <u>, <p> formatting when embedded into the (also-HTML)
+  // report template body.
+  const soapSuffixes = ["SUBJECTIVE", "OBJECTIVE", "ASSESSMENT", "PLAN"];
+  for (const s of soapSuffixes) {
+    rawHtmlTokens.add(`FIRST_${s}`);
+    rawHtmlTokens.add(`LATEST_${s}`);
+    rawHtmlTokens.add(`ALL_${s}`);
+    rawHtmlTokens.add(`MACRO_${s}`);
+    for (let n = 1; n <= 20; n++) {
+      rawHtmlTokens.add(`ENCOUNTER_${n}_${s}`);
+    }
+  }
+  for (const [typeKey] of encountersByType) {
+    for (let n = 1; n <= 20; n++) {
+      for (const s of soapSuffixes) {
+        rawHtmlTokens.add(`${typeKey}_${n}_${s}`);
+      }
+    }
+  }
+
+  return { context, rawHtmlTokens };
 }
 
-export function renderNarrativeReportBody(templateBody: string, context: Record<string, string>) {
-  return renderDocumentTemplate(templateBody, context);
+export function renderNarrativeReportBody(
+  templateBody: string,
+  context: Record<string, string>,
+  rawHtmlTokens?: Set<string>,
+) {
+  return renderDocumentTemplate(templateBody, context, rawHtmlTokens);
 }
