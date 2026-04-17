@@ -321,28 +321,77 @@ let previousNotesById: Map<string, EncounterNoteRecord> = new Map();
  * filling up as the encounter list grows over months/years.
  */
 const LOCAL_CACHE_DAYS = 90;
+// Hard byte ceiling on the encounter-notes localStorage blob. The full
+// localStorage quota is ~5 MB; we need to leave room for patients,
+// appointments, macros, templates, draft-recovery keys, the safety
+// backup, and every other casemate.* key. 1.25 MB is generous for
+// encounter notes specifically.
+const LOCAL_CACHE_MAX_BYTES = 1_250_000;
+// Hard ceiling on encounter count regardless of date. Above this we
+// keep only the most-recent N. Everything else still lives in the
+// cloud table and can be fetched on demand.
+const LOCAL_CACHE_MAX_RECORDS = 100;
+
+function encounterDateStamp(r: EncounterNoteRecord): number {
+  const match = r.encounterDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return 0;
+  return new Date(
+    Number(match[3]),
+    Number(match[1]) - 1,
+    Number(match[2]),
+  ).getTime();
+}
 
 /**
- * Return only the encounters that are recent enough to cache locally.
- * Encounters older than LOCAL_CACHE_DAYS are still dual-written to the
- * cloud but excluded from the localStorage blob.
+ * Return only the encounters that are safe to cache locally. Three
+ * trimming passes so we never hit QuotaExceededError on a SOAP save:
+ *   1. Drop records older than LOCAL_CACHE_DAYS
+ *   2. If still more than LOCAL_CACHE_MAX_RECORDS, keep the most
+ *      recent LOCAL_CACHE_MAX_RECORDS by encounter date
+ *   3. If the serialized size still exceeds LOCAL_CACHE_MAX_BYTES,
+ *      trim off the oldest records one-by-one until it fits
+ * Dropped records remain in the cloud — only the local cache shrinks.
  */
 function pruneForLocalStorage(records: EncounterNoteRecord[]): EncounterNoteRecord[] {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - LOCAL_CACHE_DAYS);
   const cutoffStamp = cutoff.getTime();
 
-  return records.filter((r) => {
-    // Parse MM/DD/YYYY encounter date
-    const match = r.encounterDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (!match) return true; // keep records with unparseable dates (safety)
-    const dateStamp = new Date(
-      Number(match[3]),
-      Number(match[1]) - 1,
-      Number(match[2]),
-    ).getTime();
-    return dateStamp >= cutoffStamp;
+  // Pass 1: age-based prune.
+  let kept = records.filter((r) => {
+    const stamp = encounterDateStamp(r);
+    if (stamp === 0) return true; // unparseable dates pass through
+    return stamp >= cutoffStamp;
   });
+
+  // Pass 2: count-based prune (most-recent wins).
+  if (kept.length > LOCAL_CACHE_MAX_RECORDS) {
+    kept = [...kept]
+      .sort((a, b) => encounterDateStamp(b) - encounterDateStamp(a))
+      .slice(0, LOCAL_CACHE_MAX_RECORDS);
+  }
+
+  // Pass 3: byte-budget prune. Serialize; if over budget, strip the
+  // oldest record and retry until we fit. Guarantees we never exceed
+  // LOCAL_CACHE_MAX_BYTES which means localStorage.setItem won't throw.
+  let serialized = JSON.stringify(kept);
+  if (serialized.length <= LOCAL_CACHE_MAX_BYTES) return kept;
+  kept = [...kept].sort((a, b) => encounterDateStamp(b) - encounterDateStamp(a));
+  while (kept.length > 1 && JSON.stringify(kept).length > LOCAL_CACHE_MAX_BYTES) {
+    kept.pop(); // drop oldest
+  }
+  serialized = JSON.stringify(kept);
+  if (serialized.length > LOCAL_CACHE_MAX_BYTES) {
+    // Single record is somehow over budget. Keep it anyway — the caller
+    // will see a quota error on setItem, but dropping it entirely means
+    // the user can't see their current encounter. Better to fail the
+    // write than silently hide their data.
+    console.warn(
+      `[encounter-notes] Single encounter exceeds localStorage budget (${serialized.length} bytes). ` +
+        "The cloud copy is still safe; localStorage write may fail.",
+    );
+  }
+  return kept;
 }
 
 export function saveEncounterNoteRecords(records: EncounterNoteRecord[]): boolean {

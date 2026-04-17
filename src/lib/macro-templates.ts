@@ -172,7 +172,7 @@ function defaultMacroTemplate(
 
 export function getDefaultMacroLibrary(): MacroLibraryConfig {
   return {
-    setName: "Prime Spine PI Macros",
+    setName: "Default PI Macros",
     enabledAutoFields: [...macroAutoFields],
     saltDefaults: {
       enabled: true,

@@ -113,20 +113,40 @@ function getActiveWorkspaceId() {
 
 const BACKUP_KEY = "casemate.__safety-backup__.v1";
 
+/** Hard cap on how big the safety-backup in localStorage can grow.
+ *  localStorage has a 5 MB quota. We can't afford to use half of it on
+ *  a snapshot the cloud already holds — the user reported a crashed
+ *  browser at 4.70 MB local, and the backup was a big chunk of it.
+ *  Above this cap we skip the backup entirely (cloud has it). */
+const BACKUP_MAX_BYTES = 500_000; // ~500 KB
+
 function backupLocalWorkspaceData() {
   if (typeof window === "undefined") {
     return;
   }
   try {
     const snapshot = readLocalSnapshot();
-    if (hasMeaningfulLocalData(snapshot)) {
-      window.localStorage.setItem(BACKUP_KEY, JSON.stringify({
-        backedUpAt: new Date().toISOString(),
-        snapshot,
-      }));
+    if (!hasMeaningfulLocalData(snapshot)) return;
+    const payload = JSON.stringify({
+      backedUpAt: new Date().toISOString(),
+      snapshot,
+    });
+    // Skip the backup if it would balloon localStorage past safe
+    // levels. The cloud is the authoritative backup anyway; this
+    // local copy is a last-ditch recovery aid for users who wipe
+    // their cloud row by mistake. Not worth risking a QuotaExceeded
+    // mid-save.
+    if (payload.length > BACKUP_MAX_BYTES) {
+      console.warn(
+        `[cloud-state] Skipping safety-backup — payload ${payload.length} bytes > ${BACKUP_MAX_BYTES} cap. Cloud is the source of truth.`,
+      );
+      // Also drop any existing oversized backup so it stops hogging quota.
+      window.localStorage.removeItem(BACKUP_KEY);
+      return;
     }
+    window.localStorage.setItem(BACKUP_KEY, payload);
   } catch {
-    // best-effort
+    // best-effort — if we can't write the backup, the cloud copy is fine
   }
 }
 

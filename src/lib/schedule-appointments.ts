@@ -103,8 +103,13 @@ export const appointmentTypeOptions = [
   "Follow-Up Visit",
 ];
 
-export const defaultScheduleLocation = "Prime Spine Glendale";
-export const defaultScheduleProvider = "Galstyan, Mike (Dr. Mike)";
+// Blank defaults only — any hardcoded office-name / doctor-name here
+// would leak into the "Location" / "Provider" dropdowns on new user
+// accounts. Each user fills these in from Settings → Office /
+// Account or their first appointment form. See
+// src/lib/office-settings.ts for the tenant-isolation rationale.
+export const defaultScheduleLocation = "";
+export const defaultScheduleProvider = "";
 
 function getTodayIsoDate() {
   const now = new Date();

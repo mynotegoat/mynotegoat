@@ -13,13 +13,21 @@ export interface OfficeSettings {
 
 const STORAGE_KEY = "casemate.office-settings.v1";
 
+// NOTE: these defaults MUST be completely empty strings, not real
+// office information. Every brand-new user starts with a truly blank
+// slate and is walked through filling in their own office info via
+// the onboarding flow. Hardcoding anyone's real office name/phone/
+// address/doctor here would leak across tenants on any path that
+// falls through to defaults (new browser, fresh signup, post-wipe
+// empty localStorage, etc.). This was an active cross-tenant PII
+// leak incident reported on 2026-04-17 — do not re-introduce.
 const defaultOfficeSettings: OfficeSettings = {
-  officeName: "Prime Spine & Wellness",
-  phone: "818-696-8868",
-  fax: "747-699-1911",
-  email: "contact@primespinewellness.com",
-  address: "815 E. Colorado St. Unit 250, Glendale, CA 91205",
-  doctorName: "Dr. Mike Galstyan",
+  officeName: "",
+  phone: "",
+  fax: "",
+  email: "",
+  address: "",
+  doctorName: "",
   logoDataUrl: "",
   deletePassword: "",
 };
