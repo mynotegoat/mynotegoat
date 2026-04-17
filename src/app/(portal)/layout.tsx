@@ -29,6 +29,13 @@ const GlobalTimerAlerts = dynamic(
     })),
   { ssr: false },
 );
+const DraftRecoveryBanner = dynamic(
+  () =>
+    import("@/components/draft-recovery-banner").then((m) => ({
+      default: m.DraftRecoveryBanner,
+    })),
+  { ssr: false },
+);
 
 export default function PortalLayout({
   children,
@@ -427,6 +434,7 @@ export default function PortalLayout({
           </div>
         )}
         <GlobalTimerAlerts />
+        <DraftRecoveryBanner />
         {children}
       </AppShell>
     </PlanTierProvider>

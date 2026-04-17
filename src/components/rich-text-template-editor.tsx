@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { writeDraft } from "@/lib/draft-recovery";
 
 export interface RichTextTemplateEditorHandle {
   focus: () => void;
@@ -16,6 +17,11 @@ type RichTextTemplateEditorProps = {
   className?: string;
   placeholder?: string;
   onElementClick?: (target: HTMLElement) => void;
+  /** Optional crash-safe draft key. When set, every input event
+   *  synchronously writes the current editor HTML to localStorage
+   *  under this key BEFORE any React state update runs. See
+   *  src/lib/draft-recovery.ts for the full rationale. */
+  draftKey?: string;
 };
 
 function escapeHtml(value: string) {
@@ -83,12 +89,20 @@ export const RichTextTemplateEditor = forwardRef<
     className = "",
     placeholder = "Start writing...",
     onElementClick,
+    draftKey,
   },
   ref,
 ) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
   const isFocusedRef = useRef(false);
+  // Hold the current draftKey in a ref so the input handler (bound
+  // once, see onInput below) always reads the latest key — avoids
+  // having to re-register listeners when the parent swaps encounters.
+  const draftKeyRef = useRef<string | undefined>(draftKey);
+  useEffect(() => {
+    draftKeyRef.current = draftKey;
+  }, [draftKey]);
 
   const syncEditorWithValue = () => {
     const editor = editorRef.current;
@@ -121,7 +135,17 @@ export const RichTextTemplateEditor = forwardRef<
     if (!editor) {
       return;
     }
-    const next = normalizeOutgoingValue(editor.innerHTML);
+    // Crash-safe draft: write the RAW editor HTML to localStorage
+    // BEFORE doing any React state work. This is the belt-and-
+    // suspenders that survives any crash between "user typed" and
+    // "React re-rendered and flushed saveEncounterNoteRecords". If
+    // the tab OOMs, freezes, or is force-closed, the draft is safe.
+    const raw = editor.innerHTML;
+    const currentDraftKey = draftKeyRef.current;
+    if (currentDraftKey) {
+      writeDraft(currentDraftKey, raw);
+    }
+    const next = normalizeOutgoingValue(raw);
     if (next === lastAppliedRef.current) {
       return;
     }

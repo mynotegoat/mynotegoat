@@ -6,6 +6,7 @@ import { PatientFilesPreviewPanel } from "@/components/patient-files-preview-pan
 import { RichTextTemplateEditor, type RichTextTemplateEditorHandle } from "@/components/rich-text-template-editor";
 import { useBillingMacros } from "@/hooks/use-billing-macros";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
+import { draftKeyFor } from "@/lib/draft-recovery";
 import { useMacroTemplates } from "@/hooks/use-macro-templates";
 import { useOfficeSettings } from "@/hooks/use-office-settings";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
@@ -2555,6 +2556,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                         minHeightClassName="min-h-64"
                         placeholder="Type directly here, use macros, or mix both."
                         onElementClick={handleSoapEditorElementClick}
+                        draftKey={draftKeyFor(selectedEncounter.id, activeSection)}
                       />
                     </div>
                     <div className="grid gap-1">
@@ -2592,6 +2594,7 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
                       minHeightClassName="min-h-64"
                       placeholder="Type directly here, use macros, or mix both."
                       onElementClick={handleSoapEditorElementClick}
+                      draftKey={draftKeyFor(selectedEncounter.id, activeSection)}
                     />
                   </div>
                 )}

@@ -361,6 +361,36 @@ export function saveEncounterNoteRecords(records: EncounterNoteRecord[]): boolea
     console.error("[encounter-notes] localStorage write failed:", err);
     return false;
   }
+
+  // Committed successfully → clear the crash-safe drafts for each
+  // encounter/section whose current content matches what we just
+  // wrote. Drafts only exist to recover work that hadn't been
+  // committed yet, so keeping them after a successful commit is noise.
+  // We lazy-import draft-recovery because encounter-notes.ts is a
+  // shared module and draft-recovery is browser-only.
+  try {
+    // Lazy-require so SSR / tests don't pull browser storage in.
+    void import("@/lib/draft-recovery").then(({ draftKeyFor, clearDraft }) => {
+      for (const record of records) {
+        for (const section of encounterSections) {
+          const key = draftKeyFor(record.id, section);
+          const rawDraft = window.localStorage.getItem(key);
+          if (!rawDraft) continue;
+          try {
+            const parsed = JSON.parse(rawDraft) as { html?: unknown };
+            if (typeof parsed.html === "string" && parsed.html === record.soap[section]) {
+              clearDraft(key);
+            }
+          } catch {
+            // Draft corrupt — clear it, the scanner will GC on next load.
+            clearDraft(key);
+          }
+        }
+      }
+    });
+  } catch {
+    // Non-fatal — drafts will be scanned and GC'd on next app load.
+  }
   // Always dual-write the FULL set to cloud (not the pruned subset).
   // We don't await here because saveEncounterNoteRecords is sync for
   // backwards compatibility, but the inner function now reports failures
