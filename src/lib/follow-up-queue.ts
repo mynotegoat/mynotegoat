@@ -427,6 +427,11 @@ export function buildFollowUpItems(
         } else if (hasSent && !hasDone) {
           const scheduledDate = extractLeadingDatePart(mriScheduledRaw);
           const sentDate = extractLeadingDatePart(mriSentRaw);
+          // Anchor on the SENT date (the original referral) so the
+          // "days waiting" count tracks how long the office has been
+          // chasing the report, not just how recently the patient
+          // happened to be put on the calendar. The scheduled date is
+          // still surfaced in the stage label for context.
           rows.push({
             id: `${patient.id}-mri-done`,
             patientId: patient.id,
@@ -438,8 +443,8 @@ export function buildFollowUpItems(
             stage: scheduledDate
               ? `Scheduled ${formatUsDateDisplay(scheduledDate)}, waiting for done date`
               : "Sent, waiting for done date",
-            anchorDate: scheduledDate || sentDate,
-            daysFromAnchor: getDaysFromToday(scheduledDate || sentDate),
+            anchorDate: sentDate,
+            daysFromAnchor: getDaysFromToday(sentDate),
             note: stripLeadingDatePart(mriSentRaw),
           });
         } else if (hasDone && !hasReceived) {
