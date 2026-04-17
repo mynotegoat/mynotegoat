@@ -100,6 +100,41 @@ export async function resolveValidatedWorkspaceId(
   }
 }
 
+/**
+ * Run `tasks` with bounded concurrency. Supabase's REST endpoints happily
+ * accept parallel writes, but firing 20+ at once when the network is
+ * already flaky gives every single one a chance to hit the same packet
+ * loss and fail together. Running a max of N at a time means early
+ * failures retry while later ops are still queued — less thundering herd.
+ *
+ * Returns PromiseSettledResult[] in the same order as the input tasks so
+ * callers can preserve their existing "X of Y failed" aggregate logic.
+ */
+export async function runBatched<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number = 4,
+): Promise<PromiseSettledResult<T>[]> {
+  if (tasks.length === 0) return [];
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.max(1, concurrency) }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= tasks.length) return;
+      try {
+        const value = await tasks[index]();
+        results[index] = { status: "fulfilled", value };
+      } catch (err) {
+        results[index] = { status: "rejected", reason: err };
+      }
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
 function isLockStealError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   if (message.includes("Lock broken by another request with the 'steal' option")) {
@@ -126,29 +161,62 @@ function isTransientNetworkError(err: unknown): boolean {
 }
 
 /**
- * Wrap a Supabase operation so that a transient lock-steal or network
- * "Failed to fetch" error triggers exactly one retry (with a short
- * backoff for network flaps). Any other error propagates unchanged.
+ * Wrap a Supabase operation so that transient lock-steal or network
+ * errors trigger a short retry loop. Any non-transient error propagates
+ * on the first hit.
  *
- * One retry is enough in practice:
- *  - The lock-steal holder releases the moment its own op finishes
- *  - Network flaps during bulk writes (merge, bulk patient update) are
- *    almost always a single momentary blip; if it's actually down, the
- *    second attempt fails too and the caller learns about it
+ * Retry policy:
+ *  - Lock-steal (navigator.locks contention): 1 retry, no backoff.
+ *    The contesting lock holder releases the moment its op finishes,
+ *    so an immediate retry almost always wins.
+ *  - Network errors ("Failed to fetch", "NetworkError", "Load failed"):
+ *    up to 3 retries with exponential backoff (500ms → 1000ms → 2000ms).
+ *    WiFi blips and Supabase transient 502s / cold edge starts are
+ *    usually <2s, so three tries covers the vast majority without
+ *    dragging out the user's perceived wait. supabase-js upsert on
+ *    (workspace_id, id) is idempotent, so duplicate retries are safe.
+ *
+ * If every retry fails, the last error is re-thrown so the caller's
+ * error-report pipeline still runs.
  */
 export async function withLockStealRetry<T>(op: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  const networkBackoffs = [500, 1000, 2000]; // up to 3 retries for network
+
   try {
     return await op();
   } catch (err) {
-    const shouldRetry = isLockStealError(err) || isTransientNetworkError(err);
-    if (!shouldRetry) throw err;
-    invalidateCloudAuthCache();
-    // Small backoff so network errors don't instantly-retry into the same
-    // packet loss. Lock-steal errors retry immediately — backoff is
-    // harmless either way.
-    if (isTransientNetworkError(err)) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+    lastError = err;
+    if (isLockStealError(err)) {
+      invalidateCloudAuthCache();
+      try {
+        return await op();
+      } catch (retryErr) {
+        lastError = retryErr;
+        // Fall through to the network-retry loop in case the lock-steal
+        // retry also hit a network blip.
+        if (!isTransientNetworkError(retryErr)) throw retryErr;
+      }
+    } else if (!isTransientNetworkError(err)) {
+      throw err;
     }
-    return await op();
+
+    // Network retry loop — retries 1 through 3 with exponential backoff.
+    for (let attempt = 0; attempt < networkBackoffs.length; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, networkBackoffs[attempt]));
+      invalidateCloudAuthCache();
+      try {
+        return await op();
+      } catch (retryErr) {
+        lastError = retryErr;
+        if (!isTransientNetworkError(retryErr) && !isLockStealError(retryErr)) {
+          throw retryErr;
+        }
+        // Keep retrying on transient errors until we exhaust the loop.
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError));
   }
 }

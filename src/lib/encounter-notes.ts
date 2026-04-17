@@ -419,37 +419,47 @@ async function dualWriteEncounterNotesToCloud(
   nextRecords: EncounterNoteRecord[],
   prevById: Map<string, EncounterNoteRecord>,
 ): Promise<void> {
-  const [{ isCloudEntityEnabled }, { upsertEncounterNoteToTable, deleteEncounterNoteFromTable }, { reportCloudWriteError }] =
-    await Promise.all([
-      import("@/lib/feature-flags"),
-      import("@/lib/encounter-notes-cloud"),
-      import("@/lib/storage-sync-interceptor"),
-    ]);
+  const [
+    { isCloudEntityEnabled },
+    { upsertEncounterNoteToTable, deleteEncounterNoteFromTable },
+    { reportCloudWriteError },
+    { runBatched },
+  ] = await Promise.all([
+    import("@/lib/feature-flags"),
+    import("@/lib/encounter-notes-cloud"),
+    import("@/lib/storage-sync-interceptor"),
+    import("@/lib/cloud-auth"),
+  ]);
   if (!isCloudEntityEnabled("encounterNotes")) return;
 
   const nextById = new Map(nextRecords.map((n) => [n.id, n]));
-  const ops: Promise<unknown>[] = [];
+  // Build TASK FACTORIES (thunks) instead of already-running Promises so
+  // the batched runner can pace them. Firing all 21+ at once is what
+  // caused the "21 of 21 failed / Failed to fetch" bug report — a single
+  // transient network blip took them all down together because each
+  // in-flight call hit the same momentary network drop.
+  const tasks: Array<() => Promise<unknown>> = [];
   for (const note of nextRecords) {
     const prev = prevById.get(note.id);
     if (!prev || JSON.stringify(prev) !== JSON.stringify(note)) {
-      ops.push(upsertEncounterNoteToTable(note));
+      tasks.push(() => upsertEncounterNoteToTable(note));
     }
   }
   for (const prevId of prevById.keys()) {
     if (!nextById.has(prevId)) {
-      ops.push(deleteEncounterNoteFromTable(prevId));
+      tasks.push(() => deleteEncounterNoteFromTable(prevId));
     }
   }
-  if (ops.length === 0) return;
+  if (tasks.length === 0) return;
 
-  const results = await Promise.allSettled(ops);
+  const results = await runBatched(tasks, 4);
   const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
   if (failures.length === 0) return;
 
   // Every individual op already called reportCloudWriteError — this is the
   // aggregate signal for any caller that wants a single pass/fail answer.
   const aggregate = new Error(
-    `[encounter-notes] ${failures.length} of ${ops.length} cloud op(s) failed — ` +
+    `[encounter-notes] ${failures.length} of ${tasks.length} cloud op(s) failed — ` +
       `first reason: ${failures[0].reason instanceof Error ? failures[0].reason.message : String(failures[0].reason)}`,
   );
   reportCloudWriteError("encounter-notes dual-write", aggregate);

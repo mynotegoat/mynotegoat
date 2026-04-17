@@ -434,18 +434,25 @@ async function dualWritePatientsToCloud(
 ): Promise<void> {
   // Lazy-imported to avoid pulling Supabase into modules that don't need it
   // and to avoid a circular dependency between mock-data and patients-cloud.
-  const [{ isCloudEntityEnabled }, { upsertPatientToTable, deletePatientFromTable }, { reportCloudWriteError }] =
-    await Promise.all([
-      import("@/lib/feature-flags"),
-      import("@/lib/patients-cloud"),
-      import("@/lib/storage-sync-interceptor"),
-    ]);
+  const [
+    { isCloudEntityEnabled },
+    { upsertPatientToTable, deletePatientFromTable },
+    { reportCloudWriteError },
+    { runBatched },
+  ] = await Promise.all([
+    import("@/lib/feature-flags"),
+    import("@/lib/patients-cloud"),
+    import("@/lib/storage-sync-interceptor"),
+    import("@/lib/cloud-auth"),
+  ]);
   if (!isCloudEntityEnabled("patients")) {
     return;
   }
 
   const nextById = new Map(nextPatients.map((entry) => [entry.id, entry]));
-  const ops: Promise<unknown>[] = [];
+  // Collect task factories (thunks) so the batched runner can pace them
+  // instead of firing everything simultaneously.
+  const ops: Array<() => Promise<unknown>> = [];
 
   // Patient delta plan:
   //   - Brand-new non-deleted patient → upsert
@@ -464,14 +471,14 @@ async function dualWritePatientsToCloud(
 
     if (!previous) {
       // Brand new — only sync if not already in the trash bucket.
-      if (!isDeletedNow) ops.push(upsertPatientToTable(patient));
+      if (!isDeletedNow) ops.push(() => upsertPatientToTable(patient));
       continue;
     }
 
     if (isDeletedNow && !wasDeletedBefore) {
       // Just soft-deleted — wipe the cloud row so it doesn't resurrect on
       // next boot / next device.
-      ops.push(deletePatientFromTable(patient.id));
+      ops.push(() => deletePatientFromTable(patient.id));
       continue;
     }
 
@@ -482,7 +489,7 @@ async function dualWritePatientsToCloud(
 
     // Non-deleted in both states OR restore (was deleted, now not).
     if (JSON.stringify(previous) !== JSON.stringify(patient)) {
-      ops.push(upsertPatientToTable(patient));
+      ops.push(() => upsertPatientToTable(patient));
     }
   }
 
@@ -493,13 +500,13 @@ async function dualWritePatientsToCloud(
       // If the patient was already soft-deleted, its cloud row is already
       // gone. Still issue the delete to make permanent delete idempotent.
       void previous;
-      ops.push(deletePatientFromTable(previousId));
+      ops.push(() => deletePatientFromTable(previousId));
     }
   }
 
   if (ops.length === 0) return;
 
-  const results = await Promise.allSettled(ops);
+  const results = await runBatched(ops, 4);
   const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
   if (failures.length === 0) return;
 
