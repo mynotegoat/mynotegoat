@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AppShell } from "@/components/app-shell";
@@ -12,6 +12,7 @@ import {
   wipeLocalWorkspaceForSignOut,
 } from "@/lib/cloud-state";
 import { forceSyncNow, installStorageSyncInterceptor, onSyncStatusChange, pauseSync, resumeSync } from "@/lib/storage-sync-interceptor";
+import { installListenerLeakGuard } from "@/lib/listener-leak-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { resolveAuthAccessState } from "@/lib/auth-access";
 import type { PlanTier } from "@/lib/plan-access";
@@ -41,6 +42,14 @@ export default function PortalLayout({
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [errorPillDismissed, setErrorPillDismissed] = useState(false);
   const [retryingSync, setRetryingSync] = useState(false);
+  /** Set by the listener-leak guard when any event on window/document
+   *  crosses its leak threshold. When set, we render a top-of-screen red
+   *  banner telling the user to hard-refresh — a listener leak means the
+   *  browser is about to start struggling and any in-flight draft work
+   *  is at risk. */
+  const [leakAlarm, setLeakAlarm] = useState<
+    { target: string; type: string; count: number } | null
+  >(null);
   // When syncStatus flips to "synced" we flash a green "Cloud Saved!" pill for
   // a few seconds so the user has positive confirmation that their work made
   // it to the cloud. The flash is driven by a setTimeout started inside the
@@ -97,6 +106,13 @@ export default function PortalLayout({
       // every casemate.* key. This prevents one account's data from being
       // shown to — or, worse, synced up to the cloud under — another account.
       ensureWorkspaceForUser(workspaceId);
+
+      // Install the listener-leak guard FIRST, before any other code
+      // can register window/document listeners. The guard intercepts
+      // addEventListener/removeEventListener and fires a visible alarm
+      // the moment any event type crosses its leak threshold. See
+      // src/lib/listener-leak-guard.ts for the incident this prevents.
+      installListenerLeakGuard();
 
       // Install interceptor paused so bootstrap writes don't trigger syncs
       pauseSync();
@@ -180,6 +196,20 @@ export default function PortalLayout({
     };
     window.addEventListener("casemate:cloud-sync-blocked", onBlocked);
 
+    // Listen for listener-leak alarms and surface a top-of-screen red
+    // banner so the user knows to hard-refresh BEFORE the browser tab
+    // starts to struggle. We only set state on the first alarm per page
+    // life (the guard itself dedupes too, belt-and-suspenders).
+    const onLeak = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { target: string; type: string; count: number }
+        | undefined;
+      if (detail && active) {
+        setLeakAlarm(detail);
+      }
+    };
+    window.addEventListener("casemate:listener-leak-detected", onLeak);
+
     // Mid-session user switch guard. If the Supabase session changes underneath
     // us — sign-in as a different user, sign-out, token refresh that yields a
     // different user_id — the data already in memory belongs to the OLD user.
@@ -223,51 +253,20 @@ export default function PortalLayout({
     return () => {
       active = false;
       window.removeEventListener("casemate:cloud-sync-blocked", onBlocked);
+      window.removeEventListener("casemate:listener-leak-detected", onLeak);
       if (authSubscription) {
         authSubscription.unsubscribe();
       }
     };
   }, [router]);
 
-  // Auto-retry the cloud sync when the tab regains focus while we're in
-  // an error state. Pattern: WiFi blip happens → red pill shows up →
-  // user goes off to do something → comes back to the tab → we silently
-  // try a fresh sync. If it works, the pill disappears and they never
-  // had to think about it.
-  //
-  // CRITICAL: the effect used to rebuild its handlers on every syncStatus
-  // change AND passed a different function reference to addEventListener
-  // vs removeEventListener for visibilitychange. Every status flip
-  // (syncing → synced → error, which can happen many times a minute
-  // under autosave) added a fresh listener that the cleanup never
-  // actually removed. After a few minutes of editing, hundreds of
-  // listeners were firing on every tab focus, each calling forceSyncNow
-  // which spawned cloud retry loops — that's what was pegging the CPU
-  // fan and blowing up Chrome's memory.
-  //
-  // Fix: pull the current syncStatus through a ref so the effect can
-  // stay mounted with a stable handler (deps: []) — one listener total,
-  // no leak, reads latest status on every fire.
-  const syncStatusRef = useRef(syncStatus);
-  useEffect(() => {
-    syncStatusRef.current = syncStatus;
-  }, [syncStatus]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleFocus = () => {
-      if (syncStatusRef.current !== "error") return;
-      void forceSyncNow();
-    };
-    const handleVisibility = () => {
-      if (!document.hidden) handleFocus();
-    };
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, []);
+  // (Auto-retry-on-focus was removed. The feature caused an event-listener
+  //  leak — every syncStatus change re-ran the effect and stacked more
+  //  listeners on window/document. That blew up Chrome's memory + pegged
+  //  the CPU fan under normal editing. Retries now happen only inside
+  //  withLockStealRetry at the op level, or via the user-initiated Retry
+  //  button on the error pill. No listener-based side channels.)
+  void syncStatus;
 
   if (bootstrapError) {
     return (
@@ -403,6 +402,21 @@ export default function PortalLayout({
             ⚠ Cloud sync blocked — this browser has less data than the cloud (
             {syncBlocked.localSize} vs {syncBlocked.remoteSize} bytes). Changes are
             NOT being saved. Reload to pull the latest data from the cloud.{" "}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="ml-2 underline"
+            >
+              Reload now
+            </button>
+          </div>
+        )}
+        {leakAlarm && (
+          <div className="fixed inset-x-0 top-0 z-[60] bg-red-700 px-4 py-3 text-center text-sm font-semibold text-white shadow-lg">
+            ⚠ Listener leak detected (&quot;{leakAlarm.type}&quot; on {leakAlarm.target}
+            , {leakAlarm.count} handlers). This browser tab is about to start
+            struggling — <strong>save your work and hard-refresh NOW</strong> (Ctrl+Shift+R
+            / Cmd+Shift+R) before it freezes.{" "}
             <button
               type="button"
               onClick={() => window.location.reload()}
