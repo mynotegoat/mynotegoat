@@ -50,6 +50,13 @@ export interface DashboardWorkspaceSettings {
     mriCtClearedBy: MriCtClearCondition[];
     specialistClearedBy: SpecialistClearCondition[];
     lienLopClearStatuses: string[];
+    /** Case statuses that auto-clear the X-Ray follow-up category for a
+     *  patient. Mirrors the Lien behavior — used to keep e.g. Discharged
+     *  cases from showing X-Ray reminders that no longer matter while
+     *  still letting Lien reminders fire. */
+    xrayClearStatuses: string[];
+    mriCtClearStatuses: string[];
+    specialistClearStatuses: string[];
     staleDaysThreshold: number;
     maxItems: number;
   };
@@ -87,6 +94,13 @@ export function getDefaultDashboardWorkspaceSettings(): DashboardWorkspaceSettin
       mriCtClearedBy: ["patientRefused", "completedPriorCare", "reviewed", "noMri"],
       specialistClearedBy: ["patientRefused", "completedPriorCare", "report", "noPm"],
       lienLopClearStatuses: ["Received"],
+      // Default per-category clear lists are empty: existing users keep
+      // their behavior because buildFollowUpItems still falls back to the
+      // closedCaseStatuses list when these are blank. Users who want
+      // granular per-status control fill these in via Reminder Settings.
+      xrayClearStatuses: [],
+      mriCtClearStatuses: [],
+      specialistClearStatuses: [],
       staleDaysThreshold: 14,
       maxItems: 10,
     },
@@ -224,6 +238,18 @@ export function normalizeDashboardWorkspaceSettings(value: unknown): DashboardWo
       lienLopClearStatuses: normalizeStatusList(
         rawFollowUp.lienLopClearStatuses,
         defaults.patientFollowUp.lienLopClearStatuses,
+      ),
+      xrayClearStatuses: normalizeStatusList(
+        rawFollowUp.xrayClearStatuses,
+        defaults.patientFollowUp.xrayClearStatuses,
+      ),
+      mriCtClearStatuses: normalizeStatusList(
+        rawFollowUp.mriCtClearStatuses,
+        defaults.patientFollowUp.mriCtClearStatuses,
+      ),
+      specialistClearStatuses: normalizeStatusList(
+        rawFollowUp.specialistClearStatuses,
+        defaults.patientFollowUp.specialistClearStatuses,
       ),
       staleDaysThreshold: normalizeNumber(
         rawFollowUp.staleDaysThreshold,

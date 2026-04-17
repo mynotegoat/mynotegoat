@@ -37,6 +37,13 @@ export type FollowUpQueueOptions = {
   mriCtClearedBy?: MriCtClearCondition[];
   specialistClearedBy?: SpecialistClearCondition[];
   lienLopClearStatuses?: string[];
+  /** Case statuses that auto-clear the X-Ray category for a patient.
+   *  Empty/undefined → falls back to the global closedCaseStatuses
+   *  list, preserving the legacy behavior where Case Closed = no
+   *  reminders. */
+  xrayClearStatuses?: string[];
+  mriCtClearStatuses?: string[];
+  specialistClearStatuses?: string[];
   followUpOverrides?: PatientFollowUpOverrideMap;
   maxItems?: number;
   closedCaseStatuses?: string[];
@@ -259,12 +266,37 @@ export function buildFollowUpItems(
     (options.closedCaseStatuses ?? []).map((statusName) => statusName.trim().toLowerCase()).filter(Boolean),
   );
 
+  // Per-category clear-statuses sets. If the per-category list is empty,
+  // fall back to the global "Case Closed" statuses so existing behavior
+  // (Case Closed = no reminders for any category) is preserved for users
+  // who haven't configured granular per-category control yet.
+  const buildClearSet = (perCategory: string[] | undefined): Set<string> => {
+    const list = perCategory && perCategory.length > 0 ? perCategory : Array.from(closedStatuses);
+    return new Set(
+      list
+        .map((statusName) => statusName.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  };
+  const xrayClearStatuses = buildClearSet(options.xrayClearStatuses);
+  const mriCtClearStatuses = buildClearSet(options.mriCtClearStatuses);
+  const specialistClearStatuses = buildClearSet(options.specialistClearStatuses);
+
   const rows: FollowUpItem[] = [];
 
   patientRows.forEach((patient) => {
-    if (closedStatuses.has(patient.caseStatus.trim().toLowerCase())) {
-      return;
-    }
+    const patientStatusKey = patient.caseStatus.trim().toLowerCase();
+    // Per-category status check — replaces the previous global early-return
+    // on closedCaseStatuses. Each category checks its own clear set so
+    // (e.g.) Discharged can clear X-Ray while still letting Lien fire.
+    const xrayClearedByStatus = xrayClearStatuses.has(patientStatusKey);
+    const mriCtClearedByStatus = mriCtClearStatuses.has(patientStatusKey);
+    const specialistClearedByStatus = specialistClearStatuses.has(patientStatusKey);
+    const lienClearedByStatus = closedStatuses.has(patientStatusKey);
+    // (lienLopClearStatuses already gates Lien below — closedStatuses
+    //  fallback for Lien preserves the historic "Case Closed hides Lien
+    //  too" behavior. Users who want Lien to keep firing on a closed
+    //  status simply don't mark that status as Case Closed.)
 
     const matrix = patient.matrix ?? {};
     const caseNumber = buildCaseNumber(patient.dateOfLoss, patient.fullName);
@@ -289,7 +321,7 @@ export function buildFollowUpItems(
     const patientOverrides = followUpOverrides[patient.id];
 
     // --- X-Ray ---
-    if (includeXray) {
+    if (includeXray && !xrayClearedByStatus) {
       const xrayCleared = isXrayCleared(xrayClearedBySet, patientOverrides?.xray, hasMatrixValue(xrayReviewedRaw));
 
       if (!xrayCleared) {
@@ -384,7 +416,7 @@ export function buildFollowUpItems(
     }
 
     // --- MRI / CT ---
-    if (includeMriCt) {
+    if (includeMriCt && !mriCtClearedByStatus) {
       const mriCleared = isMriCtCleared(mriCtClearedBySet, patientOverrides?.mriCt, hasMatrixValue(mriReviewedRaw));
 
       if (!mriCleared) {
@@ -525,7 +557,7 @@ export function buildFollowUpItems(
     }
 
     // --- Specialist ---
-    if (includeSpecialist) {
+    if (includeSpecialist && !specialistClearedByStatus) {
       const specCleared = isSpecialistCleared(specialistClearedBySet, patientOverrides?.specialist, hasMatrixValue(specialistReportRaw));
 
       if (!specCleared) {
@@ -637,7 +669,7 @@ export function buildFollowUpItems(
     }
 
     // --- Lien / LOP ---
-    if (includeLienLop) {
+    if (includeLienLop && !lienClearedByStatus) {
       const normalizedLien = lienRaw.trim().toLowerCase();
       const lienHasValue = hasMatrixValue(lienRaw);
       const isSelectedClearStatus = matchesLienClearStatus(lienRaw, lienLopClearStatuses);

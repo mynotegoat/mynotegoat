@@ -340,6 +340,45 @@ export function useDashboardWorkspaceSettings() {
     [updateSettings],
   );
 
+  const setFollowUpXrayClearStatuses = useCallback(
+    (statuses: string[]) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          xrayClearStatuses: statuses,
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const setFollowUpMriCtClearStatuses = useCallback(
+    (statuses: string[]) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          mriCtClearStatuses: statuses,
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
+  const setFollowUpSpecialistClearStatuses = useCallback(
+    (statuses: string[]) => {
+      updateSettings((current) => ({
+        ...current,
+        patientFollowUp: {
+          ...current.patientFollowUp,
+          specialistClearStatuses: statuses,
+        },
+      }));
+    },
+    [updateSettings],
+  );
+
   return {
     dashboardWorkspaceSettings,
     setTasksShowOnDashboard,
@@ -363,6 +402,9 @@ export function useDashboardWorkspaceSettings() {
     setSpecialistNoReportWarningDays,
     setSpecialistNoScheduleWarningDays,
     setFollowUpLienLopClearStatuses,
+    setFollowUpXrayClearStatuses,
+    setFollowUpMriCtClearStatuses,
+    setFollowUpSpecialistClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
     resetToDefaults,

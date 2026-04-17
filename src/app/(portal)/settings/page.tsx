@@ -2476,6 +2476,9 @@ export default function SettingsPage() {
     setSpecialistNoReportWarningDays,
     setSpecialistNoScheduleWarningDays,
     setFollowUpLienLopClearStatuses,
+    setFollowUpXrayClearStatuses,
+    setFollowUpMriCtClearStatuses,
+    setFollowUpSpecialistClearStatuses,
     setFollowUpStaleDaysThreshold,
     setFollowUpMaxItems,
     resetToDefaults: resetDashboardWorkspaceSettingsToDefaults,
@@ -3770,41 +3773,6 @@ export default function SettingsPage() {
       >
         <div className="grid gap-4 xl:grid-cols-3">
           <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
-            <h4 className="text-lg font-semibold">Case Status</h4>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Choose which case statuses to track.
-            </p>
-            <div className="mt-3 grid gap-2">
-              {caseStatuses.map((status) => (
-                <label
-                  key={`dashboard-case-status-${status.name}`}
-                  className="inline-flex items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5 text-sm"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="inline-block h-3 w-3 rounded-full border border-[var(--line-soft)]"
-                      style={{ backgroundColor: status.color }}
-                    />
-                    {status.name}
-                  </span>
-                  <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                    <input
-                      checked={status.showOnDashboard}
-                      onChange={() => toggleDashboardVisibility(status.name)}
-                      type="checkbox"
-                    />
-                    Show
-                  </span>
-                </label>
-              ))}
-              {caseStatuses.length === 0 && (
-                <p className="text-sm text-[var(--text-muted)]">Add case statuses first.</p>
-              )}
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-[var(--line-soft)] bg-white p-4">
             <h4 className="text-lg font-semibold">To Do</h4>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Controls default behavior for the To Do task list.
@@ -3892,6 +3860,30 @@ export default function SettingsPage() {
                       />
                       <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>
+                  </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when case status is</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {caseStatuses.map((status) => (
+                        <label key={`xray-clear-${status.name}`} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.xrayClearStatuses.includes(status.name)}
+                            onChange={(event) => {
+                              const current = dashboardWorkspaceSettings.patientFollowUp.xrayClearStatuses;
+                              const next = event.target.checked
+                                ? [...current, status.name]
+                                : current.filter((n) => n !== status.name);
+                              setFollowUpXrayClearStatuses(next);
+                            }}
+                            type="checkbox"
+                          />
+                          {status.name}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      Patients in any of the checked statuses won&apos;t show X-Ray reminders. Leave blank to fall back to the &quot;Case Closed&quot; list.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -3987,6 +3979,30 @@ export default function SettingsPage() {
                       <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>
                   </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when case status is</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {caseStatuses.map((status) => (
+                        <label key={`mri-clear-${status.name}`} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.mriCtClearStatuses.includes(status.name)}
+                            onChange={(event) => {
+                              const current = dashboardWorkspaceSettings.patientFollowUp.mriCtClearStatuses;
+                              const next = event.target.checked
+                                ? [...current, status.name]
+                                : current.filter((n) => n !== status.name);
+                              setFollowUpMriCtClearStatuses(next);
+                            }}
+                            type="checkbox"
+                          />
+                          {status.name}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      Patients in any of the checked statuses won&apos;t show MRI / CT reminders. Leave blank to fall back to the &quot;Case Closed&quot; list.
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -4078,6 +4094,30 @@ export default function SettingsPage() {
                       />
                       <span className="text-sm text-[var(--text-muted)]">days from sent date (0 = off)</span>
                     </div>
+                  </div>
+                  <div className="grid gap-1 sm:col-span-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Cleared when case status is</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {caseStatuses.map((status) => (
+                        <label key={`spec-clear-${status.name}`} className="inline-flex items-center gap-1.5 text-sm">
+                          <input
+                            checked={dashboardWorkspaceSettings.patientFollowUp.specialistClearStatuses.includes(status.name)}
+                            onChange={(event) => {
+                              const current = dashboardWorkspaceSettings.patientFollowUp.specialistClearStatuses;
+                              const next = event.target.checked
+                                ? [...current, status.name]
+                                : current.filter((n) => n !== status.name);
+                              setFollowUpSpecialistClearStatuses(next);
+                            }}
+                            type="checkbox"
+                          />
+                          {status.name}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      Patients in any of the checked statuses won&apos;t show Specialist reminders. Leave blank to fall back to the &quot;Case Closed&quot; list.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -4341,8 +4381,16 @@ export default function SettingsPage() {
                 />
                 <span className="font-semibold">{status.name}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm" title="Show this status in dashboard counts and case-status filters">
+                  <input
+                    checked={status.showOnDashboard}
+                    onChange={() => toggleDashboardVisibility(status.name)}
+                    type="checkbox"
+                  />
+                  Show
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm" title="Hides Case Flow reminders for patients in this status (per-category overrides live in Reminder Settings)">
                   <input
                     checked={status.isCaseClosed}
                     onChange={(event) => setStatusClosed(status.name, event.target.checked)}
