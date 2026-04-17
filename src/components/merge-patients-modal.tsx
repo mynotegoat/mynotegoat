@@ -24,6 +24,7 @@
 import { useMemo, useState } from "react";
 import {
   patients as patientStore,
+  type PatientMatrixField,
   type PatientRecord,
 } from "@/lib/mock-data";
 import { autoMergeRecord, mergePatients } from "@/lib/patient-merge";
@@ -71,6 +72,36 @@ const SCALAR_FIELDS: { key: ScalarField; label: string }[] = [
   { key: "caseStatus", label: "Case Status" },
   { key: "dateOfLoss", label: "Date of Loss" },
   { key: "priority", label: "Priority" },
+];
+
+/** Matrix fields that show in the merge UI's "Notes & Additional Details"
+ *  section. We list them in the same order they appear in the Additional
+ *  Details panel on the patient case file so the merge UI matches what
+ *  the user already knows. Auto-tracked imaging dates (xraySent,
+ *  mriDone, etc.) are intentionally NOT in this list because they're
+ *  auto-merged via the referral arrays on the parent record. */
+const MATRIX_FIELDS: { key: PatientMatrixField; label: string; multiline?: boolean }[] = [
+  { key: "notes", label: "Case Notes", multiline: true },
+  { key: "review", label: "Review", multiline: true },
+  { key: "contact", label: "Contact" },
+  { key: "initialExam", label: "Initial Exam" },
+  { key: "lien", label: "Lien / LOP" },
+  { key: "priorCare", label: "Prior Care" },
+  { key: "reExam1", label: "Re-Exam 1" },
+  { key: "reExam2", label: "Re-Exam 2" },
+  { key: "reExam3", label: "Re-Exam 3" },
+  { key: "discharge", label: "Discharge" },
+  { key: "rbSent", label: "R&B Sent" },
+  { key: "billed", label: "$ Billed" },
+  { key: "paidDate", label: "Paid Date" },
+  { key: "paidAmount", label: "$ Paid" },
+  { key: "billPercent", label: "Bill %" },
+  { key: "initialToDischarge", label: "Days Initial → Discharge" },
+  { key: "dischargeToRb", label: "Days Discharge → R&B" },
+  { key: "rbToPaid", label: "Days R&B → Paid" },
+  { key: "xrayFindings", label: "X-Ray Findings", multiline: true },
+  { key: "mriCtFindings", label: "MRI / CT Findings", multiline: true },
+  { key: "specialistRecommendations", label: "Specialist Recommendations", multiline: true },
 ];
 
 /** Render any string as US format if it looks like a date, else as-is. */
@@ -153,6 +184,19 @@ export function MergePatientsModal({
     return winnerId;
   };
 
+  /** Same as choiceFor but for matrix sub-fields (Notes, Additional Details). */
+  const matrixChoiceFor = (field: PatientMatrixField): string => {
+    const explicit = fieldChoice[`matrix.${field}`];
+    if (explicit) return explicit;
+    const winnerVal = winner?.matrix?.[field] ?? "";
+    if (winnerVal.trim()) return winnerId;
+    for (const loser of losers) {
+      const v = loser.matrix?.[field] ?? "";
+      if (v.trim()) return loser.id;
+    }
+    return winnerId;
+  };
+
   // Build the final merged record by walking every loser into the winner.
   // We use autoMergeRecord for arrays/matrix, then overlay the user's
   // per-field scalar choices on top. Always returns a fresh object — never
@@ -177,6 +221,22 @@ export function MergePatientsModal({
       if (value === undefined) continue;
       overlay[key] = value;
     }
+    // Apply matrix overrides on top of the auto-merged matrix. autoMerge
+    // already unioned the matrices (winner wins on conflict), but the
+    // user may have explicitly chosen a different value per-field — that
+    // choice goes here.
+    const matrixOverlay: Partial<Record<PatientMatrixField, string>> = {
+      ...(base.matrix ?? {}),
+    };
+    for (const { key } of MATRIX_FIELDS) {
+      const sourceId = matrixChoiceFor(key);
+      const source = patients.find((p) => p.id === sourceId);
+      if (!source) continue;
+      const value = source.matrix?.[key];
+      if (value === undefined) continue;
+      matrixOverlay[key] = value;
+    }
+    overlay.matrix = matrixOverlay;
     return overlay as unknown as PatientRecord;
   };
 
@@ -394,10 +454,126 @@ export function MergePatientsModal({
           </table>
         </div>
 
+        {/* Matrix / Notes / Additional Details — only render rows where
+            at least one record actually has a value, to keep the table
+            scannable. Multiline fields (Notes, Findings, etc.) get a
+            collapsible "show full value" affordance via wrap-in-place. */}
+        {(() => {
+          const matrixRows = MATRIX_FIELDS.filter(({ key }) =>
+            patients.some((p) => (p.matrix?.[key] ?? "").trim() !== ""),
+          );
+          if (matrixRows.length === 0) return null;
+          return (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+                Notes &amp; Additional Details
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-[var(--line-soft)]">
+                <table className="w-full text-sm">
+                  <thead className="bg-[var(--bg-soft)]">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                        Field
+                      </th>
+                      {patients.map((p) => (
+                        <th
+                          key={p.id}
+                          className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]"
+                        >
+                          {p.fullName}
+                          {winnerId === p.id ? (
+                            <span className="ml-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                              WINNER
+                            </span>
+                          ) : null}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrixRows.map(({ key, label, multiline }) => {
+                      const values = patients.map((p) => ({
+                        id: p.id,
+                        value: p.matrix?.[key] ?? "",
+                      }));
+                      const distinctValues = new Set(
+                        values.map((v) => v.value.trim()),
+                      );
+                      const allSame = distinctValues.size <= 1;
+                      const chosen = matrixChoiceFor(key);
+                      return (
+                        <tr
+                          key={`matrix-${key}`}
+                          className="border-t border-[var(--line-soft)] align-top"
+                        >
+                          <td className="px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                            {label}
+                            {!allSame ? (
+                              <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+                                DIFFERS
+                              </span>
+                            ) : null}
+                          </td>
+                          {values.map(({ id, value }) => {
+                            const isChosen = chosen === id;
+                            const display = asDisplay(value);
+                            return (
+                              <td
+                                key={`matrix-${key}-${id}`}
+                                className={`px-3 py-2 ${
+                                  isChosen
+                                    ? "bg-emerald-50 font-semibold text-emerald-900"
+                                    : "text-[var(--text-muted)]"
+                                }`}
+                              >
+                                {allSame ? (
+                                  <span
+                                    className={
+                                      multiline ? "block whitespace-pre-wrap break-words" : ""
+                                    }
+                                  >
+                                    {display}
+                                  </span>
+                                ) : (
+                                  <label className="flex cursor-pointer items-start gap-1.5">
+                                    <input
+                                      checked={isChosen}
+                                      className="mt-1 shrink-0"
+                                      name={`merge-matrix-${key}`}
+                                      onChange={() =>
+                                        setFieldChoice((current) => ({
+                                          ...current,
+                                          [`matrix.${key}`]: id,
+                                        }))
+                                      }
+                                      type="radio"
+                                    />
+                                    <span
+                                      className={
+                                        multiline ? "block whitespace-pre-wrap break-words" : ""
+                                      }
+                                    >
+                                      {display}
+                                    </span>
+                                  </label>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
         <p className="mt-2 text-[10px] text-[var(--text-muted)]">
           Lists (X-Ray, MRI, specialist referrals, alerts, related cases)
-          and the matrix tracker are auto-combined: the kept record gets
-          every entry from every record, deduped where possible.
+          are auto-combined: the kept record gets every entry from every
+          record, deduped where possible.
         </p>
 
         {resultMessage ? (
