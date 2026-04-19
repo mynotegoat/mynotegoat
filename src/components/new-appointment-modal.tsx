@@ -1645,11 +1645,11 @@ function DayScheduleHint({
   }
 
   return (
-    <details className="mt-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1 text-xs">
-      <summary className="cursor-pointer font-semibold text-[var(--text-muted)]">
+    <div className="mt-1 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5 text-xs">
+      <p className="font-semibold text-[var(--text-muted)]">
         {dayItems.length} other appointment{dayItems.length === 1 ? "" : "s"} on this day
-      </summary>
-      <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto pr-1">
+      </p>
+      <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto pr-1">
         {dayItems.map((appt) => (
           <li className="flex items-center justify-between gap-2" key={appt.id}>
             <span className="font-mono tabular-nums">
@@ -1662,6 +1662,6 @@ function DayScheduleHint({
           </li>
         ))}
       </ul>
-    </details>
+    </div>
   );
 }
