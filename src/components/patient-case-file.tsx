@@ -17,6 +17,8 @@ import { usePatientFollowUpOverrides } from "@/hooks/use-patient-follow-up-overr
 import { useQuickStatsSettings } from "@/hooks/use-quick-stats-settings";
 import { useReportTemplates } from "@/hooks/use-report-templates";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
+import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
+import { filterAppointmentTypesForPatient } from "@/lib/schedule-appointment-types";
 import { useTasks } from "@/hooks/use-tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import { renderDocumentTemplate, type DocumentTemplateScope } from "@/lib/document-templates";
@@ -1155,6 +1157,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
+  const { appointmentTypes } = useScheduleAppointmentTypes();
   const { tasks, addTask, toggleTaskDone } = useTasks();
   // patientFlowItems moved below usePatientFollowUpOverrides so overrides are available
   const patientTasks = useMemo(
@@ -1400,6 +1403,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null);
   const [quickTimeEditId, setQuickTimeEditId] = useState<string | null>(null);
   const [quickTimeDraft, setQuickTimeDraft] = useState("");
+  const [quickDateEditId, setQuickDateEditId] = useState<string | null>(null);
+  const [quickDateDraft, setQuickDateDraft] = useState("");
+  const [quickTypeEditId, setQuickTypeEditId] = useState<string | null>(null);
   const [editAppointmentId, setEditAppointmentId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
 
@@ -2970,6 +2976,65 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setQuickTimeDraft("");
   };
 
+  // ── Quick date / type editors ──
+  // Same one-field-at-a-time pattern as quickTimeEdit so a typo or
+  // wrong-pick doesn't force the user through the full Edit Appointment
+  // modal just to flip one value.
+  const beginQuickDateEdit = (appointment: ScheduleAppointmentRecord) => {
+    setQuickDateEditId(appointment.id);
+    setQuickDateDraft(toUsDate(appointment.date));
+  };
+  const cancelQuickDateEdit = () => {
+    setQuickDateEditId(null);
+    setQuickDateDraft("");
+  };
+  const commitQuickDateEdit = (appointment: ScheduleAppointmentRecord) => {
+    const formatted = quickDateDraft.trim();
+    const isoCandidate = toIsoDateFromUsDate(formatted);
+    if (!isoCandidate || isoCandidate === appointment.date) {
+      cancelQuickDateEdit();
+      return;
+    }
+    updateAppointment(appointment.id, (current) => ({
+      ...current,
+      date: isoCandidate,
+    }));
+    setEncounterMessage(
+      `Date updated to ${formatted} for ${appointment.appointmentType}.`,
+    );
+    cancelQuickDateEdit();
+  };
+
+  const beginQuickTypeEdit = (appointment: ScheduleAppointmentRecord) => {
+    setQuickTypeEditId(appointment.id);
+  };
+  const cancelQuickTypeEdit = () => {
+    setQuickTypeEditId(null);
+  };
+  const commitQuickTypeEdit = (
+    appointment: ScheduleAppointmentRecord,
+    nextType: string,
+  ) => {
+    const trimmed = nextType.trim();
+    if (!trimmed || trimmed === appointment.appointmentType) {
+      cancelQuickTypeEdit();
+      return;
+    }
+    // Pick up the matching type's default duration so a fast switch from
+    // (say) "Office Visit / 30m" to "New Patient / 60m" snaps the slot
+    // length too. User can still fine-tune via the full edit modal.
+    const matchedType = appointmentTypes.find(
+      (entry) => entry.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    updateAppointment(appointment.id, (current) => ({
+      ...current,
+      appointmentType: trimmed,
+      durationMin: matchedType?.durationMin ?? current.durationMin,
+    }));
+    setEncounterMessage(`Appointment type updated to ${trimmed}.`);
+    cancelQuickTypeEdit();
+  };
+
   const handleDeleteAppointment = (appointment: ScheduleAppointmentRecord) => {
     const dateLabel = toUsDate(appointment.date);
     const timeLabel = formatTimeLabel(appointment.startTime);
@@ -4476,14 +4541,53 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                           <tr key={row.rowId} className="border-t border-[var(--line-soft)]">
                             <td className="px-2 py-2 tabular-nums">
                               {appointment ? (
-                                <button
-                                  className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
-                                  onClick={() => setEditAppointmentId(appointment.id)}
-                                  title="Click to edit appointment"
-                                  type="button"
-                                >
-                                  {row.dateLabel}
-                                </button>
+                                quickDateEditId === appointment.id ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <input
+                                      autoFocus
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs"
+                                      inputMode="numeric"
+                                      maxLength={10}
+                                      onChange={(event) =>
+                                        setQuickDateDraft(formatUsDateInput(event.target.value))
+                                      }
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          commitQuickDateEdit(appointment);
+                                        } else if (event.key === "Escape") {
+                                          cancelQuickDateEdit();
+                                        }
+                                      }}
+                                      placeholder="MM/DD/YYYY"
+                                      value={quickDateDraft}
+                                    />
+                                    <button
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs font-semibold text-[var(--brand-primary)]"
+                                      onClick={() => commitQuickDateEdit(appointment)}
+                                      title="Save new date"
+                                      type="button"
+                                    >
+                                      ✓
+                                    </button>
+                                    <button
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]"
+                                      onClick={cancelQuickDateEdit}
+                                      title="Cancel"
+                                      type="button"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button
+                                    className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
+                                    onClick={() => beginQuickDateEdit(appointment)}
+                                    title="Click to change date — open the full edit modal from the row's ⋯ menu for everything else."
+                                    type="button"
+                                  >
+                                    {row.dateLabel}
+                                  </button>
+                                )
                               ) : (
                                 <span>{row.dateLabel}</span>
                               )}
@@ -4495,7 +4599,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                     <input
                                       autoFocus
                                       className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs"
-                                      onChange={(event) => setQuickTimeDraft(event.target.value)}
+                                      inputMode="numeric"
+                                      maxLength={5}
+                                      onChange={(event) => {
+                                        const digits = event.target.value
+                                          .replace(/\D/g, "")
+                                          .slice(0, 4);
+                                        const formatted =
+                                          digits.length <= 2
+                                            ? digits
+                                            : `${digits.slice(0, 2)}:${digits.slice(2)}`;
+                                        setQuickTimeDraft(formatted);
+                                      }}
                                       onKeyDown={(event) => {
                                         if (event.key === "Enter") {
                                           commitQuickTimeEdit(appointment);
@@ -4503,7 +4618,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                           cancelQuickTimeEdit();
                                         }
                                       }}
-                                      type="time"
+                                      placeholder="HH:MM"
                                       value={quickTimeDraft}
                                     />
                                     <button
@@ -4539,14 +4654,55 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                             </td>
                             <td className="px-2 py-2">
                               {appointment ? (
-                                <button
-                                  className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
-                                  onClick={() => setEditAppointmentId(appointment.id)}
-                                  title="Click to edit appointment"
-                                  type="button"
-                                >
-                                  {row.typeLabel}
-                                </button>
+                                quickTypeEditId === appointment.id ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <select
+                                      autoFocus
+                                      className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs"
+                                      onBlur={cancelQuickTypeEdit}
+                                      onChange={(event) =>
+                                        commitQuickTypeEdit(appointment, event.target.value)
+                                      }
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Escape") cancelQuickTypeEdit();
+                                      }}
+                                      value={appointment.appointmentType}
+                                    >
+                                      {/* Show the current type even if it's no longer in
+                                          the configured list — otherwise selecting it would
+                                          appear to "switch" to whatever option is at the top. */}
+                                      {!filterAppointmentTypesForPatient(
+                                        appointmentTypes,
+                                        Boolean(patient.isCashPatient),
+                                      ).some(
+                                        (t) =>
+                                          t.name.toLowerCase() ===
+                                          appointment.appointmentType.toLowerCase(),
+                                      ) && (
+                                        <option value={appointment.appointmentType}>
+                                          {appointment.appointmentType}
+                                        </option>
+                                      )}
+                                      {filterAppointmentTypesForPatient(
+                                        appointmentTypes,
+                                        Boolean(patient.isCashPatient),
+                                      ).map((type) => (
+                                        <option key={`quick-type-${type.id}`} value={type.name}>
+                                          {type.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </span>
+                                ) : (
+                                  <button
+                                    className="rounded-md border border-transparent px-1.5 py-0.5 text-xs font-semibold hover:border-[var(--line-soft)] hover:bg-[var(--bg-soft)]"
+                                    onClick={() => beginQuickTypeEdit(appointment)}
+                                    title="Click to change appointment type"
+                                    type="button"
+                                  >
+                                    {row.typeLabel}
+                                  </button>
+                                )
                               ) : (
                                 <span>{row.typeLabel}</span>
                               )}
