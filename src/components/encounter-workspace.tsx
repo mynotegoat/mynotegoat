@@ -1264,7 +1264,27 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
       return;
     }
 
-    appendSoapSection(selectedEncounter.id, activeSection, generatedText);
+    // Prefer cursor-position insertion via the editor's imperative
+    // handle so the macro lands wherever the user was typing — not at
+    // the end of the section. Strip leading/trailing empty-paragraph
+    // wrappers from the macro snippet so insertion at cursor doesn't
+    // produce 2–3 blank lines below the macro (the editor's own block
+    // boundaries already give us the natural paragraph break).
+    const cleanedSnippet = generatedText
+      .replace(
+        /^(?:<p>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/p>\s*|<div>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/div>\s*)+/gi,
+        "",
+      )
+      .replace(
+        /(?:<p>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/p>\s*|<div>\s*(?:&nbsp;|<br\s*\/?\s*>)?\s*<\/div>\s*)+$/gi,
+        "",
+      );
+    const editorHandle = soapEditorRef.current;
+    if (editorHandle) {
+      editorHandle.insertHtml(cleanedSnippet);
+    } else {
+      appendSoapSection(selectedEncounter.id, activeSection, cleanedSnippet);
+    }
     addMacroRun(selectedEncounter.id, {
       id: snippetId,
       section: activeSection,

@@ -96,6 +96,35 @@ export const RichTextTemplateEditor = forwardRef<
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedRef = useRef("");
   const isFocusedRef = useRef(false);
+  // Cursor position the user was at the last time the editor held the
+  // selection. Restored before insertText / insertHtml so a macro
+  // button click (which moves focus away from the editor and clears
+  // the selection) still drops content at the right caret position
+  // instead of jumping to the end of the field.
+  const lastSelectionRangeRef = useRef<Range | null>(null);
+
+  const captureSelection = () => {
+    const editor = editorRef.current;
+    if (!editor || typeof window === "undefined") return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    lastSelectionRangeRef.current = range.cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const range = lastSelectionRangeRef.current;
+    const editor = editorRef.current;
+    if (!range || !editor) return false;
+    if (!editor.contains(range.commonAncestorContainer)) return false;
+    if (typeof window === "undefined") return false;
+    const selection = window.getSelection();
+    if (!selection) return false;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  };
   // Hold the current draftKey in a ref so the input handler (bound
   // once, see onInput below) always reads the latest key — avoids
   // having to re-register listeners when the parent swaps encounters.
@@ -173,8 +202,11 @@ export const RichTextTemplateEditor = forwardRef<
     }
     isFocusedRef.current = true;
 
+    editor.focus();
+    // Try to restore the user's last caret position. If we can't, fall
+    // through to whatever selection focus() landed on (usually end).
     if (!isSelectionInsideEditor(editor)) {
-      editor.focus();
+      restoreSelection();
     }
     document.execCommand("insertText", false, text);
     emitChange();
@@ -187,8 +219,9 @@ export const RichTextTemplateEditor = forwardRef<
     }
     isFocusedRef.current = true;
 
+    editor.focus();
     if (!isSelectionInsideEditor(editor)) {
-      editor.focus();
+      restoreSelection();
     }
     document.execCommand("insertHTML", false, html);
     emitChange();
@@ -380,8 +413,16 @@ export const RichTextTemplateEditor = forwardRef<
         contentEditable
         data-placeholder={placeholder}
         onFocus={() => { isFocusedRef.current = true; }}
-        onBlur={() => { isFocusedRef.current = false; emitChange(); }}
+        onBlur={() => {
+          // Capture cursor position BEFORE blur completes so a click on
+          // a macro button (which steals focus) can still restore it.
+          captureSelection();
+          isFocusedRef.current = false;
+          emitChange();
+        }}
         onInput={emitChange}
+        onKeyUp={captureSelection}
+        onMouseUp={captureSelection}
         onKeyDown={(event) => {
           // Override the browser's default Enter behavior in
           // contentEditable, which inserts a <p> block. Because
