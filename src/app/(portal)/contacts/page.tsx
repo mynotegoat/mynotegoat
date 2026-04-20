@@ -6,6 +6,7 @@ import { useContactDirectory } from "@/hooks/use-contact-directory";
 import type { ContactRecord } from "@/lib/mock-data";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 import { ConsolidateAttorneysModal } from "@/components/consolidate-attorneys-modal";
+import { AddressFieldGroup } from "@/components/address-field-group";
 
 type ContactFormState = {
   name: string;
@@ -368,12 +369,10 @@ export default function ContactsPage() {
                     placeholder="Email Address"
                     value={editContactForm.email}
                   />
-                  <input
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                    onChange={(event) =>
-                      setEditContactForm((current) => ({ ...current, address: event.target.value }))
+                  <AddressFieldGroup
+                    onChange={(nextAddress) =>
+                      setEditContactForm((current) => ({ ...current, address: nextAddress }))
                     }
-                    placeholder="Address"
                     value={editContactForm.address}
                   />
 
@@ -522,16 +521,14 @@ export default function ContactsPage() {
                 />
               </label>
 
-              <label className="grid gap-1 md:col-span-2">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Address</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) =>
-                    setAddContactForm((current) => ({ ...current, address: event.target.value }))
+              <div className="md:col-span-2">
+                <AddressFieldGroup
+                  onChange={(nextAddress) =>
+                    setAddContactForm((current) => ({ ...current, address: nextAddress }))
                   }
                   value={addContactForm.address}
                 />
-              </label>
+              </div>
             </div>
 
             {addContactError && (

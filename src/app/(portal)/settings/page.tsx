@@ -9,6 +9,7 @@ import { MacroSettingsPanel } from "@/components/macro-settings-panel";
 import { PackageBuilderSettingsPanel } from "@/components/package-builder-settings-panel";
 import { ReportTemplateSettingsPanel } from "@/components/report-template-settings-panel";
 import { SmsTemplateSettingsPanel } from "@/components/sms-template-settings-panel";
+import { AddressFieldGroup } from "@/components/address-field-group";
 import { useCaseStatuses } from "@/hooks/use-case-statuses";
 import { useContactCategories } from "@/hooks/use-contact-categories";
 import { useFileManager } from "@/hooks/use-file-manager";
@@ -3146,15 +3147,13 @@ export default function SettingsPage() {
               type="file"
             />
           </label>
-          <label className="grid gap-1 sm:col-span-2">
+          <div className="grid gap-1 sm:col-span-2">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Address</span>
-            <input
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              onChange={(event) => updateOfficeSettings({ address: event.target.value })}
-              placeholder="Street, City, State ZIP"
+            <AddressFieldGroup
+              onChange={(nextAddress) => updateOfficeSettings({ address: nextAddress })}
               value={officeSettings.address}
             />
-          </label>
+          </div>
 
           {/* Logo preview + delete password now live side-by-side as two
               equal-size squares so the section doesn't scroll forever.

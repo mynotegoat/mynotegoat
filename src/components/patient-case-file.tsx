@@ -42,6 +42,7 @@ import { EditAppointmentModal } from "@/components/edit-appointment-modal";
 import { DocumentScannerModal } from "@/components/document-scanner-modal";
 import { SmsSendMenu } from "@/components/sms-send-menu";
 import { CashPaymentsSection } from "@/components/cash-payments-section";
+import { AddressFieldGroup } from "@/components/address-field-group";
 import { forceSyncNow } from "@/lib/storage-sync-interceptor";
 import { buildFollowUpItems } from "@/lib/follow-up-queue";
 import { type TaskPriority } from "@/lib/tasks";
@@ -3717,15 +3718,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             />
           </label>
 
-          <label className="grid gap-1 md:col-span-2 xl:col-span-4">
+          <div className="md:col-span-2 xl:col-span-4">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Patient Address</span>
-            <input
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              onChange={(event) => setPatientAddress(event.target.value)}
-              placeholder="Street, City, State ZIP"
-              value={patientAddress}
-            />
-          </label>
+            <div className="mt-1">
+              <AddressFieldGroup
+                onChange={setPatientAddress}
+                value={patientAddress}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-3 border-b border-[var(--line-soft)] p-4 md:grid-cols-3">
@@ -6188,16 +6189,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   value={newAttorneyDraft.email}
                 />
               </label>
-              <label className="grid gap-1">
+              <div className="md:col-span-2">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Address</span>
-                <input
-                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) =>
-                    setNewAttorneyDraft((current) => ({ ...current, address: event.target.value }))
-                  }
-                  value={newAttorneyDraft.address}
-                />
-              </label>
+                <div className="mt-1">
+                  <AddressFieldGroup
+                    onChange={(nextAddress) =>
+                      setNewAttorneyDraft((current) => ({ ...current, address: nextAddress }))
+                    }
+                    value={newAttorneyDraft.address}
+                  />
+                </div>
+              </div>
             </div>
 
             {attorneyModalError && (

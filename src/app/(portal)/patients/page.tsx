@@ -137,6 +137,7 @@ type NewPatientDraft = {
   phone: string;
   email: string;
   addressStreet: string;
+  addressUnit: string;
   addressCity: string;
   addressState: string;
   addressZip: string;
@@ -239,14 +240,15 @@ function buildCaseNumberPreview(dateOfLoss: string, lastName: string, firstName:
   return `${mmddyy}${lastInitials}${firstInitials}`;
 }
 
-function composePatientAddress(street: string, city: string, state: string, zip: string) {
+function composePatientAddress(street: string, unit: string, city: string, state: string, zip: string) {
   const cleanStreet = street.trim();
+  const cleanUnit = unit.trim();
   const cleanCity = city.trim();
   const cleanState = state.trim().toUpperCase();
   const cleanZip = zip.trim();
 
   const cityStateZip = [cleanCity, [cleanState, cleanZip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  return [cleanStreet, cityStateZip].filter(Boolean).join(", ");
+  return [cleanStreet, cleanUnit, cityStateZip].filter(Boolean).join(", ");
 }
 
 function getFollowUpBadgeClass(category: FollowUpCategory) {
@@ -380,6 +382,7 @@ export default function PatientsPage() {
     phone: "",
     email: "",
     addressStreet: "",
+    addressUnit: "",
     addressCity: "",
     addressState: "",
     addressZip: "",
@@ -404,6 +407,7 @@ export default function PatientsPage() {
       phone: "",
       email: "",
       addressStreet: "",
+      addressUnit: "",
       addressCity: "",
       addressState: "",
       addressZip: "",
@@ -496,6 +500,7 @@ export default function PatientsPage() {
       email: newPatientDraft.email.trim(),
       address: composePatientAddress(
         newPatientDraft.addressStreet,
+        newPatientDraft.addressUnit,
         newPatientDraft.addressCity,
         newPatientDraft.addressState,
         newPatientDraft.addressZip,
@@ -1959,9 +1964,9 @@ export default function PatientsPage() {
                   />
                 </label>
 
-                <div className="grid gap-3 md:col-span-2 xl:col-span-4 xl:grid-cols-[2fr_1.2fr_0.8fr_0.9fr]">
+                <div className="grid gap-3 md:col-span-2 xl:col-span-4 xl:grid-cols-[1.6fr_1fr_1.2fr_0.8fr_0.9fr]">
                   <label className="grid gap-1">
-                    <span className="text-sm font-semibold text-[var(--text-muted)]">Street</span>
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Address 1</span>
                     <input
                       className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
                       onChange={(event) =>
@@ -1972,6 +1977,21 @@ export default function PatientsPage() {
                       }
                       placeholder="Street address"
                       value={newPatientDraft.addressStreet}
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-[var(--text-muted)]">Address 2</span>
+                    <input
+                      className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                      onChange={(event) =>
+                        setNewPatientDraft((current) => ({
+                          ...current,
+                          addressUnit: event.target.value,
+                        }))
+                      }
+                      placeholder="Unit / Apt / Suite"
+                      value={newPatientDraft.addressUnit}
                     />
                   </label>
 
