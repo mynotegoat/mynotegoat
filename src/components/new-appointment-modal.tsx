@@ -103,6 +103,47 @@ function formatUsTimeInput(rawValue: string): string {
   return `${digits.slice(0, 2)}:${digits.slice(2)}`;
 }
 
+/**
+ * 12-hour input formatter — accepts 1-4 digits and emits "H:MM" or
+ * "HH:MM" (1-12 for hour portion). Designed so the user can type
+ * "930" and see "9:30", or "1230" and see "12:30".
+ */
+function format12hTimeInput(rawValue: string): string {
+  const digits = rawValue.replace(/\D/g, "").slice(0, 4);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits;
+  const hourDigits = digits.length === 3 ? digits.slice(0, 1) : digits.slice(0, 2);
+  const minuteDigits = digits.slice(-2);
+  return `${hourDigits}:${minuteDigits}`;
+}
+
+type Ampm = "AM" | "PM";
+
+/** Compose a "H:MM" + AM/PM pair into canonical 24h "HH:MM". */
+function compose24hFrom12h(display: string, ampm: Ampm): string | null {
+  const match = display.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 1 || hour > 12 || minute > 59) return null;
+  if (ampm === "AM" && hour === 12) hour = 0;
+  else if (ampm === "PM" && hour !== 12) hour += 12;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+/** Decompose canonical 24h "HH:MM" into "H:MM" display + AM/PM. */
+function split12hFrom24h(iso: string): { display: string; ampm: Ampm } {
+  const match = iso.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return { display: "", ampm: "AM" };
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const ampm: Ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return { display: `${hour}:${minute}`, ampm };
+}
+
 function isoDateToUs(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return iso;
@@ -416,6 +457,7 @@ export function NewAppointmentModal({
     isoDateToUs(defaultStartDate),
   );
   const [startTimeDisplay, setStartTimeDisplay] = useState("");
+  const [startTimeAmpm, setStartTimeAmpm] = useState<Ampm>("AM");
   const [recurEndDateDisplay, setRecurEndDateDisplay] = useState("");
 
   // Filter appointment types by the selected patient's kind (PI vs Cash).
@@ -505,7 +547,9 @@ export function NewAppointmentModal({
     }
     setDraft(initial);
     setStartDateDisplay(isoDateToUs(initial.startDate));
-    setStartTimeDisplay(initial.startTime);
+    const initial12h = split12hFrom24h(initial.startTime);
+    setStartTimeDisplay(initial12h.display);
+    setStartTimeAmpm(initial12h.ampm);
     setRecurEndDateDisplay(isoDateToUs(initial.recurEndDate));
     setShowPatientSuggestions(false);
     setError("");
@@ -1267,26 +1311,44 @@ export function NewAppointmentModal({
           </label>
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Time *</span>
-            <input
-              className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-              inputMode="numeric"
-              maxLength={5}
-              onChange={(event) => {
-                const formatted = formatUsTimeInput(event.target.value);
-                setStartTimeDisplay(formatted);
-                if (isCompleteTime(formatted)) {
-                  setDraft((current) => ({ ...current, startTime: formatted }));
-                }
-              }}
-              placeholder="HH:MM (24h)"
-              value={startTimeDisplay}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                className="w-24 rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                inputMode="numeric"
+                maxLength={5}
+                onChange={(event) => {
+                  const formatted = format12hTimeInput(event.target.value);
+                  setStartTimeDisplay(formatted);
+                  const composed = compose24hFrom12h(formatted, startTimeAmpm);
+                  if (composed) {
+                    setDraft((current) => ({ ...current, startTime: composed }));
+                  }
+                }}
+                placeholder="9:30"
+                value={startTimeDisplay}
+              />
+              <select
+                className="w-20 rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
+                onChange={(event) => {
+                  const nextAmpm = event.target.value as Ampm;
+                  setStartTimeAmpm(nextAmpm);
+                  const composed = compose24hFrom12h(startTimeDisplay, nextAmpm);
+                  if (composed) {
+                    setDraft((current) => ({ ...current, startTime: composed }));
+                  }
+                }}
+                value={startTimeAmpm}
+              >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
           </label>
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Duration</span>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2">
               <select
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
+                className="w-24 rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -1301,19 +1363,22 @@ export function NewAppointmentModal({
                 <option value={3}>3 hr</option>
                 <option value={4}>4 hr</option>
               </select>
-              <input
-                className="rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2"
-                max={59}
-                min={0}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    durationMinutes: Math.max(0, Math.min(59, Number(event.target.value) || 0)),
-                  }))
-                }
-                type="number"
-                value={draft.durationMinutes}
-              />
+              <div className="flex items-center gap-1">
+                <input
+                  className="w-16 rounded-xl border border-[var(--line-soft)] bg-white px-2 py-2 text-center"
+                  max={59}
+                  min={0}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      durationMinutes: Math.max(0, Math.min(59, Number(event.target.value) || 0)),
+                    }))
+                  }
+                  type="number"
+                  value={draft.durationMinutes}
+                />
+                <span className="text-sm text-[var(--text-muted)]">min</span>
+              </div>
             </div>
           </label>
         </div>
