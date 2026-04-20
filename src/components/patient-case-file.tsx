@@ -1927,42 +1927,57 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setBilledAmount(encounterChargesTotal.toFixed(2));
   }
   const currentBillTotal = Number.parseFloat(billedAmount) || 0;
+  // Quick Stats rolls up to THREE consolidated boxes per user request:
+  //   1. Appointments — total count + "In · Out · Canceled" breakdown
+  //   2. Encounters    — total count + "Open · Closed" breakdown
+  //   3. Current Bill  — total encounter charges
+  // The per-metric visibility settings are retained for backwards
+  // compatibility but no longer render individual cards; if every
+  // metric inside a group is toggled off in Settings, the group box
+  // is hidden too so the user can still collapse sections if they want.
   const quickStatRows = useMemo(
     () => {
+      const appointmentsVisible =
+        quickStatsSettings.visibleStats.checkedInOut ||
+        quickStatsSettings.visibleStats.canceled ||
+        quickStatsSettings.visibleStats.noShow;
+      const encountersVisible =
+        quickStatsSettings.visibleStats.openEncounters ||
+        quickStatsSettings.visibleStats.closedEncounters;
+
       const rows: Array<{
-        key: QuickStatOptionKey;
+        key: "appointments" | "encounters" | "currentBill";
         label: string;
         value: string;
         helper?: string;
-      }> = [
-        {
-          key: "checkedInOut",
-          label: "Checked In / Out",
-          value: `${checkedInOutCount}`,
-          helper: `In ${checkedInCount} • Out ${checkedOutCount}`,
-        },
-        {
-          key: "canceled",
-          label: "Canceled",
-          value: `${canceledCount}`,
-        },
-        {
-          key: "openEncounters",
-          label: "Open Encounters",
-          value: `${openPatientEncounterRecords.length}`,
-        },
-        {
-          key: "closedEncounters",
-          label: "Closed Encounters",
-          value: `${closedEncounterCount}`,
-        },
-        {
+      }> = [];
+
+      if (appointmentsVisible) {
+        const totalAppointments = checkedInOutCount + canceledCount;
+        rows.push({
+          key: "appointments",
+          label: "Appointments",
+          value: `${totalAppointments}`,
+          helper: `In ${checkedInCount} · Out ${checkedOutCount} · Canceled ${canceledCount}`,
+        });
+      }
+      if (encountersVisible) {
+        const openCount = openPatientEncounterRecords.length;
+        rows.push({
+          key: "encounters",
+          label: "Encounters",
+          value: `${openCount + closedEncounterCount}`,
+          helper: `Open ${openCount} · Closed ${closedEncounterCount}`,
+        });
+      }
+      if (quickStatsSettings.visibleStats.currentBill) {
+        rows.push({
           key: "currentBill",
           label: "Current Bill",
           value: formatUsdCurrency(currentBillTotal),
-        },
-      ];
-      return rows.filter((row) => quickStatsSettings.visibleStats[row.key]);
+        });
+      }
+      return rows;
     },
     [
       canceledCount,
