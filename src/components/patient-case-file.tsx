@@ -1783,11 +1783,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const patientAppointmentRecords = useMemo(() => {
     const patientNameLookup = buildPatientNameLookupSet(patient.fullName, firstName, lastName);
     return scheduleAppointments
-      .filter(
-        (entry) =>
-          entry.patientId === patient.id ||
-          patientNameLookup.has(normalizeNameForLookup(entry.patientName)),
-      )
+      .filter((entry) => {
+        // Hard rule first: if the appointment has a patientId, that's the
+        // source of truth — match by id exactly. The old code OR'd a
+        // name-based fallback on top of this, which cross-contaminated
+        // two patients who happened to share a name (e.g. two "John Smith"
+        // records from two separate accidents). Appointments from case A
+        // would then bleed into case B's appointments table.
+        if (entry.patientId) return entry.patientId === patient.id;
+        // Only fall back to name-matching when the appointment has no
+        // patientId at all — that's the legacy-data shape from before
+        // every appointment row carried an id. Same-name collision is
+        // still possible here but only for the legacy subset, and the
+        // user can fix those by re-assigning the appointment to the
+        // right patient from the schedule page.
+        return patientNameLookup.has(normalizeNameForLookup(entry.patientName));
+      })
       .sort((left, right) => {
         const byDate = right.date.localeCompare(left.date);
         if (byDate !== 0) {
