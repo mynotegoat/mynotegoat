@@ -3268,6 +3268,12 @@ function readStringField(entry: ImagingSummaryEntry, ...keys: string[]): string 
   return "";
 }
 
+function readRegionsList(entry: ImagingSummaryEntry): string {
+  const regions = entry.regions;
+  if (!Array.isArray(regions) || regions.length === 0) return "";
+  return regions.filter((r) => typeof r === "string" && r.trim()).join(", ");
+}
+
 /**
  * Compact imaging / specialist summary shown in the charting side-rail.
  * Surfaces the most recent entry of each category with its Sent date +
@@ -3305,11 +3311,19 @@ function ImagingSpecialistSummary({
     return null;
   }
 
-  type Row = { label: string; left: string; right: string; leftValue: string; rightValue: string };
+  type Row = {
+    label: string;
+    regions: string;
+    left: string;
+    right: string;
+    leftValue: string;
+    rightValue: string;
+  };
   const rows: Row[] = [];
   if (latestXray) {
     rows.push({
       label: "X-Ray",
+      regions: readRegionsList(latestXray),
       left: "Sent",
       right: "Reviewed",
       leftValue: toUsDate(readStringField(latestXray, "sentDate", "sent") ?? ""),
@@ -3321,6 +3335,7 @@ function ImagingSpecialistSummary({
   if (latestMri) {
     rows.push({
       label: "MRI",
+      regions: readRegionsList(latestMri),
       left: "Sent",
       right: "Reviewed",
       leftValue: toUsDate(readStringField(latestMri, "sentDate", "sent") ?? ""),
@@ -3330,8 +3345,11 @@ function ImagingSpecialistSummary({
     });
   }
   if (latestSpec) {
+    // Specialists don't have regions; show the specialist's name in
+    // the middle slot so the column isn't wasted space.
     rows.push({
       label: "Specialist",
+      regions: readStringField(latestSpec, "specialist", "name") || "",
       left: "Sent",
       right: "Completed",
       leftValue: toUsDate(readStringField(latestSpec, "sentDate", "sent") ?? ""),
@@ -3348,16 +3366,19 @@ function ImagingSpecialistSummary({
 
   return (
     <article className="panel-card p-3">
-      <h4 className="mb-3 border-b border-[var(--line-soft)] pb-2 text-sm font-semibold">
+      <h4 className="mb-4 border-b border-[var(--line-soft)] pb-2 text-sm font-semibold">
         Imaging & Specialist
       </h4>
-      <ul className="space-y-1.5 text-xs">
+      <ul className="space-y-2 text-xs">
         {rows.map((row) => (
           <li
-            className="grid grid-cols-[72px_1fr_1fr] items-center gap-2"
+            className="grid grid-cols-[72px_1.2fr_1fr_1fr] items-center gap-3"
             key={`imaging-summary-${row.label}`}
           >
             <span className="font-semibold">{row.label}</span>
+            <span className="truncate" title={row.regions}>
+              {row.regions || <span className="text-[var(--text-muted)]">—</span>}
+            </span>
             <span className="tabular-nums">
               <span className="text-[var(--text-muted)]">{row.left}: </span>
               {row.leftValue || <span className="text-[var(--text-muted)]">—</span>}
