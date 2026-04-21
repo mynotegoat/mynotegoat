@@ -1304,6 +1304,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [editingMriReferralId, setEditingMriReferralId] = useState<string | null>(null);
   const [editingImagingReferral, setEditingImagingReferral] = useState<(ImagingReferral & { mode: ImagingMode }) | null>(null);
   const [imagingEditorAnchor, setImagingEditorAnchor] = useState<PopupAnchor | null>(null);
+  const [showImagingRegionEditor, setShowImagingRegionEditor] = useState(false);
 
   const [specialistDraft, setSpecialistDraft] = useState({
     specialist: "",
@@ -2351,6 +2352,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const openImagingEditor = (mode: ImagingMode, entry: ImagingReferral, event?: MouseEvent<HTMLElement>) => {
     setEditingImagingReferral({ ...entry, mode });
     setImagingEditorAnchor(event ? getPopupAnchorFromEvent(event) : null);
+    // Keep the region chip grid collapsed on first open — most edits
+    // are date / findings tweaks and the chip row takes a lot of space.
+    setShowImagingRegionEditor(false);
   };
 
   const saveImagingEditor = () => {
@@ -6589,53 +6593,72 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
               </div>
 
               <div className="grid gap-1">
-                <span className="text-sm font-semibold text-[var(--text-muted)]">Regions</span>
-                <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
-                  {imagingRegions
-                    .filter((entry) => entry.modalities.includes(editingImagingReferral.mode))
-                    .map((entry) => {
-                      const region = entry.label;
-                      const selected = editingImagingReferral.regions.includes(region);
-                      return (
-                        <button
-                          aria-pressed={selected}
-                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
-                            selected
-                              ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
-                              : "border-[var(--line-soft)] bg-white text-[var(--text-main)] hover:border-[var(--brand-primary)]"
-                          }`}
-                          key={`edit-region-${region}`}
-                          onClick={() =>
-                            setEditingImagingReferral((current) => {
-                              if (!current) return current;
-                              const isSelected = current.regions.includes(region);
-                              const nextRegions = isSelected
-                                ? current.regions.filter((r) => r !== region)
-                                : [...current.regions, region];
-                              // Also tidy up companion maps when removing.
-                              const nextFlexExt = isSelected
-                                ? current.flexExtRegions.filter((r) => r !== region)
-                                : current.flexExtRegions;
-                              const nextLaterality = { ...current.lateralityByRegion };
-                              if (isSelected) delete nextLaterality[region];
-                              return {
-                                ...current,
-                                regions: nextRegions,
-                                flexExtRegions: nextFlexExt,
-                                lateralityByRegion: nextLaterality,
-                              };
-                            })
-                          }
-                          type="button"
-                        >
-                          {region}
-                        </button>
-                      );
-                    })}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">
+                    Regions:{" "}
+                    <span className="font-normal text-[var(--text-main)]">
+                      {editingImagingReferral.regions.length > 0
+                        ? editingImagingReferral.regions.join(", ")
+                        : "None"}
+                    </span>
+                  </span>
+                  <button
+                    className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-xs font-semibold text-[var(--brand-primary)]"
+                    onClick={() => setShowImagingRegionEditor((v) => !v)}
+                    type="button"
+                  >
+                    {showImagingRegionEditor ? "Done" : "± Region"}
+                  </button>
                 </div>
-                <span className="text-xs text-[var(--text-muted)]">
-                  Click to toggle. Laterality / Flex-Ext details preserved; remove a region to clear them.
-                </span>
+                {showImagingRegionEditor && (
+                  <>
+                    <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+                      {imagingRegions
+                        .filter((entry) => entry.modalities.includes(editingImagingReferral.mode))
+                        .map((entry) => {
+                          const region = entry.label;
+                          const selected = editingImagingReferral.regions.includes(region);
+                          return (
+                            <button
+                              aria-pressed={selected}
+                              className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                                selected
+                                  ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                                  : "border-[var(--line-soft)] bg-white text-[var(--text-main)] hover:border-[var(--brand-primary)]"
+                              }`}
+                              key={`edit-region-${region}`}
+                              onClick={() =>
+                                setEditingImagingReferral((current) => {
+                                  if (!current) return current;
+                                  const isSelected = current.regions.includes(region);
+                                  const nextRegions = isSelected
+                                    ? current.regions.filter((r) => r !== region)
+                                    : [...current.regions, region];
+                                  const nextFlexExt = isSelected
+                                    ? current.flexExtRegions.filter((r) => r !== region)
+                                    : current.flexExtRegions;
+                                  const nextLaterality = { ...current.lateralityByRegion };
+                                  if (isSelected) delete nextLaterality[region];
+                                  return {
+                                    ...current,
+                                    regions: nextRegions,
+                                    flexExtRegions: nextFlexExt,
+                                    lateralityByRegion: nextLaterality,
+                                  };
+                                })
+                              }
+                              type="button"
+                            >
+                              {region}
+                            </button>
+                          );
+                        })}
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      Click to add or remove. Laterality / Flex-Ext settings carry over on toggles off.
+                    </span>
+                  </>
+                )}
               </div>
 
               <label className="grid gap-1">
