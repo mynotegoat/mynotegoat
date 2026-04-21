@@ -486,6 +486,7 @@ export function NewAppointmentModal({
     attorney: "",
     dateOfLoss: "",
     notes: "",
+    isCashPatient: false,
   });
   const [quickNewPatientError, setQuickNewPatientError] = useState("");
   const [quickAttorneyFocused, setQuickAttorneyFocused] = useState(false);
@@ -511,6 +512,7 @@ export function NewAppointmentModal({
       attorney: "",
       dateOfLoss: "",
       notes: "",
+      isCashPatient: false,
     });
     setQuickNewPatientError("");
   };
@@ -661,8 +663,11 @@ export function NewAppointmentModal({
       setQuickNewPatientError("First and last name are required.");
       return;
     }
+    const isCash = quickNewPatientDraft.isCashPatient;
     let dolIso = "";
-    if (quickNewPatientDraft.dateOfLoss.trim()) {
+    // Cash patients don't carry an injury date — skip DOI parsing and
+    // validation entirely, same as the full New Patient modal does.
+    if (!isCash && quickNewPatientDraft.dateOfLoss.trim()) {
       const match = quickNewPatientDraft.dateOfLoss.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       if (!match) {
         setQuickNewPatientError("Date of Injury must be MM/DD/YYYY.");
@@ -673,10 +678,11 @@ export function NewAppointmentModal({
     const created = createPatientRecord({
       firstName,
       lastName,
-      attorney: quickNewPatientDraft.attorney.trim() || undefined,
+      attorney: isCash ? "Self" : (quickNewPatientDraft.attorney.trim() || undefined),
       phone: quickNewPatientDraft.phone.trim() || undefined,
-      dateOfLoss: dolIso,
+      dateOfLoss: isCash ? "" : dolIso,
       notes: quickNewPatientDraft.notes.trim() || undefined,
+      isCashPatient: isCash,
     });
     if (!created) {
       setQuickNewPatientError("Could not create patient.");
@@ -685,16 +691,19 @@ export function NewAppointmentModal({
     // Auto-select the just-created patient into the appointment draft.
     handleSelectPatient(created);
     // Contact-gap check: if the attorney string doesn't match an existing
-    // Attorney-category contact, prompt to add one.
-    const attorneyName = created.attorney;
-    if (attorneyName && attorneyName.toLowerCase() !== "self") {
-      const found = findContactByName(contacts, attorneyName, "Attorney");
-      if (!found) {
-        setContactGap({
-          name: attorneyName,
-          categoryHint: "Attorney",
-          message: `"${attorneyName}" isn't in your Contacts yet — add them now?`,
-        });
+    // Attorney-category contact, prompt to add one. Cash patients have
+    // no attorney to validate so skip the check entirely.
+    if (!isCash) {
+      const attorneyName = created.attorney;
+      if (attorneyName && attorneyName.toLowerCase() !== "self") {
+        const found = findContactByName(contacts, attorneyName, "Attorney");
+        if (!found) {
+          setContactGap({
+            name: attorneyName,
+            categoryHint: "Attorney",
+            message: `"${attorneyName}" isn't in your Contacts yet — add them now?`,
+          });
+        }
       }
     }
     resetQuickNewPatientPanel();
@@ -994,6 +1003,25 @@ export function NewAppointmentModal({
                   Complete the rest of the chart later
                 </span>
               </div>
+              <label className="mt-2 flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1.5 text-xs">
+                <input
+                  checked={quickNewPatientDraft.isCashPatient}
+                  className="h-4 w-4"
+                  onChange={(event) =>
+                    setQuickNewPatientDraft((current) => ({
+                      ...current,
+                      isCashPatient: event.target.checked,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-semibold">Cash Patient</span>
+                  <span className="block text-[var(--text-muted)]">
+                    No attorney / no injury date / no case number.
+                  </span>
+                </span>
+              </label>
               <div className="mt-3 grid gap-3 md:grid-cols-5">
                 <label className="grid gap-1">
                   <span className="text-xs font-semibold text-[var(--text-muted)]">Last Name *</span>
@@ -1031,6 +1059,7 @@ export function NewAppointmentModal({
                     value={quickNewPatientDraft.phone}
                   />
                 </label>
+                {!quickNewPatientDraft.isCashPatient && (
                 <label className="relative grid gap-1">
                   <span className="text-xs font-semibold text-[var(--text-muted)]">Attorney</span>
                   <input
@@ -1068,6 +1097,8 @@ export function NewAppointmentModal({
                     </ul>
                   )}
                 </label>
+                )}
+                {!quickNewPatientDraft.isCashPatient && (
                 <label className="grid gap-1">
                   <span className="text-xs font-semibold text-[var(--text-muted)]">Date of Injury</span>
                   <input
@@ -1087,6 +1118,7 @@ export function NewAppointmentModal({
                     value={quickNewPatientDraft.dateOfLoss}
                   />
                 </label>
+                )}
               </div>
               <label className="mt-3 grid gap-1">
                 <span className="text-xs font-semibold text-[var(--text-muted)]">Note</span>
