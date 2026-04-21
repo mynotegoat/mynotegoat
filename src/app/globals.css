@@ -288,10 +288,10 @@ a {
 }
 
 /*
- * Document-template preview (and, mirrored, the generated PDF):
- * stop mid-word wrapping and give every <p> a hanging indent so
- * values that wrap fall back under the value column rather than
- * the page's left margin.
+ * Document-template preview mirrors the generated PDF's .content rules.
+ * Fixed-width label column (170px) with hanging indent: label sits at
+ * x=0, value and its wrap lines sit at x=170px, continuation rows
+ * (.kv-cont) are fully in the value column.
  */
 .preview-doc-content {
   overflow-wrap: break-word;
@@ -300,8 +300,29 @@ a {
   -webkit-hyphens: none;
   tab-size: 4;
 }
-.preview-doc-content p {
-  padding-left: 14em;
-  text-indent: -14em;
+.preview-doc-content .kv,
+.preview-doc-content .kv-cont {
   margin: 0 0 4px 0;
+  padding: 0 0 0 170px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  -webkit-hyphens: none;
+}
+.preview-doc-content .kv {
+  text-indent: -170px;
+}
+.preview-doc-content .kv-cont {
+  text-indent: 0;
+}
+.preview-doc-content .kv-label {
+  display: inline-block;
+  width: 170px;
+  vertical-align: top;
+  font-weight: inherit;
+  text-indent: 0;
+}
+.preview-doc-content .kv-value {
+  text-indent: 0;
 }

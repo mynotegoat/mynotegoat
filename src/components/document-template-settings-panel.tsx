@@ -13,6 +13,10 @@ import {
   type DocumentTemplate,
   type DocumentTemplateScope,
 } from "@/lib/document-templates";
+import {
+  applyLabelValueHangingIndent,
+  stripHtmlIndentation,
+} from "@/lib/document-html-layout";
 import type { OfficeSettings } from "@/lib/office-settings";
 
 const demoPatientContext: Record<string, string> = {
@@ -173,7 +177,8 @@ export function DocumentTemplateSettingsPanel({
     if (!selectedTemplate) {
       return "";
     }
-    return renderDocumentTemplate(selectedTemplate.body, previewContext);
+    const rendered = renderDocumentTemplate(selectedTemplate.body, previewContext);
+    return applyLabelValueHangingIndent(stripHtmlIndentation(rendered));
   }, [previewContext, selectedTemplate]);
 
   const previewHeader = useMemo(() => {

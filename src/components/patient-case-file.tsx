@@ -22,6 +22,10 @@ import { filterAppointmentTypesForPatient } from "@/lib/schedule-appointment-typ
 import { useTasks } from "@/hooks/use-tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import { renderDocumentTemplate, type DocumentTemplateScope } from "@/lib/document-templates";
+import {
+  applyLabelValueHangingIndent,
+  stripHtmlIndentation,
+} from "@/lib/document-html-layout";
 import { createEncounterMacroRunId, encounterSections } from "@/lib/encounter-notes";
 import { formatUsPhoneInput } from "@/lib/phone-format";
 import { type QuickStatOptionKey } from "@/lib/quick-stats-settings";
@@ -544,67 +548,9 @@ type PrintableDocumentConfig = {
   billingPagesHtml?: string;
 };
 
-/** Strip leading whitespace from each line if the content contains HTML tags.
- *  This prevents pre-wrap from indenting AI-generated narrative HTML,
- *  while leaving plain-text templates with tabs intact. */
-function stripHtmlIndentation(html: string): string {
-  if (!/<[a-z][\s\S]*>/i.test(html)) return html; // plain text — keep tabs
-  return html.replace(/^[ \t]+/gm, "");
-}
-
-/**
- * Rewrite `<p>Label:   value</p>` paragraphs as a two-column grid row
- * so long values hang-indent under the value column instead of wrapping
- * back to the left margin underneath the label. Matches "Label:" as any
- * letter-run ending in a colon, followed by two-or-more whitespace
- * characters, followed by the value. The grouping CSS is in
- * buildPrintableDocumentHtml (`.content .kv` / `.kv-cont`).
- *
- * Consecutive paragraphs that are "blank label + value" lines (like the
- * 2nd and 3rd lines of an Imaging Center block: phone, address) get
- * tagged with `kv-cont` so they render in the value column right under
- * the first line.
- */
-function applyLabelValueHangingIndent(html: string): string {
-  // Label pattern — roughly "Word:", optionally multi-word, ending
-  // with a colon. Used to detect which <p>s introduce a NEW kv row
-  // vs. which ones are continuations of the previous value.
-  const labelPatternSource = "[A-Z][A-Za-z0-9 ()&/\\-]*?:";
-
-  // Phase 1: turn "Label:   value" rows into .kv grid rows. Tolerates
-  // 1+ whitespace OR nbsp between the label and value.
-  let next = html.replace(
-    new RegExp(
-      `<p([^>]*)>\\s*(${labelPatternSource})(?:&nbsp;|\\s)+([\\s\\S]*?)<\\/p>`,
-      "g",
-    ),
-    (_match, attrs, label, rest) => {
-      return `<div class="kv"${attrs}><span class="kv-label">${label}</span><span class="kv-value">${rest.trim()}</span></div>`;
-    },
-  );
-
-  // Phase 2: tag every <p> that immediately follows a .kv row or a
-  // previous .kv-cont AND doesn't start with a new label as a
-  // continuation. Loop until the text stabilizes so chains of 3+
-  // continuation lines all get picked up.
-  //
-  // Allowing continuations that have NO leading whitespace (not just
-  // 2+) is the critical difference from the earlier version — the
-  // user's imaging-center template renders the address paragraph
-  // without any leading space, so "strict 2+ whitespace" missed it.
-  const continuationRe = new RegExp(
-    `(<(?:div|p) class="kv(?:-cont)?"[^>]*>[\\s\\S]*?<\\/(?:div|p)>)\\s*<p([^>]*)>(?!\\s*${labelPatternSource}(?:&nbsp;|\\s))([\\s\\S]*?)<\\/p>`,
-    "g",
-  );
-  for (let i = 0; i < 10; i++) {
-    const before = next;
-    next = next.replace(continuationRe, (_match, prev, attrs, cont) => {
-      return `${prev}<p class="kv-cont"${attrs}>${cont.trim()}</p>`;
-    });
-    if (before === next) break;
-  }
-  return next;
-}
+// stripHtmlIndentation and applyLabelValueHangingIndent now live in
+// src/lib/document-html-layout.ts so the settings preview and the
+// generated PDF both apply the same label/value layout.
 
 function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
   const { title, headerHtml, fontFamily, includeLogo, logoDataUrl } = config;
@@ -642,21 +588,18 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
         font-size: 14px;
         line-height: 1.6;
       }
-      .content div, .content section, .content article, .content aside,
+      /* Reset most structural elements inside .content, BUT NOT our
+         own .kv / .kv-cont divs (they depend on padding/margin rules
+         defined further down). */
+      .content section, .content article, .content aside,
       .content details, .content summary, .content figure, .content figcaption,
       .content dl, .content dt, .content dd, .content blockquote, .content pre,
-      .content fieldset, .content legend, .content nav, .content footer, .content header {
+      .content fieldset, .content legend, .content nav, .content footer, .content header,
+      .content div:not(.kv):not(.kv-cont) {
         margin: 0 !important; padding: 0 !important; border: 0 !important; text-indent: 0 !important;
         margin-left: 0 !important; padding-left: 0 !important;
       }
       h1, h2, h3, h4, h5, h6 { margin: 14px 0 4px 0; text-indent: 0; }
-      /* Hanging-indent every paragraph in .content so wrapped values
-         fall under the value column instead of the left margin.
-         14em handles "Clinical Impression:" (the longest common
-         label). Shorter labels get extra space before the value but
-         every line WRAPS correctly under itself. Headings, lists
-         and the header block override this back to text-indent: 0. */
-      .content p { padding-left: 14em; text-indent: -14em; margin: 0 0 6px 0; }
       p { margin: 0 0 6px 0; text-indent: 0; }
       ul, ol { margin: 0 0 6px 0; padding-left: 20px; text-indent: 0; }
       li { margin: 0 0 2px 0; text-indent: 0; }
@@ -672,38 +615,58 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .content {
         margin: 0;
         white-space: pre-wrap;
-        /* Use overflow-wrap (breaks only when a single word can't fit)
-           instead of word-break: break-word (which breaks mid-word
-           aggressively). The old rule was causing medical vocabulary
-           to wrap as "derangements | econdary" — splitting the word
-           "secondary" right before the "s". */
+        /* overflow-wrap only breaks words that literally can't fit on
+           a line. word-break: normal keeps whole words together. And
+           hyphens: none stops &shy; soft-hyphens that get pasted in
+           from PDFs from breaking words mid-character. */
         overflow-wrap: break-word;
         word-break: normal;
+        hyphens: none;
+        -webkit-hyphens: none;
         font-family: ${safeFontFamily};
         font-size: 14px;
         line-height: 1.6;
       }
-      /* Label + value row. When the generator detects a line shaped
-         like "Label:   value" (two or more spaces after the colon),
-         it rewrites the paragraph as <div class="kv"> so the label
-         stays in its own column and the value wraps hanging-indent
-         style under itself instead of falling to the left margin. */
-      .content .kv {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        column-gap: 8px;
-        align-items: start;
+      /* Label + value rows. applyLabelValueHangingIndent converts:
+           <p>Label:   value</p>
+         into:
+           <div class="kv"><span class="kv-label">Label:</span><span class="kv-value">value</span></div>
+         and subsequent orphan paragraphs into <div class="kv-cont">.
+
+         Layout approach: FIXED label column (170px) with hanging
+         indent, so every row's value starts at the same x-position
+         and wrapped value lines sit under themselves. No grid —
+         grids stack rows independently and can't align multi-line
+         continuations with the first row's label column. */
+      .content .kv,
+      .content .kv-cont {
         margin: 0 0 4px 0;
-      }
-      .content .kv > .kv-label {
-        white-space: nowrap;
-        font-weight: inherit;
-      }
-      .content .kv > .kv-value { white-space: pre-wrap; }
-      .content .kv + .kv-cont {
-        grid-column: 2;
+        padding: 0 0 0 170px;
         white-space: pre-wrap;
-        margin: 0;
+        overflow-wrap: break-word;
+        word-break: normal;
+        hyphens: none;
+        -webkit-hyphens: none;
+      }
+      .content .kv {
+        /* Pull line 1 back by the label-column width so the label
+           appears at x=0. Wrapped value lines stay at 170px. */
+        text-indent: -170px;
+      }
+      .content .kv-cont {
+        /* Continuation lines are fully in the value column (no pull-back). */
+        text-indent: 0;
+      }
+      .content .kv-label {
+        display: inline-block;
+        width: 170px;
+        vertical-align: top;
+        font-weight: inherit;
+        text-indent: 0;
+      }
+      .content .kv-value {
+        /* Inline — wraps inside the available width after the label. */
+        text-indent: 0;
       }
       .header {
         flex: 1;
