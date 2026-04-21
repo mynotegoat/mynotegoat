@@ -797,26 +797,49 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
     return encountersByNewest.find((entry) => entry.id === selectedEncounterId)?.patientId ?? null;
   }, [encountersByNewest, selectedEncounterId]);
 
-  // Live autocomplete matches for the Patient search box. Scoped to
-  // patients (not encounter history) so "Smith" surfaces every patient
-  // named Smith, not a merged list of their encounters. When the
-  // current search string already equals a single patient's fullName
-  // exactly, suppress the dropdown — the user has finished picking.
+  // Live autocomplete matches for the Patient search box. Uses the
+  // same word-split logic as the Patients page so that
+  //   "smith john"  matches stored "Smith, John"
+  //   "john smith"  matches stored "Smith, John"
+  //   "smi"         matches stored "Smith, John"
+  // — order-insensitive and comma-insensitive.
+  //
+  // When the current search string already equals a single patient's
+  // fullName exactly, the dropdown is suppressed so the encounter
+  // list can take over without the menu obscuring it.
   const patientSearchMatches = useMemo(() => {
-    const query = normalizeLookupText(encounterSearch);
-    if (!query) return [];
+    const rawQuery = encounterSearch.trim().toLowerCase();
+    if (!rawQuery) return [];
     const exactMatchedPatient = patients.find(
-      (p) => normalizeLookupText(p.fullName) === query,
+      (p) => p.fullName.toLowerCase() === rawQuery,
     );
     if (exactMatchedPatient) return [];
+    const queryWords = rawQuery
+      .replace(/[,.:;]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    if (queryWords.length === 0) return [];
     return patients
-      .filter((p) => normalizeLookupText(p.fullName).includes(query))
+      .filter((p) => {
+        if (p.deleted) return false;
+        const haystack = p.fullName.toLowerCase().replace(/[,.:;]/g, " ");
+        return queryWords.every((word) => haystack.includes(word));
+      })
       .slice(0, 12);
   }, [encounterSearch]);
 
   const filteredEncounterList = useMemo(() => {
-    const query = normalizeLookupText(encounterSearch);
-    if (!query) {
+    const rawQuery = encounterSearch.trim().toLowerCase();
+    if (!rawQuery) {
+      return [];
+    }
+    // Match the word-split logic used by the autocomplete dropdown so
+    // "smith john" and "john smith" both resolve to stored "Smith, John".
+    const queryWords = rawQuery
+      .replace(/[,.:;]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    if (queryWords.length === 0) {
       return [];
     }
     const scopedEntries = encountersByNewest
@@ -830,7 +853,8 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         return true;
       })
       .filter((entry) => {
-        return normalizeLookupText(entry.patientName).includes(query);
+        const haystack = entry.patientName.toLowerCase().replace(/[,.:;]/g, " ");
+        return queryWords.every((word) => haystack.includes(word));
       });
     if (!scopedEntries.length) {
       return [];

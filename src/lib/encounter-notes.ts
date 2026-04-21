@@ -420,20 +420,23 @@ export function saveEncounterNoteRecords(records: EncounterNoteRecord[]): boolea
   try {
     // Lazy-require so SSR / tests don't pull browser storage in.
     void import("@/lib/draft-recovery").then(({ draftKeyFor, clearDraft }) => {
+      // Clear EVERY draft for every encounter we just saved — don't
+      // gate on byte-for-byte HTML equality. The old check
+      //   parsed.html === record.soap[section]
+      // kept failing in practice because the editor's raw draft HTML
+      // (captured inside the editor's onInput handler) has trivial
+      // differences from the committed HTML after sanitizeSoapHtml /
+      // React's reconciler / macro-span normalization run over it:
+      // extra whitespace, normalized attribute order, collapsed empty
+      // paragraphs. Result: user sees a draft-recovery banner on
+      // every single reload even though the encounter saved cleanly.
+      //
+      // Semantically: once a record reaches saveEncounterNoteRecords,
+      // its pending drafts are moot — we have a committed version.
+      // Keeping them around is noise, not safety.
       for (const record of records) {
         for (const section of encounterSections) {
-          const key = draftKeyFor(record.id, section);
-          const rawDraft = window.localStorage.getItem(key);
-          if (!rawDraft) continue;
-          try {
-            const parsed = JSON.parse(rawDraft) as { html?: unknown };
-            if (typeof parsed.html === "string" && parsed.html === record.soap[section]) {
-              clearDraft(key);
-            }
-          } catch {
-            // Draft corrupt — clear it, the scanner will GC on next load.
-            clearDraft(key);
-          }
+          clearDraft(draftKeyFor(record.id, section));
         }
       }
     });
