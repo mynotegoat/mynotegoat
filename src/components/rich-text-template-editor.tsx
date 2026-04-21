@@ -449,6 +449,68 @@ export const RichTextTemplateEditor = forwardRef<
               document.execCommand("insertHTML", false, "<br>");
             }
             emitChange();
+            return;
+          }
+
+          // Protect macro-prompt pills from accidental deletion.
+          // Standard contentEditable behaviour: when the caret sits
+          // right after a contenteditable=false element and the user
+          // presses Backspace, Chrome/Safari delete the whole span in
+          // one keystroke. User complaint: "when i delete those
+          // paragraph spaces it ends up deleting the macro input
+          // before it". Fix is to intercept Backspace when the caret
+          // is immediately adjacent to a .macro-prompt span and move
+          // the caret to JUST BEFORE the pill instead of deleting it.
+          // The user can still delete the pill by clicking it (which
+          // re-opens the picker and offers a clear option) or by
+          // selecting + deleting explicitly.
+          if (event.key === "Backspace") {
+            const editor = editorRef.current;
+            if (!editor) return;
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return;
+            const range = selection.getRangeAt(0);
+            if (!range.collapsed) return; // user selected something — let it run
+            if (!editor.contains(range.startContainer)) return;
+
+            // Walk one step back from the caret. We want to know if
+            // the thing that would be deleted is (or is inside) a
+            // macro-prompt span.
+            const findPrevAdjacent = (): HTMLElement | null => {
+              const container = range.startContainer;
+              const offset = range.startOffset;
+              // Text node: if the caret is at offset 0, the "previous"
+              // thing is the previous sibling.
+              if (container.nodeType === Node.TEXT_NODE) {
+                if (offset > 0) return null;
+                let prev: Node | null = container.previousSibling;
+                while (prev && prev.nodeType === Node.TEXT_NODE && !prev.textContent) {
+                  prev = prev.previousSibling;
+                }
+                return prev instanceof HTMLElement ? prev : null;
+              }
+              // Element node: the previous sibling of the child at offset.
+              if (container.nodeType === Node.ELEMENT_NODE) {
+                const childNode = (container as HTMLElement).childNodes[offset - 1];
+                return childNode instanceof HTMLElement ? childNode : null;
+              }
+              return null;
+            };
+
+            const prev = findPrevAdjacent();
+            const pill = prev?.closest?.(".macro-prompt") ?? null;
+            if (pill) {
+              // Move the caret to just BEFORE the pill instead of
+              // letting the browser delete the pill.
+              event.preventDefault();
+              const newRange = document.createRange();
+              newRange.setStartBefore(pill);
+              newRange.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+              captureSelection();
+              return;
+            }
           }
         }}
         onPaste={(event) => {

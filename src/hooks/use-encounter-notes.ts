@@ -60,17 +60,33 @@ function nowIso() {
 //   <p></p>                      — no content
 //   <p><br></p>  <p><br/></p>    — single break, both self-closed variants
 //   <p>&nbsp;</p>                — non-breaking space placeholder
-//   <p><br><br></p>              — multiple breaks (happens when the
-//                                  editor records several Enter presses)
+//   <p><br><br></p>              — multiple breaks (several Enter presses)
 //   <p class="..."></p>          — attribute-carrying empty paragraphs
+//   <p><span></span></p>         — empty inline wrappers left by contentEditable
 //   <div>…same variants…</div>   — some browsers emit div instead of p
+//   <h1></h1> … <h6></h6>        — empty headings (format-block then backspace)
+//   <br>                         — a stray <br> between blocks
+//
+// The `emptyInlineFiller` piece covers the inline-but-invisible
+// residue (spans/fonts/strong/em/etc) that contentEditable often
+// leaves inside a "cleared" paragraph.
+const emptyInlineFiller =
+  "(?:&nbsp;|<br\\s*\\/?\\s*>|<(?:span|font|strong|em|u|b|i)(?:\\s[^>]*)?>\\s*(?:&nbsp;)?\\s*<\\/(?:span|font|strong|em|u|b|i)>)\\s*";
 const emptyBlockPatternSource =
-  "<(?:p|div)(?:\\s[^>]*)?>\\s*(?:(?:&nbsp;|<br\\s*\\/?\\s*>)\\s*)*<\\/(?:p|div)>\\s*";
+  `(?:<(?:p|div|h[1-6])(?:\\s[^>]*)?>\\s*(?:${emptyInlineFiller})*<\\/(?:p|div|h[1-6])>\\s*|<br\\s*\\/?\\s*>\\s*)`;
 
 function stripEdgeEmptyBlocks(html: string): string {
   const leading = new RegExp(`^(?:${emptyBlockPatternSource})+`, "gi");
   const trailing = new RegExp(`(?:${emptyBlockPatternSource})+$`, "gi");
-  return html.replace(leading, "").replace(trailing, "");
+  // Loop once to catch nesting cases — e.g. stripping a <br> can
+  // reveal a preceding empty <p>, which the next pass will catch.
+  let next = html;
+  for (let i = 0; i < 4; i++) {
+    const before = next;
+    next = next.replace(leading, "").replace(trailing, "");
+    if (before === next) break;
+  }
+  return next;
 }
 
 /**

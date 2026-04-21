@@ -158,11 +158,27 @@ a {
 }
 
 .rich-text-editor p {
-  margin: 0 0 0.7em;
+  margin: 0 0 0.35em;
 }
 
 .rich-text-editor p:last-child {
   margin-bottom: 0;
+}
+
+/* Collapse truly empty paragraphs (just a placeholder <br>) down to a
+ * small visual gap instead of a full line-height + margin. Multiple
+ * Enter-presses after a macro used to stack into a tall blank zone
+ * that made it feel like the editor was shoving the caret far down
+ * the page. With this, even a run of 2–3 placeholder <p><br></p>s
+ * stays modest. */
+.rich-text-editor p:has(> br:only-child) {
+  line-height: 0.6;
+  margin: 0 0 0.15em;
+}
+.rich-text-editor p:empty {
+  line-height: 0.6;
+  margin: 0 0 0.15em;
+  min-height: 0.6em;
 }
 
 .rich-text-editor ul,
