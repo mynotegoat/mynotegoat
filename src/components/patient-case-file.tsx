@@ -3041,16 +3041,19 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   // modal just to flip one value.
   const beginQuickDateEdit = (appointment: ScheduleAppointmentRecord) => {
     setQuickDateEditId(appointment.id);
-    setQuickDateDraft(toUsDate(appointment.date));
+    // quickDateDraft now holds the ISO value used by <input type="date">
+    // so the native browser calendar popover works. The draft gets
+    // converted back to US display only when we surface a status
+    // message to the user.
+    setQuickDateDraft(appointment.date);
   };
   const cancelQuickDateEdit = () => {
     setQuickDateEditId(null);
     setQuickDateDraft("");
   };
   const commitQuickDateEdit = (appointment: ScheduleAppointmentRecord) => {
-    const formatted = quickDateDraft.trim();
-    const isoCandidate = toIsoDateFromUsDate(formatted);
-    if (!isoCandidate || isoCandidate === appointment.date) {
+    const isoCandidate = quickDateDraft.trim();
+    if (!isoCandidate || !/^\d{4}-\d{2}-\d{2}$/.test(isoCandidate) || isoCandidate === appointment.date) {
       cancelQuickDateEdit();
       return;
     }
@@ -3059,7 +3062,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       date: isoCandidate,
     }));
     setEncounterMessage(
-      `Date updated to ${formatted} for ${appointment.appointmentType}.`,
+      `Date updated to ${toUsDate(isoCandidate)} for ${appointment.appointmentType}.`,
     );
     cancelQuickDateEdit();
   };
@@ -4648,6 +4651,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     <thead>
                       <tr className="bg-[var(--bg-soft)] text-left">
                         <th className="px-2 py-2">Date</th>
+                        <th className="px-2 py-2">Day</th>
                         <th className="px-2 py-2">Time</th>
                         <th className="px-2 py-2">Type</th>
                         <th className="px-2 py-2">Status</th>
@@ -4659,6 +4663,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       {appointmentRows.map((row) => {
                         const linkedEncounter = row.linkedEncounter;
                         const appointment = row.appointment;
+                        // "Day" column: short weekday abbreviation
+                        // computed from the appointment's ISO date.
+                        // Falls back to em-dash when no appointment is
+                        // attached (e.g., encounter-only rows).
+                        const dayLabel = (() => {
+                          if (!appointment) return "";
+                          const match = appointment.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                          if (!match) return "";
+                          const d = new Date(
+                            Number(match[1]),
+                            Number(match[2]) - 1,
+                            Number(match[3]),
+                          );
+                          if (Number.isNaN(d.getTime())) return "";
+                          return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+                        })();
                         return (
                           <tr key={row.rowId} className="border-t border-[var(--line-soft)]">
                             <td className="px-2 py-2 tabular-nums">
@@ -4668,11 +4688,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                     <input
                                       autoFocus
                                       className="rounded-md border border-[var(--line-soft)] bg-white px-1.5 py-0.5 text-xs"
-                                      inputMode="numeric"
-                                      maxLength={10}
-                                      onChange={(event) =>
-                                        setQuickDateDraft(formatUsDateInput(event.target.value))
-                                      }
+                                      onChange={(event) => setQuickDateDraft(event.target.value)}
                                       onKeyDown={(event) => {
                                         if (event.key === "Enter") {
                                           commitQuickDateEdit(appointment);
@@ -4680,7 +4696,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                           cancelQuickDateEdit();
                                         }
                                       }}
-                                      placeholder="MM/DD/YYYY"
+                                      type="date"
                                       value={quickDateDraft}
                                     />
                                     <button
@@ -4713,6 +4729,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                               ) : (
                                 <span>{row.dateLabel}</span>
                               )}
+                            </td>
+                            <td className="px-2 py-2 text-xs text-[var(--text-muted)]">
+                              {dayLabel || <span>—</span>}
                             </td>
                             <td className="px-2 py-2 tabular-nums">
                               {appointment ? (
