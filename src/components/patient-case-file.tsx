@@ -552,9 +552,54 @@ function stripHtmlIndentation(html: string): string {
   return html.replace(/^[ \t]+/gm, "");
 }
 
+/**
+ * Rewrite `<p>Label:   value</p>` paragraphs as a two-column grid row
+ * so long values hang-indent under the value column instead of wrapping
+ * back to the left margin underneath the label. Matches "Label:" as any
+ * letter-run ending in a colon, followed by two-or-more whitespace
+ * characters, followed by the value. The grouping CSS is in
+ * buildPrintableDocumentHtml (`.content .kv` / `.kv-cont`).
+ *
+ * Consecutive paragraphs that are "blank label + value" lines (like the
+ * 2nd and 3rd lines of an Imaging Center block: phone, address) get
+ * tagged with `kv-cont` so they render in the value column right under
+ * the first line.
+ */
+function applyLabelValueHangingIndent(html: string): string {
+  // Phase 1: convert "Label:   value" rows.
+  let next = html.replace(
+    /<p([^>]*)>\s*([A-Z][A-Za-z0-9 ()&/\-]*?:)(?:&nbsp;|\s){2,}([\s\S]*?)<\/p>/g,
+    (_match, attrs, label, rest) => {
+      return `<div class="kv"${attrs}><span class="kv-label">${label}</span><span class="kv-value">${rest.trim()}</span></div>`;
+    },
+  );
+  // Phase 2: if a <p> that starts with 2+ whitespace (a continuation of
+  // a multi-line value like the 2nd/3rd lines of an Imaging Center
+  // block) immediately follows a .kv row, tag it as a kv-cont so CSS
+  // puts it in the value column.
+  next = next.replace(
+    /(<div class="kv"[^>]*>[\s\S]*?<\/div>)\s*<p([^>]*)>\s*(?:&nbsp;|\s){2,}([\s\S]*?)<\/p>/g,
+    (_match, kvDiv, attrs, cont) => {
+      return `${kvDiv}<p class="kv-cont"${attrs}>${cont.trim()}</p>`;
+    },
+  );
+  // A third pass for chained continuations (3+ lines).
+  for (let i = 0; i < 4; i++) {
+    const before = next;
+    next = next.replace(
+      /(<p class="kv-cont"[^>]*>[\s\S]*?<\/p>)\s*<p([^>]*)>\s*(?:&nbsp;|\s){2,}([\s\S]*?)<\/p>/g,
+      (_match, contDiv, attrs, cont) => {
+        return `${contDiv}<p class="kv-cont"${attrs}>${cont.trim()}</p>`;
+      },
+    );
+    if (before === next) break;
+  }
+  return next;
+}
+
 function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
   const { title, headerHtml, fontFamily, includeLogo, logoDataUrl } = config;
-  const bodyHtml = stripHtmlIndentation(config.bodyHtml);
+  const bodyHtml = applyLabelValueHangingIndent(stripHtmlIndentation(config.bodyHtml));
   const encounterPagesHtml = config.encounterPagesHtml ?? "";
   const billingPagesHtml = config.billingPagesHtml ?? "";
   const headerFontFamily = config.headerFontFamily;
@@ -611,16 +656,45 @@ function buildPrintableDocumentHtml(config: PrintableDocumentConfig) {
       .content {
         margin: 0;
         white-space: pre-wrap;
-        word-break: break-word;
+        /* Use overflow-wrap (breaks only when a single word can't fit)
+           instead of word-break: break-word (which breaks mid-word
+           aggressively). The old rule was causing medical vocabulary
+           to wrap as "derangements | econdary" — splitting the word
+           "secondary" right before the "s". */
+        overflow-wrap: break-word;
+        word-break: normal;
         font-family: ${safeFontFamily};
         font-size: 14px;
         line-height: 1.6;
+      }
+      /* Label + value row. When the generator detects a line shaped
+         like "Label:   value" (two or more spaces after the colon),
+         it rewrites the paragraph as <div class="kv"> so the label
+         stays in its own column and the value wraps hanging-indent
+         style under itself instead of falling to the left margin. */
+      .content .kv {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 8px;
+        align-items: start;
+        margin: 0 0 4px 0;
+      }
+      .content .kv > .kv-label {
+        white-space: nowrap;
+        font-weight: inherit;
+      }
+      .content .kv > .kv-value { white-space: pre-wrap; }
+      .content .kv + .kv-cont {
+        grid-column: 2;
+        white-space: pre-wrap;
+        margin: 0;
       }
       .header {
         flex: 1;
         text-align: left;
         white-space: pre-wrap;
-        word-break: break-word;
+        overflow-wrap: break-word;
+        word-break: normal;
         font-family: ${safeHeaderFontFamily};
         font-size: 13px;
         line-height: 1.5;
