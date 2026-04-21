@@ -346,13 +346,38 @@ export function useEncounterNotes() {
 
   const setSoapSection = useCallback(
     (encounterId: string, section: EncounterSection, value: string) => {
-      upsertEncounter(encounterId, (current) => ({
-        ...current,
-        soap: {
-          ...current.soap,
-          [section]: value,
-        },
-      }));
+      upsertEncounter(encounterId, (current) => {
+        // Prune macroRuns whose rendered text (marked by
+        // data-macro-run-id="…" spans) no longer exists in the updated
+        // HTML for this section. When the user backspaces a macro
+        // block out of the SOAP editor, the span is removed from the
+        // HTML but the macroRun entry survived — which kept
+        // reconcileLinkedCharges seeing the run as "present" and
+        // kept its linked CPT charges on the encounter.
+        const nextRuns = current.macroRuns.filter((run) => {
+          if (run.section !== section) return true;
+          return value.includes(`data-macro-run-id="${run.id}"`);
+        });
+        // If any run was pruned, drop every charge whose
+        // linkedMacroRunId points to a now-missing run. User-owned
+        // manual charges (no linkedMacroRunId) are left alone.
+        let nextCharges = current.charges;
+        if (nextRuns.length !== current.macroRuns.length) {
+          const liveRunIds = new Set(nextRuns.map((r) => r.id));
+          nextCharges = current.charges.filter((charge) =>
+            charge.linkedMacroRunId ? liveRunIds.has(charge.linkedMacroRunId) : true,
+          );
+        }
+        return {
+          ...current,
+          soap: {
+            ...current.soap,
+            [section]: value,
+          },
+          macroRuns: nextRuns,
+          charges: nextCharges,
+        };
+      });
     },
     [upsertEncounter],
   );

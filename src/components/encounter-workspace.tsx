@@ -3314,20 +3314,18 @@ function ImagingSpecialistSummary({
   type Row = {
     label: string;
     regions: string;
-    left: string;
-    right: string;
-    leftValue: string;
-    rightValue: string;
+    sent: string;
+    completed: string;
+    reviewed: string;
   };
   const rows: Row[] = [];
   if (latestXray) {
     rows.push({
       label: "X-Ray",
       regions: readRegionsList(latestXray),
-      left: "Sent",
-      right: "Reviewed",
-      leftValue: toUsDate(readStringField(latestXray, "sentDate", "sent") ?? ""),
-      rightValue: toUsDate(
+      sent: toUsDate(readStringField(latestXray, "sentDate", "sent") ?? ""),
+      completed: toUsDate(readStringField(latestXray, "doneDate", "completedDate") ?? ""),
+      reviewed: toUsDate(
         readStringField(latestXray, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
       ),
     });
@@ -3336,24 +3334,23 @@ function ImagingSpecialistSummary({
     rows.push({
       label: "MRI",
       regions: readRegionsList(latestMri),
-      left: "Sent",
-      right: "Reviewed",
-      leftValue: toUsDate(readStringField(latestMri, "sentDate", "sent") ?? ""),
-      rightValue: toUsDate(
+      sent: toUsDate(readStringField(latestMri, "sentDate", "sent") ?? ""),
+      completed: toUsDate(readStringField(latestMri, "doneDate", "completedDate") ?? ""),
+      reviewed: toUsDate(
         readStringField(latestMri, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
       ),
     });
   }
   if (latestSpec) {
-    // Specialists don't have regions; show the specialist's name in
-    // the middle slot so the column isn't wasted space.
+    // Specialists don't have regions — reuse the middle slot for the
+    // specialist's name so the column isn't wasted space. Specialists
+    // also don't have a "reviewed" step; leave that cell empty with
+    // an em-dash so the 4-column grid stays aligned with X-Ray/MRI.
     rows.push({
       label: "Specialist",
       regions: readStringField(latestSpec, "specialist", "name") || "",
-      left: "Sent",
-      right: "Completed",
-      leftValue: toUsDate(readStringField(latestSpec, "sentDate", "sent") ?? ""),
-      rightValue: toUsDate(
+      sent: toUsDate(readStringField(latestSpec, "sentDate", "sent") ?? ""),
+      completed: toUsDate(
         readStringField(
           latestSpec,
           "completedDate",
@@ -3361,6 +3358,7 @@ function ImagingSpecialistSummary({
           "reportDate",
         ) ?? "",
       ),
+      reviewed: "",
     });
   }
 
@@ -3372,7 +3370,7 @@ function ImagingSpecialistSummary({
       <ul className="space-y-2 text-xs">
         {rows.map((row) => (
           <li
-            className="grid grid-cols-[72px_1.2fr_1fr_1fr] items-center gap-3"
+            className="grid grid-cols-[72px_1fr_auto_auto_auto] items-center gap-3"
             key={`imaging-summary-${row.label}`}
           >
             <span className="font-semibold">{row.label}</span>
@@ -3380,12 +3378,16 @@ function ImagingSpecialistSummary({
               {row.regions || <span className="text-[var(--text-muted)]">—</span>}
             </span>
             <span className="tabular-nums">
-              <span className="text-[var(--text-muted)]">{row.left}: </span>
-              {row.leftValue || <span className="text-[var(--text-muted)]">—</span>}
+              <span className="text-[var(--text-muted)]">Sent: </span>
+              {row.sent || <span className="text-[var(--text-muted)]">—</span>}
             </span>
             <span className="tabular-nums">
-              <span className="text-[var(--text-muted)]">{row.right}: </span>
-              {row.rightValue || <span className="text-[var(--text-muted)]">—</span>}
+              <span className="text-[var(--text-muted)]">Completed: </span>
+              {row.completed || <span className="text-[var(--text-muted)]">—</span>}
+            </span>
+            <span className="tabular-nums">
+              <span className="text-[var(--text-muted)]">Reviewed: </span>
+              {row.reviewed || <span className="text-[var(--text-muted)]">—</span>}
             </span>
           </li>
         ))}
