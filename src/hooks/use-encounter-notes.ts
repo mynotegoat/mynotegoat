@@ -139,12 +139,47 @@ function normalizeEditorBlocks(html: string): string {
   const isBlockTag = (tag: string) =>
     /^(P|DIV|H[1-6]|BLOCKQUOTE|PRE|SECTION|ARTICLE)$/i.test(tag);
 
-  // Walk top-level children, rebuilding into a cleaned list.
+  // Walk top-level children, rebuilding into a cleaned list. Any run
+  // of stray inline content (text node, <strong>, <span>, etc.) that
+  // appears at the top level gets wrapped in its own <p> so the
+  // browser's contentEditable can't merge it into a neighbouring
+  // paragraph on re-render — which was the root cause of the
+  // "Exercises macro jumped above onto Lumbar's line" bug for macros
+  // whose body HTML had no <p> wrapper.
   const nodes = Array.from(body.childNodes);
   const cleaned: Node[] = [];
   let lastWasEmpty = false;
+  let inlineBuffer: Node[] = [];
+
+  const flushInlineBuffer = () => {
+    if (inlineBuffer.length === 0) return;
+    // If the buffer is entirely whitespace, drop it — no one wants a
+    // paragraph full of "&nbsp;".
+    const hasContent = inlineBuffer.some((n) => {
+      if (n.nodeType === Node.TEXT_NODE) {
+        return ((n.textContent ?? "").replace(/[\s\u00A0]/g, "")).length > 0;
+      }
+      // Any non-empty element or atomic descendant counts as content.
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const el = n as Element;
+        if ((el.textContent ?? "").replace(/[\s\u00A0]/g, "")) return true;
+        if (el.querySelector("img, video, iframe, input, canvas, [data-macro-run-id], [data-prompt-id]")) return true;
+      }
+      return false;
+    });
+    if (!hasContent) {
+      inlineBuffer = [];
+      return;
+    }
+    const p = doc.createElement("p");
+    inlineBuffer.forEach((n) => p.appendChild(n));
+    cleaned.push(p);
+    lastWasEmpty = false;
+    inlineBuffer = [];
+  };
 
   const pushCanonicalEmpty = () => {
+    flushInlineBuffer();
     if (lastWasEmpty || cleaned.length === 0) return;
     const p = doc.createElement("p");
     p.appendChild(doc.createElement("br"));
@@ -155,9 +190,10 @@ function normalizeEditorBlocks(html: string): string {
   for (const node of nodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent ?? "";
-      if (!text.trim()) continue; // whitespace-only text between blocks — drop
-      cleaned.push(node);
-      lastWasEmpty = false;
+      if (!text.trim() && inlineBuffer.length === 0) {
+        continue; // whitespace between blocks — drop
+      }
+      inlineBuffer.push(node);
       continue;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -171,14 +207,21 @@ function normalizeEditorBlocks(html: string): string {
       continue;
     }
 
-    if (isBlockTag(tag) && isVisuallyEmpty(el)) {
-      pushCanonicalEmpty();
+    if (isBlockTag(tag)) {
+      flushInlineBuffer();
+      if (isVisuallyEmpty(el)) {
+        pushCanonicalEmpty();
+      } else {
+        cleaned.push(node);
+        lastWasEmpty = false;
+      }
       continue;
     }
 
-    cleaned.push(node);
-    lastWasEmpty = false;
+    // Any other element is inline — buffer until we hit a block boundary.
+    inlineBuffer.push(node);
   }
+  flushInlineBuffer();
 
   // Strip any trailing empties (pushCanonicalEmpty only skips them
   // when they're the first node, not when content ended on an empty).
