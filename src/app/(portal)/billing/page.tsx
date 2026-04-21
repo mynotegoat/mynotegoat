@@ -530,8 +530,16 @@ export default function BillingPage() {
     return [...encountersByNewest]
       .filter((encounter) => encounter.patientId === activePatientId)
       .sort((a, b) => toSortStamp(toUsDate(a.encounterDate)) - toSortStamp(toUsDate(b.encounterDate)))
-      .flatMap((encounter) =>
-        encounter.charges.map((charge) => ({
+      .flatMap((encounter) => {
+        // Match the encounter-workspace display order: highest unit
+        // price first, ties broken by name. The stored `encounter.charges`
+        // array is insertion order; sort here so the billing view's
+        // per-encounter rows visually agree with what the provider sees
+        // while charting.
+        const sortedCharges = [...encounter.charges].sort(
+          (a, b) => b.unitPrice - a.unitPrice || a.name.localeCompare(b.name),
+        );
+        return sortedCharges.map((charge) => ({
           id: `${encounter.id}-${charge.id}`,
           encounterId: encounter.id,
           chargeId: charge.id,
@@ -543,8 +551,8 @@ export default function BillingPage() {
           units: charge.units,
           unitPrice: charge.unitPrice,
           lineTotal: charge.unitPrice * charge.units,
-        })),
-      )
+        }));
+      })
       .sort((left, right) => toSortStamp(left.encounterDate) - toSortStamp(right.encounterDate));
   }, [activePatientId, encountersByNewest]);
 
