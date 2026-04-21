@@ -3182,10 +3182,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
-    // Guard against accidentally creating an encounter for a future
-    // appointment. appointment.date is ISO YYYY-MM-DD; compare against
-    // today's local date string so time-zone / clock differences don't
-    // block a same-day appointment.
+    // Guard against accidentally creating an encounter for an
+    // appointment whose date isn't today. Catches both directions:
+    //  - Future: the user misclicks on tomorrow's slot and starts
+    //    typing before the patient has even walked in.
+    //  - Past: the user checked a patient in days ago but never
+    //    made an encounter, then clicks + Encounter long after
+    //    the fact and the new encounter gets stamped with the
+    //    original visit date.
+    // Same-day appointments pass through silently — no nag.
     const todayIso = (() => {
       const now = new Date();
       const y = now.getFullYear();
@@ -3193,13 +3198,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       const d = String(now.getDate()).padStart(2, "0");
       return `${y}-${m}-${d}`;
     })();
-    if (appointment.date > todayIso) {
+    if (appointment.date !== todayIso) {
+      const direction = appointment.date > todayIso ? "in the future" : "in the past";
       const proceed = window.confirm(
-        `This appointment is on ${appointmentDate}, which is in the future. ` +
+        `This appointment is on ${appointmentDate}, which is ${direction}. ` +
           `Are you sure you want to create an encounter now? Click Cancel if you opened the wrong appointment.`,
       );
       if (!proceed) {
-        setEncounterMessage("Encounter creation canceled — appointment is in the future.");
+        setEncounterMessage(`Encounter creation canceled — appointment is ${direction}.`);
         return;
       }
     }

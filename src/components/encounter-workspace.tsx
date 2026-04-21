@@ -549,6 +549,7 @@ function AppointmentsOverview({
   patients: patientList,
   onCreateEncounter,
   onOpenEncounter,
+  onStatusChange,
 }: {
   appointments: Array<{ id: string; patientId: string; patientName: string; appointmentType: string; date: string; startTime: string; status: string }>;
   encounters: Array<{ id: string; patientId: string; encounterDate: string; signed: boolean; patientName: string; appointmentType: string }>;
@@ -557,6 +558,7 @@ function AppointmentsOverview({
   appointmentTypes: Array<{ name: string }>;
   onCreateEncounter: (appointmentId: string, patientId: string, patientName: string, appointmentType: string, date: string) => void;
   onOpenEncounter: (encounterId: string, patientName: string) => void;
+  onStatusChange: (appointmentId: string, nextStatus: AppointmentStatus) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -628,7 +630,31 @@ function AppointmentsOverview({
                     <td className="px-3 py-2 tabular-nums">{formatTimeLabel(apt.startTime)}</td>
                     <td className="px-3 py-2 font-semibold">{apt.patientName}</td>
                     <td className="px-3 py-2">{apt.appointmentType}</td>
-                    <td className="px-3 py-2">{formatAppointmentStatusLabel(apt.status)}</td>
+                    <td className="px-3 py-2">
+                      <select
+                        className={`rounded-full border border-[var(--line-soft)] px-2 py-1 text-xs font-semibold ${getStatusBadgeClass(apt.status as AppointmentStatus)}`}
+                        onChange={(event) => {
+                          const nextStatus = event.target.value as AppointmentStatus;
+                          if (nextStatus === apt.status) return;
+                          if (!confirmStatusChangeIfNeeded(apt.status as AppointmentStatus, nextStatus)) return;
+                          onStatusChange(apt.id, nextStatus);
+                        }}
+                        value={apt.status}
+                      >
+                        {appointmentStatusOptions.map((status) => {
+                          const disabled = !isAppointmentStatusSelectable(status, apt.status as AppointmentStatus);
+                          return (
+                            <option
+                              disabled={disabled}
+                              key={`today-apt-status-${apt.id}-${status}`}
+                              value={status}
+                            >
+                              {formatAppointmentStatusLabel(status)}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </td>
                     <td className="px-3 py-2">
                       {linked ? (
                         <button
@@ -1814,6 +1840,10 @@ export function EncounterWorkspace({ initialPatientId, initialEncounterId }: Enc
         onOpenEncounter={(encounterId, patientName) => {
           setEncounterSearch(patientName);
           setSelectedEncounterId(encounterId);
+        }}
+        onStatusChange={(appointmentId, nextStatus) => {
+          updateAppointment(appointmentId, (current) => ({ ...current, status: nextStatus }));
+          setMessage(`Appointment status updated to ${formatAppointmentStatusLabel(nextStatus)}.`);
         }}
       />
 
