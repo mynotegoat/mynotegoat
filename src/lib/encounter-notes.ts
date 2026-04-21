@@ -417,31 +417,27 @@ export function saveEncounterNoteRecords(records: EncounterNoteRecord[]): boolea
   // committed yet, so keeping them after a successful commit is noise.
   // We lazy-import draft-recovery because encounter-notes.ts is a
   // shared module and draft-recovery is browser-only.
+  // Clear every pending draft for every encounter we just saved,
+  // SYNCHRONOUSLY — no dynamic import, no async gap. The previous
+  // version used `void import("@/lib/draft-recovery").then(...)`,
+  // which left a ~10ms window after commit during which a fresh
+  // keystroke could write a new draft before the old drafts were
+  // cleared, re-inventing the exact "banner on every reload"
+  // problem the wider fix was meant to solve. Do the removeItem
+  // calls inline against the same prefix shape that draft-recovery
+  // uses so there's no cross-module ordering race.
   try {
-    // Lazy-require so SSR / tests don't pull browser storage in.
-    void import("@/lib/draft-recovery").then(({ draftKeyFor, clearDraft }) => {
-      // Clear EVERY draft for every encounter we just saved — don't
-      // gate on byte-for-byte HTML equality. The old check
-      //   parsed.html === record.soap[section]
-      // kept failing in practice because the editor's raw draft HTML
-      // (captured inside the editor's onInput handler) has trivial
-      // differences from the committed HTML after sanitizeSoapHtml /
-      // React's reconciler / macro-span normalization run over it:
-      // extra whitespace, normalized attribute order, collapsed empty
-      // paragraphs. Result: user sees a draft-recovery banner on
-      // every single reload even though the encounter saved cleanly.
-      //
-      // Semantically: once a record reaches saveEncounterNoteRecords,
-      // its pending drafts are moot — we have a committed version.
-      // Keeping them around is noise, not safety.
-      for (const record of records) {
-        for (const section of encounterSections) {
-          clearDraft(draftKeyFor(record.id, section));
-        }
+    for (const record of records) {
+      for (const section of encounterSections) {
+        // Matches draftKeyFor(record.id, section) — keep in sync with
+        // src/lib/draft-recovery.ts DRAFT_KEY_PREFIX.
+        const safeId = record.id.replace(/[^a-zA-Z0-9_-]/g, "");
+        const safeSection = section.replace(/[^a-zA-Z0-9_-]/g, "");
+        window.localStorage.removeItem(`casemate.draft.v1.${safeId}.${safeSection}`);
       }
-    });
+    }
   } catch {
-    // Non-fatal — drafts will be scanned and GC'd on next app load.
+    // Non-fatal — scanDrafts GC will clean up on next app load.
   }
   // Always dual-write the FULL set to cloud (not the pruned subset).
   // We don't await here because saveEncounterNoteRecords is sync for

@@ -42,6 +42,33 @@ type PendingDraft = DraftEntry & {
   committedHtml: string;
 };
 
+/**
+ * Parse the create-time timestamp out of an encounter id shaped like
+ * `enc-1776737838030-u31ywj` → Date. Returns null if the id isn't in
+ * that format. Used as a last-resort label when the encounter was
+ * pruned from the local cache so we can at least show the user when
+ * the draft originated instead of raw gibberish.
+ */
+function parseEncounterIdTimestamp(id: string): Date | null {
+  const match = id.match(/^enc-(\d+)-/);
+  if (!match) return null;
+  const ms = Number(match[1]);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function formatIdFallbackLabel(id: string): string {
+  const timestamp = parseEncounterIdTimestamp(id);
+  if (!timestamp) return `Encounter ${id}`;
+  return `Encounter from ${timestamp.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+}
+
 export function DraftRecoveryBanner() {
   const router = useRouter();
   const [pending, setPending] = useState<PendingDraft[]>([]);
@@ -64,10 +91,26 @@ export function DraftRecoveryBanner() {
     const pend: PendingDraft[] = [];
     for (const draft of drafts) {
       const encounter = byId.get(draft.encounterId);
+      // If the encounter isn't in the local cache, it was either
+      // deleted or pruned out (cache holds only the most recent 100 /
+      // 90 days). In either case the cloud has the committed version.
+      // Show the draft with an ID-derived label so the user has
+      // context; if the draft content is empty, silently drop it
+      // because there's nothing to recover.
+      if (!encounter) {
+        if (!draft.html.trim()) {
+          clearDraft(draft.key);
+          continue;
+        }
+        pend.push({
+          ...draft,
+          encounterLabel: formatIdFallbackLabel(draft.encounterId),
+          committedHtml: "",
+        });
+        continue;
+      }
       const committed =
-        encounter &&
-        typeof encounter.soap === "object" &&
-        draft.section in encounter.soap
+        typeof encounter.soap === "object" && draft.section in encounter.soap
           ? (encounter.soap as Record<string, string>)[draft.section]
           : "";
       // Content matches committed → already saved, clear the draft
@@ -83,9 +126,7 @@ export function DraftRecoveryBanner() {
       }
       pend.push({
         ...draft,
-        encounterLabel: encounter
-          ? `${encounter.patientName} — ${encounter.encounterDate}`
-          : null,
+        encounterLabel: `${encounter.patientName} — ${encounter.encounterDate}`,
         committedHtml: committed,
       });
     }

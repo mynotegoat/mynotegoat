@@ -6588,6 +6588,56 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
               </div>
 
+              <div className="grid gap-1">
+                <span className="text-sm font-semibold text-[var(--text-muted)]">Regions</span>
+                <div className="flex flex-wrap gap-1.5 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-2">
+                  {imagingRegions
+                    .filter((entry) => entry.modalities.includes(editingImagingReferral.mode))
+                    .map((entry) => {
+                      const region = entry.label;
+                      const selected = editingImagingReferral.regions.includes(region);
+                      return (
+                        <button
+                          aria-pressed={selected}
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+                            selected
+                              ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                              : "border-[var(--line-soft)] bg-white text-[var(--text-main)] hover:border-[var(--brand-primary)]"
+                          }`}
+                          key={`edit-region-${region}`}
+                          onClick={() =>
+                            setEditingImagingReferral((current) => {
+                              if (!current) return current;
+                              const isSelected = current.regions.includes(region);
+                              const nextRegions = isSelected
+                                ? current.regions.filter((r) => r !== region)
+                                : [...current.regions, region];
+                              // Also tidy up companion maps when removing.
+                              const nextFlexExt = isSelected
+                                ? current.flexExtRegions.filter((r) => r !== region)
+                                : current.flexExtRegions;
+                              const nextLaterality = { ...current.lateralityByRegion };
+                              if (isSelected) delete nextLaterality[region];
+                              return {
+                                ...current,
+                                regions: nextRegions,
+                                flexExtRegions: nextFlexExt,
+                                lateralityByRegion: nextLaterality,
+                              };
+                            })
+                          }
+                          type="button"
+                        >
+                          {region}
+                        </button>
+                      );
+                    })}
+                </div>
+                <span className="text-xs text-[var(--text-muted)]">
+                  Click to toggle. Laterality / Flex-Ext details preserved; remove a region to clear them.
+                </span>
+              </div>
+
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Findings</span>
                 <textarea
