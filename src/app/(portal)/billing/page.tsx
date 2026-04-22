@@ -444,6 +444,7 @@ export default function BillingPage() {
 
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState("");
+  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false);
   const [message, setMessage] = useState("");
 
   const diagnosisMap = useMemo(() => loadPatientDiagnosesMap(), []);
@@ -503,24 +504,49 @@ export default function BillingPage() {
       .sort((left, right) => left.fullName.localeCompare(right.fullName));
   }, [patientsById, chargeTotalsByPatientId]);
 
-  const filteredPatients = useMemo(() => {
-    const query = patientSearch.trim().toLowerCase();
-    if (!query) {
-      return patientRows;
-    }
-    return patientRows.filter((entry) => {
-      return (
-        entry.fullName.toLowerCase().includes(query) ||
-        entry.phone.toLowerCase().includes(query) ||
-        entry.attorney.toLowerCase().includes(query) ||
-        entry.dateOfLoss.toLowerCase().includes(query) ||
-        entry.caseNumber.toLowerCase().includes(query)
-      );
-    });
-  }, [patientRows, patientSearch]);
+  // Live-search matches for the autocomplete dropdown. Uses the same
+  // order-insensitive word-split logic as the Encounters picker so
+  // "smith john" and "john smith" both find "Smith, John". When the
+  // search text already equals a selected patient's fullName exactly
+  // we suppress the dropdown so the billing statement can render
+  // without the menu obscuring the page.
+  const patientSearchMatches = useMemo(() => {
+    const rawQuery = patientSearch.trim().toLowerCase();
+    if (!rawQuery) return [] as BillingPatientRow[];
+    const lockedName = selectedPatientId
+      ? patientRows.find((p) => p.id === selectedPatientId)?.fullName.toLowerCase() ?? ""
+      : "";
+    if (lockedName && rawQuery === lockedName) return [];
+    const queryWords = rawQuery
+      .replace(/[,.:;]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    if (queryWords.length === 0) return [];
+    return patientRows
+      .filter((entry) => {
+        const haystack = [
+          entry.fullName,
+          entry.phone,
+          entry.attorney,
+          entry.dateOfLoss,
+          entry.caseNumber,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .replace(/[,.:;]/g, " ");
+        return queryWords.every((word) => haystack.includes(word));
+      })
+      .slice(0, 12);
+  }, [patientRows, patientSearch, selectedPatientId]);
 
-  const fallbackPatientId = filteredPatients.find((entry) => entry.chargeCount > 0)?.id ?? filteredPatients[0]?.id ?? "";
-  const activePatientId = selectedPatientId || fallbackPatientId;
+  // The billing statement ONLY shows after the user explicitly picks
+  // a patient (click a dropdown row OR press Enter). Previously, the
+  // billing page auto-loaded the first filtered patient as the user
+  // typed, which silently attached the statement to whichever patient
+  // matched the search fragment — bad for patients with multiple
+  // cases or shared names. Match the Encounters picker behavior: no
+  // pick, no statement.
+  const activePatientId = selectedPatientId;
   const selectedPatient = patientRows.find((entry) => entry.id === activePatientId) ?? null;
 
   const encounterChargeLines = useMemo(() => {
@@ -631,50 +657,73 @@ export default function BillingPage() {
     <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <section className="panel-card p-4">
         <h2 className="text-xl font-semibold">Patients</h2>
-        <input
-          className="mt-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-          onChange={(event) => setPatientSearch(event.target.value)}
-          placeholder="Search patient..."
-          value={patientSearch}
-        />
-        {/* Live search: only show the patient list while the user is typing
-            a query or until they've picked a patient. Once a patient is
-            selected and the search box is empty, the list collapses to a
-            single "currently viewing" pill so the page isn't dominated by
-            the directory. */}
-        {patientSearch.trim() ? (
-          <div className="mt-3 max-h-[72vh] space-y-2 overflow-auto pr-1">
-            {filteredPatients.slice(0, 20).map((entry) => {
-              const selected = entry.id === activePatientId;
-              return (
-                <button
-                  className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                    selected
-                      ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
-                      : "border-[var(--line-soft)] bg-white hover:bg-[var(--bg-soft)]"
-                  }`}
-                  key={entry.id}
-                  onClick={() => {
-                    setSelectedPatientId(entry.id);
-                    setPatientSearch("");
-                    setMessage("");
-                  }}
-                  type="button"
-                >
-                  <p className="font-semibold">{entry.fullName}</p>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Case #: {entry.caseNumber || "-"} • DOI: {entry.dateOfLoss || "-"}
-                  </p>
-                </button>
+        <label className="relative mt-3 grid gap-1">
+          <input
+            className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+            onBlur={() => {
+              window.setTimeout(() => setShowPatientSuggestions(false), 150);
+            }}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setPatientSearch(nextValue);
+              setShowPatientSuggestions(true);
+              // Editing after a pick clears the committed selection —
+              // otherwise the statement on the right would stay locked
+              // to the previous patient while the user retyped.
+              if (selectedPatientId) {
+                const lockedName =
+                  patientRows.find((p) => p.id === selectedPatientId)?.fullName ?? "";
+                if (nextValue.trim().toLowerCase() !== lockedName.trim().toLowerCase()) {
+                  setSelectedPatientId("");
+                }
+              }
+            }}
+            onFocus={() => setShowPatientSuggestions(true)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              // Enter commits the top match (or an exact-name match
+              // if the user typed the full name out).
+              const typed = patientSearch.trim().toLowerCase();
+              const exact = patientRows.find(
+                (p) => p.fullName.toLowerCase() === typed,
               );
-            })}
-            {filteredPatients.length === 0 && (
-              <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-4 text-sm text-[var(--text-muted)]">
-                No matching patients.
-              </p>
-            )}
-          </div>
-        ) : selectedPatient ? (
+              const target = exact ?? patientSearchMatches[0] ?? null;
+              if (!target) return;
+              setPatientSearch(target.fullName);
+              setSelectedPatientId(target.id);
+              setShowPatientSuggestions(false);
+              setMessage("");
+            }}
+            placeholder="Type patient name, then click or press Enter..."
+            value={patientSearch}
+          />
+          {showPatientSuggestions && patientSearchMatches.length > 0 && (
+            <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-[var(--line-soft)] bg-white shadow-lg">
+              {patientSearchMatches.map((candidate) => (
+                <li key={`billing-patient-suggestion-${candidate.id}`}>
+                  <button
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-soft)]"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setPatientSearch(candidate.fullName);
+                      setSelectedPatientId(candidate.id);
+                      setShowPatientSuggestions(false);
+                      setMessage("");
+                    }}
+                    type="button"
+                  >
+                    <span className="font-semibold">{candidate.fullName}</span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {candidate.dateOfLoss ? `DOI ${candidate.dateOfLoss}` : candidate.caseNumber || ""}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </label>
+        {selectedPatient ? (
           <div className="mt-3 rounded-xl border border-[var(--brand-primary)] bg-[var(--bg-soft)] px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
               Viewing
@@ -685,12 +734,19 @@ export default function BillingPage() {
             </p>
             <button
               className="mt-2 text-xs font-semibold text-[var(--brand-primary)] underline"
-              onClick={() => setSelectedPatientId("")}
+              onClick={() => {
+                setSelectedPatientId("");
+                setPatientSearch("");
+              }}
               type="button"
             >
               Change patient
             </button>
           </div>
+        ) : patientSearch.trim() ? (
+          <p className="mt-3 rounded-xl border border-dashed border-[var(--line-soft)] px-3 py-4 text-sm text-[var(--text-muted)]">
+            Click a patient from the dropdown (or press Enter) to load their statement.
+          </p>
         ) : (
           <p className="mt-3 rounded-xl border border-dashed border-[var(--line-soft)] px-3 py-4 text-sm text-[var(--text-muted)]">
             Start typing a patient name above to begin.
