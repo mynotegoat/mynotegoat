@@ -358,9 +358,16 @@ export function useBillingMacros() {
       if (!name) {
         return false;
       }
+      const family = (draft.family ?? "").trim();
 
       updateLibrary((current) => {
-        const duplicate = current.packages.some((entry) => entry.name.toLowerCase() === name.toLowerCase());
+        // Names must be unique WITHIN a family (so "Gold" can exist in
+        // both "Spinal Decompression" and "Massage" without colliding).
+        const duplicate = current.packages.some(
+          (entry) =>
+            entry.name.toLowerCase() === name.toLowerCase() &&
+            (entry.family ?? "").trim().toLowerCase() === family.toLowerCase(),
+        );
         if (duplicate) {
           return current;
         }
@@ -375,12 +382,89 @@ export function useBillingMacros() {
               discountedPrice: Math.max(0, draft.discountedPrice),
               items: [],
               active: true,
+              ...(family ? { family } : {}),
             },
           ],
         };
       });
 
       return true;
+    },
+    [updateLibrary],
+  );
+
+  /**
+   * Reorder packages by full ordered list of ids. Used by drag-and-drop
+   * in the settings panel — both for moving a tier within a family and
+   * for moving a whole family-block when the user drags the family
+   * header.
+   */
+  const reorderPackages = useCallback(
+    (orderedIds: string[]) => {
+      updateLibrary((current) => {
+        const byId = new Map(current.packages.map((entry) => [entry.id, entry]));
+        const reordered: TreatmentPackage[] = [];
+        const seen = new Set<string>();
+        for (const id of orderedIds) {
+          const entry = byId.get(id);
+          if (entry && !seen.has(id)) {
+            reordered.push(entry);
+            seen.add(id);
+          }
+        }
+        // Append anything the caller forgot to list (defensive — keeps
+        // packages from disappearing if orderedIds is stale).
+        for (const entry of current.packages) {
+          if (!seen.has(entry.id)) reordered.push(entry);
+        }
+        return { ...current, packages: reordered };
+      });
+    },
+    [updateLibrary],
+  );
+
+  /**
+   * Rename a family across every package whose family matches the
+   * old value. `null` / "" target moves them all to Uncategorized.
+   */
+  const renamePackageFamily = useCallback(
+    (oldName: string, newName: string) => {
+      const oldKey = (oldName ?? "").trim().toLowerCase();
+      const next = (newName ?? "").trim();
+      updateLibrary((current) => ({
+        ...current,
+        packages: current.packages.map((entry) => {
+          const entryKey = (entry.family ?? "").trim().toLowerCase();
+          if (entryKey !== oldKey) return entry;
+          if (!next) {
+            const { family: _drop, ...rest } = entry;
+            return rest;
+          }
+          return { ...entry, family: next };
+        }),
+      }));
+    },
+    [updateLibrary],
+  );
+
+  /**
+   * Update the family of a single package — used when dragging a tier
+   * across families. Empty string moves it to Uncategorized.
+   */
+  const setPackageFamily = useCallback(
+    (packageId: string, family: string) => {
+      const next = (family ?? "").trim();
+      updateLibrary((current) => ({
+        ...current,
+        packages: current.packages.map((entry) => {
+          if (entry.id !== packageId) return entry;
+          if (!next) {
+            const { family: _drop, ...rest } = entry;
+            return rest;
+          }
+          return { ...entry, family: next };
+        }),
+      }));
     },
     [updateLibrary],
   );
@@ -518,6 +602,9 @@ export function useBillingMacros() {
     addPackage,
     updatePackage,
     removePackage,
+    reorderPackages,
+    renamePackageFamily,
+    setPackageFamily,
     addPackageTreatment,
     updatePackageTreatmentVisits,
     removePackageTreatment,

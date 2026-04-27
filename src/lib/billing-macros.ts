@@ -25,6 +25,13 @@ export interface TreatmentPackage {
   discountedPrice: number;
   items: TreatmentPackageItem[];
   active: boolean;
+  /** Optional family / group label for two-level organization in the
+   *  settings panel — e.g. family "Spinal Decompression" with tiers
+   *  "Gold" / "Silver" / "Bronze". Empty / missing means the package
+   *  groups under "Uncategorized". Just a string tag — no separate
+   *  Family entity, so renames cascade by editing every package
+   *  whose family matched. */
+  family?: string;
 }
 
 export interface DiagnosisMacro {
@@ -454,6 +461,8 @@ function normalizePackage(value: unknown, validTreatmentIds: Set<string>): Treat
     new Map(items.map((entry) => [entry.treatmentId, entry] as const)).values(),
   );
 
+  const family = normalizeString(row.family);
+
   return {
     id,
     name,
@@ -461,6 +470,7 @@ function normalizePackage(value: unknown, validTreatmentIds: Set<string>): Treat
     discountedPrice: Math.max(0, normalizeNumber(row.discountedPrice, 0)),
     items: dedupedItems,
     active: row.active !== false,
+    ...(family ? { family } : {}),
   };
 }
 
