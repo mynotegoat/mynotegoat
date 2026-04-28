@@ -3310,104 +3310,164 @@ function ImagingSpecialistSummary({
   const mriEntries = (patient.mriReferrals ?? []) as ImagingSummaryEntry[];
   const specEntries = (patient.specialistReferrals ?? []) as ImagingSummaryEntry[];
 
-  const pickMostRecent = (entries: ImagingSummaryEntry[]): ImagingSummaryEntry | null => {
-    if (entries.length === 0) return null;
-    // Entries are stored in creation order; the "most recent" for
-    // summary purposes is the last one. Covers the 95% single-referral
-    // case and gives a sensible default for the multi-referral case
-    // without introducing a dedicated sort by sentDate.
-    return entries[entries.length - 1] ?? null;
-  };
-
-  const latestXray = pickMostRecent(xrayEntries);
-  const latestMri = pickMostRecent(mriEntries);
-  const latestSpec = pickMostRecent(specEntries);
-
-  if (!latestXray && !latestMri && !latestSpec) {
+  if (
+    xrayEntries.length === 0 &&
+    mriEntries.length === 0 &&
+    specEntries.length === 0
+  ) {
     return null;
   }
 
-  type Row = {
-    label: string;
+  // Entries are stored in creation order. Reverse so the most recent
+  // referral renders first — that's what the provider almost always
+  // wants to read first. We list them all so multi-referral patients
+  // (re-imaged after worsening, second specialist consult, etc.) get
+  // every entry visible without truncation.
+  const orderRecentFirst = <T,>(arr: T[]): T[] => [...arr].reverse();
+
+  type ImagingRow = {
     regions: string;
     sent: string;
     completed: string;
     reviewed: string;
   };
-  const rows: Row[] = [];
-  if (latestXray) {
-    rows.push({
-      label: "X-Ray",
-      regions: readRegionsList(latestXray),
-      sent: toUsDate(readStringField(latestXray, "sentDate", "sent") ?? ""),
-      completed: toUsDate(readStringField(latestXray, "doneDate", "completedDate") ?? ""),
-      reviewed: toUsDate(
-        readStringField(latestXray, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
-      ),
-    });
-  }
-  if (latestMri) {
-    rows.push({
-      label: "MRI",
-      regions: readRegionsList(latestMri),
-      sent: toUsDate(readStringField(latestMri, "sentDate", "sent") ?? ""),
-      completed: toUsDate(readStringField(latestMri, "doneDate", "completedDate") ?? ""),
-      reviewed: toUsDate(
-        readStringField(latestMri, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
-      ),
-    });
-  }
-  if (latestSpec) {
-    // Specialists don't have regions — reuse the middle slot for the
-    // specialist's name so the column isn't wasted space. Specialists
-    // also don't have a "reviewed" step; leave that cell empty with
-    // an em-dash so the 4-column grid stays aligned with X-Ray/MRI.
-    rows.push({
-      label: "Specialist",
-      regions: readStringField(latestSpec, "specialist", "name") || "",
-      sent: toUsDate(readStringField(latestSpec, "sentDate", "sent") ?? ""),
-      completed: toUsDate(
-        readStringField(
-          latestSpec,
-          "completedDate",
-          "reportReceivedDate",
-          "reportDate",
-        ) ?? "",
-      ),
-      reviewed: "",
-    });
-  }
+  type SpecialistRow = {
+    doctor: string;
+    sent: string;
+    completed: string;
+  };
+
+  const xrayRows: ImagingRow[] = orderRecentFirst(xrayEntries).map((entry) => ({
+    regions: readRegionsList(entry),
+    sent: toUsDate(readStringField(entry, "sentDate", "sent") ?? ""),
+    completed: toUsDate(readStringField(entry, "doneDate", "completedDate") ?? ""),
+    reviewed: toUsDate(
+      readStringField(entry, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
+    ),
+  }));
+  const mriRows: ImagingRow[] = orderRecentFirst(mriEntries).map((entry) => ({
+    regions: readRegionsList(entry),
+    sent: toUsDate(readStringField(entry, "sentDate", "sent") ?? ""),
+    completed: toUsDate(readStringField(entry, "doneDate", "completedDate") ?? ""),
+    reviewed: toUsDate(
+      readStringField(entry, "reportReviewedDate", "reviewedDate", "reviewed") ?? "",
+    ),
+  }));
+  const specRows: SpecialistRow[] = orderRecentFirst(specEntries).map((entry) => ({
+    doctor: readStringField(entry, "specialist", "name") || "",
+    sent: toUsDate(readStringField(entry, "sentDate", "sent") ?? ""),
+    completed: toUsDate(
+      readStringField(entry, "completedDate", "reportReceivedDate", "reportDate") ?? "",
+    ),
+  }));
+
+  const Empty = () => <span className="text-[var(--text-muted)]">—</span>;
+  const Date = ({ label, value }: { label: string; value: string }) => (
+    <span className="inline-flex items-baseline gap-1 tabular-nums whitespace-nowrap">
+      <span className="text-[var(--text-muted)]">{label}:</span>
+      {value || <Empty />}
+    </span>
+  );
 
   return (
-    <article className="panel-card p-3">
-      <h4 className="mb-4 border-b border-[var(--line-soft)] pb-2 text-sm font-semibold">
+    <article className="panel-card p-3 text-xs">
+      <h4 className="mb-3 border-b border-[var(--line-soft)] pb-2 text-sm font-semibold">
         Imaging & Specialist
       </h4>
-      <ul className="space-y-2 text-xs">
-        {rows.map((row) => (
-          <li
-            className="grid grid-cols-[72px_1fr_auto_auto_auto] items-center gap-3"
-            key={`imaging-summary-${row.label}`}
-          >
-            <span className="font-semibold">{row.label}</span>
-            <span className="truncate" title={row.regions}>
-              {row.regions || <span className="text-[var(--text-muted)]">—</span>}
-            </span>
-            <span className="tabular-nums">
-              <span className="text-[var(--text-muted)]">Sent: </span>
-              {row.sent || <span className="text-[var(--text-muted)]">—</span>}
-            </span>
-            <span className="tabular-nums">
-              <span className="text-[var(--text-muted)]">Completed: </span>
-              {row.completed || <span className="text-[var(--text-muted)]">—</span>}
-            </span>
-            <span className="tabular-nums">
-              <span className="text-[var(--text-muted)]">Reviewed: </span>
-              {row.reviewed || <span className="text-[var(--text-muted)]">—</span>}
-            </span>
-          </li>
-        ))}
-      </ul>
+
+      <div className="space-y-3">
+        {/* X-Ray section */}
+        <section>
+          <header className="mb-1 flex items-baseline justify-between gap-2">
+            <span className="font-semibold">X-Ray</span>
+            {xrayRows.length > 1 && (
+              <span className="text-[var(--text-muted)]">
+                {xrayRows.length} referrals
+              </span>
+            )}
+          </header>
+          {xrayRows.length === 0 ? (
+            <p className="text-[var(--text-muted)]">No X-Ray referrals yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {xrayRows.map((row, idx) => (
+                <li
+                  className="rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5"
+                  key={`imaging-summary-xray-${idx}`}
+                >
+                  <p className="font-medium">{row.regions || <Empty />}</p>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <Date label="Sent" value={row.sent} />
+                    <Date label="Completed" value={row.completed} />
+                    <Date label="Reviewed" value={row.reviewed} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* MRI section */}
+        <section>
+          <header className="mb-1 flex items-baseline justify-between gap-2">
+            <span className="font-semibold">MRI</span>
+            {mriRows.length > 1 && (
+              <span className="text-[var(--text-muted)]">
+                {mriRows.length} referrals
+              </span>
+            )}
+          </header>
+          {mriRows.length === 0 ? (
+            <p className="text-[var(--text-muted)]">No MRI referrals yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {mriRows.map((row, idx) => (
+                <li
+                  className="rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5"
+                  key={`imaging-summary-mri-${idx}`}
+                >
+                  <p className="font-medium">{row.regions || <Empty />}</p>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <Date label="Sent" value={row.sent} />
+                    <Date label="Completed" value={row.completed} />
+                    <Date label="Reviewed" value={row.reviewed} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Specialist section — full doctor name, no truncation. */}
+        <section>
+          <header className="mb-1 flex items-baseline justify-between gap-2">
+            <span className="font-semibold">Specialist</span>
+            {specRows.length > 1 && (
+              <span className="text-[var(--text-muted)]">
+                {specRows.length} referrals
+              </span>
+            )}
+          </header>
+          {specRows.length === 0 ? (
+            <p className="text-[var(--text-muted)]">No specialist referrals yet.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {specRows.map((row, idx) => (
+                <li
+                  className="rounded-lg border border-[var(--line-soft)] bg-[var(--bg-soft)] px-2 py-1.5"
+                  key={`imaging-summary-spec-${idx}`}
+                >
+                  <p className="font-medium">{row.doctor || <Empty />}</p>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <Date label="Sent" value={row.sent} />
+                    <Date label="Completed" value={row.completed} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </article>
   );
 }
