@@ -105,31 +105,52 @@ export function useBillingMacros() {
     [updateLibrary],
   );
 
+  /**
+   * Add (or look up if duplicate) a diagnosis in the master library.
+   * Returns the resulting diagnosis id and whether this call inserted
+   * a new row, so callers can chain bundle attachments without
+   * re-querying state and still distinguish between "newly created"
+   * vs "matched an existing code".
+   *
+   * Returns { id: null, added: false } when input is invalid (missing
+   * code or description).
+   */
   const addDiagnosis = useCallback(
-    (draft: { code: string; description: string; folderId?: string }) => {
+    (draft: {
+      code: string;
+      description: string;
+      folderId?: string;
+    }): { id: string | null; added: boolean } => {
       const code = draft.code.trim().toUpperCase();
       const description = draft.description.trim();
       if (!code || !description) {
-        return false;
+        return { id: null, added: false };
       }
 
+      let resultId: string | null = null;
+      let wasAdded = false;
       updateLibrary((current) => {
-        const duplicate = current.diagnoses.some(
+        const duplicate = current.diagnoses.find(
           (entry) => entry.code.toLowerCase() === code.toLowerCase(),
         );
         if (duplicate) {
+          resultId = duplicate.id;
+          wasAdded = false;
           return current;
         }
         const allowedFolders = new Set(current.diagnosisFolders.map((entry) => entry.id));
         const folderId = allowedFolders.has(draft.folderId?.trim() ?? "")
           ? (draft.folderId?.trim() as string)
           : current.diagnosisFolders[0]?.id ?? GENERAL_DIAGNOSIS_FOLDER_ID;
+        const newId = createId("dx");
+        resultId = newId;
+        wasAdded = true;
         return {
           ...current,
           diagnoses: [
             ...current.diagnoses,
             {
-              id: createId("dx"),
+              id: newId,
               code,
               description,
               folderId,
@@ -139,7 +160,7 @@ export function useBillingMacros() {
         };
       });
 
-      return true;
+      return { id: resultId, added: wasAdded };
     },
     [updateLibrary],
   );

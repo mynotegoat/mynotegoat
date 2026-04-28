@@ -251,11 +251,13 @@ function formatSpecialistSummary(entries: NarrativeSpecialistEntry[]) {
   }
   return entries
     .map((entry, index) => {
-      const line = `${index + 1}. ${entry.specialist || "-"} | Sent: ${toUsDate(entry.sentDate || "-")} | Completed: ${toUsDate(entry.completedDate || "-")}`;
+      // Sent / Completed dates were dropped per the office's preferred
+      // narrative format — the specialist's name and their actual
+      // recommendations are what carries weight in the report. Dates
+      // still surface in the patient page Imaging & Specialist card,
+      // so the info isn't lost; it's just kept out of the narrative.
+      const line = `${index + 1}. ${entry.specialist || "-"}`;
       const recs = entry.recommendations?.trim();
-      // Same rationale as the imaging "Findings:" change — keep the
-      // label on its own line so multi-line recommendation text doesn't
-      // collapse onto the label row.
       return recs ? `${line}\n   Recommendations:\n${recs}` : line;
     })
     .join("\n");

@@ -1206,7 +1206,12 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const router = useRouter();
   const { officeSettings } = useOfficeSettings();
   const { caseStatuses, lienLabel, lienOptions } = useCaseStatuses();
-  const { billingMacros } = useBillingMacros();
+  const {
+    billingMacros,
+    addDiagnosis: addLibraryDiagnosis,
+    addBundle: addLibraryBundle,
+    updateBundle: updateLibraryBundle,
+  } = useBillingMacros();
   const { contacts, addContact } = useContactDirectory();
   const { documentTemplates } = useDocumentTemplates();
   const { reportTemplates } = useReportTemplates();
@@ -1453,9 +1458,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [reviewStatus, setReviewStatus] = useState(patient.matrix?.review || "Not Requested");
   const [diagnosisMacroIdDraft, setDiagnosisMacroIdDraft] = useState("");
   const [diagnosisBundleIdDraft, setDiagnosisBundleIdDraft] = useState("");
-  const [customDiagnosisCodeDraft, setCustomDiagnosisCodeDraft] = useState("");
-  const [customDiagnosisDescriptionDraft, setCustomDiagnosisDescriptionDraft] = useState("");
   const [diagnosisMessage, setDiagnosisMessage] = useState("");
+  // Modal state for "+ Add Custom Code" — adds the dx to the master
+  // library AND attaches it to the current patient + any selected
+  // bundles in one shot.
+  const [showAddCustomDxModal, setShowAddCustomDxModal] = useState(false);
+  const [customDxCode, setCustomDxCode] = useState("");
+  const [customDxDescription, setCustomDxDescription] = useState("");
+  const [customDxFolderId, setCustomDxFolderId] = useState("");
+  const [customDxBundleIds, setCustomDxBundleIds] = useState<Set<string>>(new Set());
+  const [customDxNewBundleName, setCustomDxNewBundleName] = useState("");
+  const [customDxError, setCustomDxError] = useState("");
   const [letterTemplateIdDraft, setLetterTemplateIdDraft] = useState("");
   const [letterMessage, setLetterMessage] = useState("");
   const [narrativeTemplateIdDraft, setNarrativeTemplateIdDraft] = useState("");
@@ -3573,15 +3586,75 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     );
   };
 
-  const addCustomDiagnosis = () => {
-    const wasAdded = addDiagnosis(customDiagnosisCodeDraft, customDiagnosisDescriptionDraft, "Manual");
-    if (!wasAdded) {
-      setDiagnosisMessage("Enter diagnosis code + description. Duplicate entries are skipped.");
+  const openAddCustomDxModal = () => {
+    setCustomDxCode("");
+    setCustomDxDescription("");
+    setCustomDxFolderId(billingMacros.diagnosisFolders[0]?.id ?? "");
+    setCustomDxBundleIds(new Set());
+    setCustomDxNewBundleName("");
+    setCustomDxError("");
+    setShowAddCustomDxModal(true);
+  };
+
+  const closeAddCustomDxModal = () => {
+    setShowAddCustomDxModal(false);
+    setCustomDxError("");
+  };
+
+  const toggleCustomDxBundle = (bundleId: string) => {
+    setCustomDxBundleIds((current) => {
+      const next = new Set(current);
+      if (next.has(bundleId)) next.delete(bundleId);
+      else next.add(bundleId);
+      return next;
+    });
+  };
+
+  const handleSaveCustomDx = () => {
+    const codeTrim = customDxCode.trim();
+    const descTrim = customDxDescription.trim();
+    if (!codeTrim || !descTrim) {
+      setCustomDxError("Code and description are required.");
       return;
     }
-    setCustomDiagnosisCodeDraft("");
-    setCustomDiagnosisDescriptionDraft("");
-    setDiagnosisMessage("Custom diagnosis code added to patient file.");
+    // 1) Add (or look up) the diagnosis in the master library.
+    const { id: libraryDxId, added: wasAddedToLibrary } = addLibraryDiagnosis({
+      code: codeTrim,
+      description: descTrim,
+      folderId: customDxFolderId || undefined,
+    });
+    if (!libraryDxId) {
+      setCustomDxError("Could not add diagnosis. Check the code and description.");
+      return;
+    }
+    // 2) Attach to every selected existing bundle. Read the bundle's
+    //    current diagnosis list and append the new id; updateBundle
+    //    re-validates against the library so a stale id is ignored.
+    for (const bundleId of customDxBundleIds) {
+      const bundle = billingMacros.bundles.find((b) => b.id === bundleId);
+      if (!bundle) continue;
+      if (bundle.diagnosisIds.includes(libraryDxId)) continue;
+      updateLibraryBundle(bundleId, {
+        diagnosisIds: [...bundle.diagnosisIds, libraryDxId],
+      });
+    }
+    // 3) Optionally spawn a brand-new bundle that contains just this dx.
+    const newBundleNameTrim = customDxNewBundleName.trim();
+    if (newBundleNameTrim) {
+      addLibraryBundle(newBundleNameTrim, [libraryDxId]);
+    }
+    // 4) Add to the current patient's file.
+    addDiagnosis(codeTrim, descTrim, "Manual");
+    // Compose a friendly status message.
+    const parts: string[] = [];
+    parts.push(wasAddedToLibrary ? "added to library" : "already in library");
+    const bundleCount = customDxBundleIds.size + (newBundleNameTrim ? 1 : 0);
+    if (bundleCount > 0) {
+      parts.push(`${bundleCount} bundle${bundleCount === 1 ? "" : "s"} updated`);
+    }
+    parts.push("added to this patient");
+    setDiagnosisMessage(`${codeTrim}: ${parts.join(", ")}.`);
+    setShowAddCustomDxModal(false);
   };
 
   const initialExamDateValue = parseUsDate(initialExam);
@@ -5211,26 +5284,21 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </button>
               </div>
 
-              <div className="space-y-2 rounded-xl border border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
+              <div className="space-y-2 rounded-xl border border-dashed border-[var(--line-soft)] bg-[var(--bg-soft)] p-3">
                 <p className="text-sm font-semibold">Add Custom Diagnosis</p>
-                <input
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => setCustomDiagnosisCodeDraft(event.target.value)}
-                  placeholder="ICD-10 Code"
-                  value={customDiagnosisCodeDraft}
-                />
-                <input
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                  onChange={(event) => setCustomDiagnosisDescriptionDraft(event.target.value)}
-                  placeholder="Description"
-                  value={customDiagnosisDescriptionDraft}
-                />
+                <p className="text-xs text-[var(--text-muted)]">
+                  Enter a brand-new ICD-10 code that isn&apos;t in the
+                  library yet. The modal lets you place it in a folder
+                  and attach it to one or more bundles in the same step
+                  — so the next patient who needs it can pick it from
+                  the regular dropdown.
+                </p>
                 <button
-                  className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 font-semibold"
-                  onClick={addCustomDiagnosis}
+                  className="w-full rounded-xl bg-[var(--brand-primary)] px-3 py-2 font-semibold text-white"
+                  onClick={openAddCustomDxModal}
                   type="button"
                 >
-                  Add Custom Code
+                  + Add Custom Code
                 </button>
               </div>
             </div>
@@ -6982,6 +7050,138 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         onClose={() => setScannerOpen(false)}
         open={scannerOpen}
       />
+
+      {showAddCustomDxModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
+          <ScrollLock />
+          <form
+            className="panel-card mx-auto w-full max-w-xl p-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveCustomDx();
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold">Add Custom Diagnosis Code</h3>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Adds the code to the master library, attaches it to any
+                  bundles you select, and adds it to this patient&apos;s file.
+                </p>
+              </div>
+              <button
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm font-semibold"
+                onClick={closeAddCustomDxModal}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  ICD-10 Code *
+                </span>
+                <input
+                  autoFocus
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setCustomDxCode(e.target.value)}
+                  placeholder="e.g. M54.16"
+                  value={customDxCode}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Description *
+                </span>
+                <input
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setCustomDxDescription(e.target.value)}
+                  placeholder="e.g. Radiculopathy, lumbar region"
+                  value={customDxDescription}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Folder
+                </span>
+                <select
+                  className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                  onChange={(e) => setCustomDxFolderId(e.target.value)}
+                  value={customDxFolderId}
+                >
+                  {billingMacros.diagnosisFolders.map((folder) => (
+                    <option key={`custom-dx-folder-${folder.id}`} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <fieldset className="grid gap-1">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Bundles (optional)
+                </legend>
+                {billingMacros.bundles.length === 0 ? (
+                  <p className="text-xs text-[var(--text-muted)]">
+                    No bundles in the library yet. Use the field below to
+                    create a brand-new bundle that contains this code.
+                  </p>
+                ) : (
+                  <div className="grid max-h-40 gap-1 overflow-y-auto rounded-xl border border-[var(--line-soft)] bg-white p-2">
+                    {billingMacros.bundles.map((bundle) => (
+                      <label
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-[var(--bg-soft)]"
+                        key={`custom-dx-bundle-${bundle.id}`}
+                      >
+                        <input
+                          checked={customDxBundleIds.has(bundle.id)}
+                          className="accent-[var(--brand-primary)]"
+                          onChange={() => toggleCustomDxBundle(bundle.id)}
+                          type="checkbox"
+                        />
+                        <span className="text-sm">{bundle.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <label className="mt-2 grid gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Or create a new bundle
+                  </span>
+                  <input
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
+                    onChange={(e) => setCustomDxNewBundleName(e.target.value)}
+                    placeholder="New bundle name (optional)"
+                    value={customDxNewBundleName}
+                  />
+                </label>
+              </fieldset>
+
+              {customDxError && (
+                <p className="text-sm font-semibold text-[#b43b34]">{customDxError}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2 font-semibold"
+                onClick={closeAddCustomDxModal}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white"
+                type="submit"
+              >
+                Save Code
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">

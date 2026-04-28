@@ -64,6 +64,11 @@ export function BillingMacroSettingsPanel() {
     description: "",
     folderId: "",
   });
+  // Bundle ids the user wants to attach the new diagnosis to. Same
+  // multi-select pattern the patient page uses so the two flows match.
+  const [diagnosisDraftBundleIds, setDiagnosisDraftBundleIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [diagnosisFolderDraft, setDiagnosisFolderDraft] = useState("");
   const [bundleNameDraft, setBundleNameDraft] = useState("");
   const [bundleDiagnosisDraft, setBundleDiagnosisDraft] = useState<string[]>([]);
@@ -115,20 +120,43 @@ export function BillingMacroSettingsPanel() {
   };
 
   const handleAddDiagnosis = () => {
-    const added = addDiagnosis({
+    const { id, added } = addDiagnosis({
       code: diagnosisDraft.code,
       description: diagnosisDraft.description,
       folderId: diagnosisDraft.folderId || billingMacros.diagnosisFolders[0]?.id,
     });
-    if (!added) {
-      setError("Could not add diagnosis code. Code/description may be missing or duplicated.");
+    if (!id) {
+      setError("Could not add diagnosis code. Code or description is missing.");
       return;
+    }
+    if (!added) {
+      setError("Diagnosis code already exists in the library.");
+      return;
+    }
+    // Attach the new dx to every bundle the user ticked. updateBundle
+    // re-validates against the library so a stale id is dropped.
+    for (const bundleId of diagnosisDraftBundleIds) {
+      const bundle = billingMacros.bundles.find((b) => b.id === bundleId);
+      if (!bundle) continue;
+      if (bundle.diagnosisIds.includes(id)) continue;
+      updateBundle(bundleId, { diagnosisIds: [...bundle.diagnosisIds, id] });
     }
     setError("");
     setDiagnosisDraft({
       code: "",
       description: "",
       folderId: diagnosisDraft.folderId || billingMacros.diagnosisFolders[0]?.id || "",
+    });
+    // Reset bundle selection too so the next dx starts fresh.
+    setDiagnosisDraftBundleIds(new Set());
+  };
+
+  const toggleDiagnosisDraftBundle = (bundleId: string) => {
+    setDiagnosisDraftBundleIds((current) => {
+      const next = new Set(current);
+      if (next.has(bundleId)) next.delete(bundleId);
+      else next.add(bundleId);
+      return next;
     });
   };
 
@@ -515,6 +543,36 @@ export function BillingMacroSettingsPanel() {
                 ))}
               </select>
             </div>
+            {/* Bundle picker — match the patient page custom-dx flow.
+                Optional; multiple bundles can be ticked at once. */}
+            <fieldset className="mt-2 rounded-lg border border-[var(--line-soft)] bg-white p-2">
+              <legend className="px-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+                Bundles (optional)
+              </legend>
+              {billingMacros.bundles.length === 0 ? (
+                <p className="px-1 text-xs text-[var(--text-muted)]">
+                  No bundles in the library yet. Add a bundle below first
+                  if you want this code to belong to one.
+                </p>
+              ) : (
+                <div className="grid max-h-32 gap-1 overflow-y-auto px-1">
+                  {billingMacros.bundles.map((bundle) => (
+                    <label
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[var(--bg-soft)]"
+                      key={`dx-bundle-pick-${bundle.id}`}
+                    >
+                      <input
+                        checked={diagnosisDraftBundleIds.has(bundle.id)}
+                        className="accent-[var(--brand-primary)]"
+                        onChange={() => toggleDiagnosisDraftBundle(bundle.id)}
+                        type="checkbox"
+                      />
+                      <span className="text-sm">{bundle.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
             <button
               className="mt-2 w-full rounded-xl bg-[var(--brand-primary)] px-4 py-2 font-semibold text-white transition-all active:scale-[0.97] active:brightness-90"
               onClick={handleAddDiagnosis}
