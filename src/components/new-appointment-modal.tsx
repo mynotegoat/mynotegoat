@@ -1292,7 +1292,7 @@ export function NewAppointmentModal({
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <label className="grid gap-1 md:col-span-2">
+          <label className="grid gap-1 min-w-0 md:col-span-2">
             <span className="text-sm font-semibold text-[var(--text-muted)]">Start Date *</span>
             <UsDateInput
               className="w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
@@ -1316,11 +1316,6 @@ export function NewAppointmentModal({
                 }));
               }}
               value={startDateDisplay}
-            />
-            <DayScheduleHint
-              dateIso={draft.startDate}
-              scheduleAppointments={scheduleAppointments}
-              excludeAppointmentId={null}
             />
           </label>
           <label className="grid gap-1">
@@ -1395,6 +1390,20 @@ export function NewAppointmentModal({
               </div>
             </div>
           </label>
+        </div>
+
+        {/* Day-schedule hint as its own full-width row so it doesn't
+            get crammed inside the date column and visually overlap
+            the Start Time / Duration controls (the previous layout
+            put this inside the Start Date label, which on wide
+            viewports stretched the row height and made the panel
+            appear to bleed under the time/duration boxes). */}
+        <div className="mt-2">
+          <DayScheduleHint
+            dateIso={draft.startDate}
+            scheduleAppointments={scheduleAppointments}
+            excludeAppointmentId={null}
+          />
         </div>
 
         {draft.isRecurring && (
