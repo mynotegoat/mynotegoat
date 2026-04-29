@@ -31,6 +31,18 @@ export function stripHtmlIndentation(html: string): string {
  * our `kv-cont` and breaking the continuation indent silently.
  */
 export function applyLabelValueHangingIndent(html: string): string {
+  // Diagnostic: dump the raw input HTML (pre-transform) so we can
+  // see EXACTLY what the helper is being asked to process. The
+  // alignment bugs I keep failing to fix correctly are caused by my
+  // assumptions about the template's HTML structure not matching the
+  // truth. Set window.__DOC_LAYOUT_DEBUG = false to silence.
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __DOC_LAYOUT_DEBUG?: boolean };
+    if (w.__DOC_LAYOUT_DEBUG !== false) {
+      console.log("[doc-layout] input HTML:\n" + html);
+    }
+  }
+
   const labelPatternSource = "[A-Z][A-Za-z0-9 ()&/\\-]*?:";
   // Match either <p ...> ... </p> or <div ...> ... </div> as a "block".
   // Case-insensitive so contenteditable's mix of <P> / <DIV> works too.
@@ -142,5 +154,13 @@ export function applyLabelValueHangingIndent(html: string): string {
     });
     if (before === next) break;
   }
+
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __DOC_LAYOUT_DEBUG?: boolean };
+    if (w.__DOC_LAYOUT_DEBUG !== false) {
+      console.log("[doc-layout] output HTML:\n" + next);
+    }
+  }
+
   return next;
 }
