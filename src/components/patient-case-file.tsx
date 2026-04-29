@@ -1255,8 +1255,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { encountersByNewest, createEncounter, setSoapSection, addMacroRun, addCharge, deleteEncounter } = useEncounterNotes();
   const { macroLibrary } = useMacroTemplates();
   const { entries: patientDiagnoses, addDiagnosis, addBulkDiagnoses, removeDiagnosis, reorderDiagnoses } = usePatientDiagnoses(patient.id);
-  const { recordsByPatientId: followUpOverridesByPatientId, getRecord: getPatientFollowUpOverride, setPatientRefused, setCompletedPriorCare, setNotNeeded } =
-    usePatientFollowUpOverrides();
+  const {
+    recordsByPatientId: followUpOverridesByPatientId,
+    getRecord: getPatientFollowUpOverride,
+    setPatientRefusedAsync,
+    setCompletedPriorCareAsync,
+    setNotNeededAsync,
+  } = usePatientFollowUpOverrides();
   const patientFlowItems = useMemo(
     () => buildFollowUpItems([patient], { followUpOverrides: followUpOverridesByPatientId }),
     [patient, followUpOverridesByPatientId],
@@ -3623,6 +3628,49 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     void performPatientSave(overrides, { silent: true });
   };
 
+  // Loud, awaitable wrapper for the Patient Refused / Completed Prior
+  // Care / No Imaging override toggles. The previous fire-and-forget
+  // pattern silently dropped failed cloud writes — the toggle visibly
+  // flipped, the user moved on, and the next bootstrap overwrote
+  // localStorage from the stale cloud value (wiping every toggle in the
+  // session). This routes the write through the existing save pill so
+  // the user gets a hard signal that the cloud actually accepted it.
+  const categoryLabel = (category: "xray" | "mriCt" | "specialist") =>
+    category === "xray" ? "X-Ray" : category === "mriCt" ? "MRI/CT" : "Specialist";
+  const flagLabel = (flag: "patientRefused" | "completedPriorCare" | "notNeeded") =>
+    flag === "patientRefused" ? "Patient Refused"
+      : flag === "completedPriorCare" ? "Completed Prior Care"
+        : "Not Needed";
+  const runOverrideToggle = async (
+    category: "xray" | "mriCt" | "specialist",
+    flag: "patientRefused" | "completedPriorCare" | "notNeeded",
+    enabled: boolean,
+  ) => {
+    const label = `${categoryLabel(category)} → ${flagLabel(flag)}`;
+    setSaveStatus("saving");
+    setSaveMessage(`Saving ${label}${enabled ? " ON" : " OFF"} — confirming cloud write...`);
+    const setter =
+      flag === "patientRefused" ? setPatientRefusedAsync
+        : flag === "completedPriorCare" ? setCompletedPriorCareAsync
+          : setNotNeededAsync;
+    try {
+      await setter(patient.id, category, enabled);
+      const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      setSaveStatus("saved");
+      setSaveMessage(`Saved ${label}${enabled ? " ON" : " OFF"} · ${time}`);
+      setLastSavedAt(new Date().toISOString());
+      window.setTimeout(() => {
+        setSaveStatus((current) => (current === "saved" ? "idle" : current));
+      }, 2500);
+    } catch (error) {
+      console.error("[Override Toggle] cloud write failed:", error);
+      setSaveStatus("error");
+      setSaveMessage(
+        `⚠ "${label}" did NOT save to cloud. Don't refresh or close — try toggling again, or check your connection.`,
+      );
+    }
+  };
+
   const saveAndClosePatientFile = async () => {
     const ok = await performPatientSave({}, { silent: false });
     if (!ok) {
@@ -4255,7 +4303,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.patientRefused}
-                      onChange={(event) => setPatientRefused(patient.id, "xray", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("xray", "patientRefused", event.target.checked); }}
                       type="checkbox"
                     />
                     Patient Refused
@@ -4263,7 +4311,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.completedPriorCare}
-                      onChange={(event) => setCompletedPriorCare(patient.id, "xray", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("xray", "completedPriorCare", event.target.checked); }}
                       type="checkbox"
                     />
                     Completed Prior Care
@@ -4271,7 +4319,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={xrayFollowUpOverride.notNeeded}
-                      onChange={(event) => setNotNeeded(patient.id, "xray", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("xray", "notNeeded", event.target.checked); }}
                       type="checkbox"
                     />
                     No X-Ray
@@ -4467,7 +4515,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.patientRefused}
-                      onChange={(event) => setPatientRefused(patient.id, "mriCt", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("mriCt", "patientRefused", event.target.checked); }}
                       type="checkbox"
                     />
                     Patient Refused
@@ -4475,7 +4523,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.completedPriorCare}
-                      onChange={(event) => setCompletedPriorCare(patient.id, "mriCt", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("mriCt", "completedPriorCare", event.target.checked); }}
                       type="checkbox"
                     />
                     Completed Prior Care
@@ -4483,7 +4531,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={mriCtFollowUpOverride.notNeeded}
-                      onChange={(event) => setNotNeeded(patient.id, "mriCt", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("mriCt", "notNeeded", event.target.checked); }}
                       type="checkbox"
                     />
                     No MRI
@@ -4622,7 +4670,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={specialistFollowUpOverride.patientRefused}
-                      onChange={(event) => setPatientRefused(patient.id, "specialist", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("specialist", "patientRefused", event.target.checked); }}
                       type="checkbox"
                     />
                     Patient Refused
@@ -4630,7 +4678,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={specialistFollowUpOverride.completedPriorCare}
-                      onChange={(event) => setCompletedPriorCare(patient.id, "specialist", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("specialist", "completedPriorCare", event.target.checked); }}
                       type="checkbox"
                     />
                     Completed Prior Care
@@ -4638,7 +4686,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)]">
                     <input
                       checked={specialistFollowUpOverride.notNeeded}
-                      onChange={(event) => setNotNeeded(patient.id, "specialist", event.target.checked)}
+                      onChange={(event) => { void runOverrideToggle("specialist", "notNeeded", event.target.checked); }}
                       type="checkbox"
                     />
                     No Spcl

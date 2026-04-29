@@ -721,19 +721,58 @@ async function bootstrapTableBackedEntities() {
           }
         } else {
           // Table has data — replace localStorage from the table for enabled keys.
+          //
+          // SAFETY: Before clobbering local with cloud, count what each side
+          // has. If local has MORE entries than cloud for a record-shaped key
+          // (object map of patientId → record, or array), we treat that as a
+          // "cloud is older / our last save didn't land" signal and SKIP the
+          // overwrite, keeping local. Otherwise an offline session, a failed
+          // dual-write, or just a quick refresh-after-toggle would silently
+          // wipe everything the user just did. This was the failure mode for
+          // the "I marked 15 patients refused and went back to Case Flow and
+          // they were all there" data-loss report.
           let replacedCount = 0;
+          let skippedLocalIsBigger = 0;
           pauseSync();
           try {
             for (const key of enabledKeys) {
               const value = remoteKv.get(key);
-              if (value !== undefined) {
+              if (value === undefined) continue;
+              const localRaw = window.localStorage.getItem(key);
+              if (localRaw) {
+                let localCount = -1;
+                let cloudCount = -1;
                 try {
-                  window.localStorage.setItem(key, JSON.stringify(value));
-                  replacedCount += 1;
-                } catch (storageErr) {
-                  // localStorage quota exceeded — skip this key but don't crash bootstrap
-                  console.warn(`[Cloud Sync] Could not write "${key}" to localStorage (quota?):`, storageErr);
+                  const localParsed = JSON.parse(localRaw);
+                  if (localParsed && typeof localParsed === "object") {
+                    localCount = Array.isArray(localParsed)
+                      ? localParsed.length
+                      : Object.keys(localParsed).length;
+                  }
+                  if (value && typeof value === "object") {
+                    cloudCount = Array.isArray(value)
+                      ? (value as unknown[]).length
+                      : Object.keys(value as object).length;
+                  }
+                } catch {
+                  // Unparseable local — fall through and overwrite.
                 }
+                if (localCount > 0 && cloudCount >= 0 && localCount > cloudCount) {
+                  console.warn(
+                    `[Cloud Sync] SKIPPING overwrite of "${key}" — local has ${localCount} entries, ` +
+                    `cloud has only ${cloudCount}. Cloud may be stale (failed dual-write?). ` +
+                    `Keeping local. Will re-sync on next save.`,
+                  );
+                  skippedLocalIsBigger += 1;
+                  continue;
+                }
+              }
+              try {
+                window.localStorage.setItem(key, JSON.stringify(value));
+                replacedCount += 1;
+              } catch (storageErr) {
+                // localStorage quota exceeded — skip this key but don't crash bootstrap
+                console.warn(`[Cloud Sync] Could not write "${key}" to localStorage (quota?):`, storageErr);
               }
             }
           } finally {
@@ -741,6 +780,11 @@ async function bootstrapTableBackedEntities() {
           }
           if (replacedCount > 0) {
             console.info(`[Cloud Sync] Loaded ${replacedCount} kv key(s) from workspace_kv table.`);
+          }
+          if (skippedLocalIsBigger > 0) {
+            console.warn(
+              `[Cloud Sync] Preserved ${skippedLocalIsBigger} local key(s) that had more entries than cloud.`,
+            );
           }
         }
       }

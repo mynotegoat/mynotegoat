@@ -115,10 +115,14 @@ export function loadPatientFollowUpOverridesMap(): PatientFollowUpOverrideMap {
   }
 }
 
-export function savePatientFollowUpOverridesMap(value: PatientFollowUpOverrideMap) {
+export function savePatientFollowUpOverridesMap(value: PatientFollowUpOverrideMap): Promise<void> {
   if (typeof window === "undefined") {
-    return;
+    return Promise.resolve();
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  void import("@/lib/kv-cloud").then((m) => m.dualWriteKv(STORAGE_KEY, "billing", value));
+  // Use the throwing variant — callers that await must be able to detect
+  // failure so the patient page can show an explicit "Save FAILED" pill
+  // instead of silently losing the toggle on the next bootstrap. Fire-
+  // and-forget callers can `.catch(() => {})` themselves.
+  return import("@/lib/kv-cloud").then((m) => m.dualWriteKvOrThrow(STORAGE_KEY, "billing", value));
 }

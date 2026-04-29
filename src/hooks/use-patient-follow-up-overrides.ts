@@ -39,10 +39,20 @@ export function usePatientFollowUpOverrides() {
     });
   }, []);
 
+  // Holds the in-flight cloud write so callers can await confirmation
+  // for a single setter call. setState's updater runs synchronously
+  // inside React's batch — we capture the promise via this ref instead
+  // of returning it, so the existing fire-and-forget setters stay
+  // backwards compatible.
+  const lastCloudWriteRef = useRef<Promise<void>>(Promise.resolve());
+
   const updateMap = useCallback((updater: (current: PatientFollowUpOverrideMap) => PatientFollowUpOverrideMap) => {
     setRecordsByPatientId((current) => {
       const next = updater(current);
-      savePatientFollowUpOverridesMap(next);
+      // Capture the cloud-write promise so the awaitable variants
+      // (setPatientRefusedAsync, etc.) can confirm the write landed
+      // before the caller flips a "Saved" indicator.
+      lastCloudWriteRef.current = savePatientFollowUpOverridesMap(next);
       selfWriteCountRef.current++;
       notifyChange(SYNC_KEY);
       return next;
@@ -123,6 +133,36 @@ export function usePatientFollowUpOverrides() {
     [setCategoryFlags],
   );
 
+  // Awaitable variants — perform the same setter then resolve only after
+  // the cloud write confirms. Use these from UI flows that want to flip a
+  // "Saving → Saved" pill so a silent cloud failure doesn't leave the
+  // user thinking their toggle stuck when the next bootstrap will wipe
+  // it. The non-async variants above remain for code paths that don't
+  // need confirmation.
+  const setPatientRefusedAsync = useCallback(
+    async (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { patientRefused: enabled });
+      await lastCloudWriteRef.current;
+    },
+    [setCategoryFlags],
+  );
+
+  const setCompletedPriorCareAsync = useCallback(
+    async (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { completedPriorCare: enabled });
+      await lastCloudWriteRef.current;
+    },
+    [setCategoryFlags],
+  );
+
+  const setNotNeededAsync = useCallback(
+    async (patientId: string, category: FollowUpOverrideCategory, enabled: boolean) => {
+      setCategoryFlags(patientId, category, { notNeeded: enabled });
+      await lastCloudWriteRef.current;
+    },
+    [setCategoryFlags],
+  );
+
   const clearPatientOverrides = useCallback(
     (patientId: string) => {
       const normalizedPatientId = patientId.trim();
@@ -148,6 +188,9 @@ export function usePatientFollowUpOverrides() {
     setPatientRefused,
     setCompletedPriorCare,
     setNotNeeded,
+    setPatientRefusedAsync,
+    setCompletedPriorCareAsync,
+    setNotNeededAsync,
     clearPatientOverrides,
   };
 }

@@ -69,7 +69,15 @@ export async function fetchAllKvValues(): Promise<Map<string, unknown> | null> {
 }
 
 /**
- * Upsert a single key-value pair. Fire-and-forget from save functions.
+ * Upsert a single key-value pair. Throws on hard failure so callers that
+ * await the returned promise can react (show error UI, retry, block
+ * navigation). Fire-and-forget callers should `void` the call AND wrap in
+ * a `.catch(() => {})` if they want the prior swallow-error behavior.
+ *
+ * Hard failure = supabase responded with an error. Soft conditions (no
+ * supabase client, no workspace) still resolve silently — there's no
+ * point throwing on those because they're expected configuration states
+ * that shouldn't crash an autosave.
  */
 export async function upsertKvValue(key: string, value: unknown): Promise<void> {
   const supabase = getSupabaseBrowserClient();
@@ -86,6 +94,7 @@ export async function upsertKvValue(key: string, value: unknown): Promise<void> 
 
   if (error) {
     console.error(`[kv-cloud] upsert failed for key="${key}":`, error.message);
+    throw new Error(`KV upsert failed for "${key}": ${error.message}`);
   }
 }
 
@@ -161,6 +170,35 @@ export async function dualWriteKv(
     if (!isCloudEntityEnabled(flag as import("@/lib/feature-flags").CloudEntityFlag)) return;
     await upsertKvValue(storageKey, value);
   } catch (error) {
+    // Swallow for fire-and-forget callers (this is the historical
+    // contract — many callers do `void dualWriteKv(...)` and we don't
+    // want unhandled-rejection noise). Callers that NEED to detect
+    // failure (e.g. patient page Patient-Refused toggle) should use
+    // dualWriteKvOrThrow instead.
     console.error(`[kv-cloud] dual-write failed for key="${storageKey}":`, error);
   }
+}
+
+/**
+ * Same as dualWriteKv but propagates errors so awaiting callers can show
+ * an explicit "Save FAILED" indicator and refuse to navigate. Use this
+ * for any user action where silent cloud failure would lose data on the
+ * next bootstrap (which overwrites localStorage from the cloud table).
+ */
+export async function dualWriteKvOrThrow(
+  storageKey: string,
+  flagName: string,
+  value: unknown,
+): Promise<void> {
+  const { isCloudEntityEnabled } = await import("@/lib/feature-flags");
+  const flagMap: Record<string, string> = {
+    billing: "billing",
+    macros: "macros",
+    schedulingSettings: "schedulingSettings",
+    contacts: "contacts",
+    tasks: "tasks",
+  };
+  const flag = flagMap[flagName] ?? flagName;
+  if (!isCloudEntityEnabled(flag as import("@/lib/feature-flags").CloudEntityFlag)) return;
+  await upsertKvValue(storageKey, value);
 }
