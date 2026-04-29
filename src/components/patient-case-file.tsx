@@ -2585,12 +2585,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       reportReviewedDate: "",
       recommendations: "",
     };
-    setSpecialistReferrals((current) => [...current, newItem]);
+    const nextSpecialists = [...specialistReferrals, newItem];
+    setSpecialistReferrals(nextSpecialists);
     setSpecialistDraft({
       specialist: "",
       sentDate: "",
     });
     setSpecialistMessage(`${specialistName} added. Use Edit to update scheduling/report status.`);
+    autoSavePatientFile({ specialistReferrals: nextSpecialists });
     // Contact gap check: if this specialist isn't already in contacts, offer to add them.
     const found = findContactByName(contacts, specialistName);
     if (!found) {
@@ -2615,17 +2617,22 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       setSpecialistMessage("Specialist and Sent Date are required.");
       return;
     }
-    setSpecialistReferrals((current) =>
-      current.map((entry) => (entry.id === editingSpecialist.id ? editingSpecialist : entry)),
+    const editedSpecialist = editingSpecialist;
+    const nextSpecialists = specialistReferrals.map((entry) =>
+      entry.id === editedSpecialist.id ? editedSpecialist : entry,
     );
-    setSpecialistMessage(`${editingSpecialist.specialist} updated.`);
+    setSpecialistReferrals(nextSpecialists);
+    setSpecialistMessage(`${editedSpecialist.specialist} updated.`);
     setEditingSpecialist(null);
     setSpecialistEditorAnchor(null);
+    autoSavePatientFile({ specialistReferrals: nextSpecialists });
   };
 
   const removeSpecialist = (id: string) => {
-    setSpecialistReferrals((current) => current.filter((entry) => entry.id !== id));
+    const nextSpecialists = specialistReferrals.filter((entry) => entry.id !== id);
+    setSpecialistReferrals(nextSpecialists);
     setSpecialistMessage("Specialist referral removed.");
+    autoSavePatientFile({ specialistReferrals: nextSpecialists });
   };
 
   const generateSpecialistReferralPdf = (entry: SpecialistReferral) => {
@@ -3477,13 +3484,20 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     openEncounterEditor(newEncounterId);
   };
 
-  const savePatientFile = () => {
-    const paidValue = Number.parseFloat(paidAmount);
-    setPatientBillingCoreFields(patient.id, {
-      billedAmount: currentBillTotal,
-      paidAmount: Number.isFinite(paidValue) ? paidValue : 0,
-      paidDate,
-    });
+  // Build the full patch for updatePatientRecordById. Accepts overrides so
+  // an autosave triggered right after a setState call can pass the
+  // freshly-computed value (the closure-captured state would otherwise be
+  // one tick stale).
+  const buildPatientPatch = (overrides: {
+    specialistReferrals?: SpecialistReferral[];
+    xrayReferrals?: ImagingReferral[];
+    mriReferrals?: ImagingReferral[];
+    relatedCases?: RelatedCaseEntry[];
+  } = {}): UpdatePatientRecordPatch => {
+    const effectiveSpecialists = overrides.specialistReferrals ?? specialistReferrals;
+    const effectiveXrays = overrides.xrayReferrals ?? xrayReferrals;
+    const effectiveMris = overrides.mriReferrals ?? mriReferrals;
+    const effectiveRelated = overrides.relatedCases ?? relatedCases;
 
     const nextFirstName = firstName.trim();
     const nextLastName = lastName.trim();
@@ -3492,7 +3506,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         ? `${nextLastName || names.lastName}, ${nextFirstName || names.firstName}`
         : patient.fullName;
 
-    const savedPatient = updatePatientRecordById(patient.id, {
+    return {
       fullName: nextFullName,
       dob: toIsoDateFromUsDate(patientDob),
       sex: patientSex || undefined,
@@ -3505,10 +3519,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       caseStatus: caseStatus as PatientRecord["caseStatus"],
       isCashPatient: isCashPatient || undefined,
       lastUpdate: new Date().toISOString().slice(0, 10),
-      relatedCases: relatedCases.length > 0 ? relatedCases : undefined,
-      xrayReferrals,
-      mriReferrals,
-      specialistReferrals,
+      relatedCases: effectiveRelated.length > 0 ? effectiveRelated : undefined,
+      xrayReferrals: effectiveXrays,
+      mriReferrals: effectiveMris,
+      specialistReferrals: effectiveSpecialists,
       alerts: patientAlerts.length > 0 ? patientAlerts : undefined,
       matrix: {
         initialExam: toIsoDateFromUsDate(initialExam),
@@ -3517,29 +3531,20 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         xrayFindings: xrayFindings.trim(),
         mriCtFindings: mriCtFindings.trim(),
         specialistRecommendations: specialistRecommendations.trim(),
-        // Derive the specialist matrix fields from the specialistReferrals
-        // array so the Case Flow queue sees what the user has actually
-        // logged in the Specialist panel. Without this sync, the user
-        // logs a specialist referral in the card but Case Flow keeps
-        // showing "Referral needs to be sent" because it only reads the
-        // matrix.
-        //    sent      → latest Sent date across all referrals
-        //    scheduled → latest Scheduled date
-        //    report    → latest Report-Received date
         specialistSent: (() => {
-          const dates = specialistReferrals
+          const dates = effectiveSpecialists
             .map((entry) => toIsoDateFromUsDate(entry.sentDate))
             .filter((d) => d);
           return dates.sort().at(-1) ?? "";
         })(),
         specialistScheduled: (() => {
-          const dates = specialistReferrals
+          const dates = effectiveSpecialists
             .map((entry) => toIsoDateFromUsDate(entry.scheduledDate))
             .filter((d) => d);
           return dates.sort().at(-1) ?? "";
         })(),
         specialistReport: (() => {
-          const dates = specialistReferrals
+          const dates = effectiveSpecialists
             .map((entry) => toIsoDateFromUsDate(entry.reportReceivedDate))
             .filter((d) => d);
           return dates.sort().at(-1) ?? "";
@@ -3551,57 +3556,67 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         paidAmount: paidAmount || "0",
         paidDate: toIsoDateFromUsDate(paidDate),
       },
-    });
-
-    if (savedPatient) {
-      setSaveStatus("saving");
-      setSaveMessage("Saving — pushing to cloud...");
-      void forceSyncNow()
-        .then(() => {
-          setSaveStatus("saved");
-          setSaveMessage(`Saved & synced to cloud · ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`);
-          setLastSavedAt(new Date().toISOString());
-          // Auto-fade after 6s so the green doesn't hang around forever,
-          // but keep the lastSavedAt timestamp visible permanently as a
-          // separate quiet "Last saved at …" line.
-          window.setTimeout(() => {
-            setSaveStatus((current) => (current === "saved" ? "idle" : current));
-          }, 6000);
-        })
-        .catch(() => {
-          setSaveStatus("error");
-          setSaveMessage("Saved locally — cloud sync FAILED. Don't close this tab. Retry now or check connection.");
-        });
-    } else {
-      setSaveStatus("error");
-      setSaveMessage("Could not save patient record. Try Update again or refresh.");
-    }
+    };
   };
 
-  const saveAndClosePatientFile = async () => {
-    savePatientFile();
+  // Shared save core. `silent` autosaves get a tiny "Auto-saved" pill that
+  // fades quickly; explicit Save & Close gets the louder "Saving — pushing
+  // to cloud..." flow.
+  const performPatientSave = async (
+    overrides: Parameters<typeof buildPatientPatch>[0] = {},
+    opts: { silent: boolean } = { silent: false },
+  ): Promise<boolean> => {
+    const paidValue = Number.parseFloat(paidAmount);
+    setPatientBillingCoreFields(patient.id, {
+      billedAmount: currentBillTotal,
+      paidAmount: Number.isFinite(paidValue) ? paidValue : 0,
+      paidDate,
+    });
+
+    const savedPatient = updatePatientRecordById(patient.id, buildPatientPatch(overrides));
+    if (!savedPatient) {
+      setSaveStatus("error");
+      setSaveMessage("Could not save patient record. Try again or refresh.");
+      return false;
+    }
+
     setSaveStatus("saving");
-    setSaveMessage("Saving — pushing to cloud...");
+    setSaveMessage(opts.silent ? "Auto-saving..." : "Saving — pushing to cloud...");
     try {
       await forceSyncNow();
       setSaveStatus("saved");
-      setSaveMessage("Saved & synced. Returning to patient list...");
+      const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      setSaveMessage(opts.silent ? `Auto-saved · ${time}` : `Saved & synced to cloud · ${time}`);
       setLastSavedAt(new Date().toISOString());
-      // Hold the green confirmation for a beat so the user can see
-      // it BEFORE we navigate away. Without this delay the message
-      // existed for one render frame and then the page unmounted —
-      // which is exactly why the Save & Close button felt silent.
-      await new Promise((resolve) => window.setTimeout(resolve, 700));
-      router.push(`/patients?saved=${encodeURIComponent(patient.fullName)}`);
+      window.setTimeout(() => {
+        setSaveStatus((current) => (current === "saved" ? "idle" : current));
+      }, opts.silent ? 2500 : 6000);
+      return true;
     } catch {
       setSaveStatus("error");
-      setSaveMessage(
-        "Cloud sync FAILED. Local copy is safe — stay on this page and click Update again to retry. Do NOT close.",
-      );
-      // Don't navigate on failure — the user needs to see the error
-      // and either retry or report. Closing now risks the local copy
-      // being lost on the next page load if cloud catches up first.
+      setSaveMessage("Saved locally — cloud sync FAILED. Don't close this tab. Retry or check connection.");
+      return false;
     }
+  };
+
+  // Fire-and-forget autosave for "big things" (add specialist, etc.). Caller
+  // passes an override for any state value that was just changed in the
+  // same handler tick — closures would otherwise read the prior value.
+  const autoSavePatientFile = (overrides: Parameters<typeof buildPatientPatch>[0] = {}) => {
+    void performPatientSave(overrides, { silent: true });
+  };
+
+  const saveAndClosePatientFile = async () => {
+    const ok = await performPatientSave({}, { silent: false });
+    if (!ok) {
+      // Stay on the page so the user sees the error and can retry.
+      return;
+    }
+    setSaveMessage("Saved & synced. Returning to patient list...");
+    // Hold the green confirmation a beat so the user sees it before
+    // navigation tears the component down.
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    router.push(`/patients?saved=${encodeURIComponent(patient.fullName)}`);
   };
 
   const handleDeletePatient = () => {
@@ -6019,14 +6034,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="rounded-xl border border-[var(--line-soft)] bg-white px-6 py-2 font-semibold disabled:opacity-50"
-            disabled={saveStatus === "saving"}
-            onClick={savePatientFile}
-            type="button"
-          >
-            {saveStatus === "saving" ? "Saving…" : "Update"}
-          </button>
-          <button
             className="rounded-xl bg-[#de3a31] px-6 py-2 font-semibold text-white disabled:opacity-50"
             disabled={saveStatus === "saving"}
             onClick={saveAndClosePatientFile}
@@ -6805,10 +6812,14 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 </label>
               </div>
 
-              <label className="grid gap-1">
+              <label className="grid gap-1 min-w-0">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Recommendations</span>
                 <textarea
-                  className="min-h-[140px] w-full resize-y rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  // resize: both lets the user drag wider AND taller. min-w-full
+                  // (not w-full) keeps it full-width by default but allows the
+                  // browser-applied inline width from the drag handle to grow it
+                  // past the parent without being snapped back to 100%.
+                  className="min-h-[140px] min-w-full resize rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                   onChange={(event) =>
                     setEditingSpecialist((current) =>
                       current ? { ...current, recommendations: event.target.value } : current,
@@ -7117,10 +7128,17 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                 )}
               </div>
 
-              <label className="grid gap-1">
+              <label className="grid gap-1 min-w-0">
                 <span className="text-sm font-semibold text-[var(--text-muted)]">Findings</span>
                 <textarea
-                  className="min-h-[160px] w-full resize-y rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                  // resize: both — drag the corner handle to grow wider
+                  // AND taller. min-w-full keeps it full-width by default
+                  // but doesn't fight the inline `width` style the browser
+                  // sets when the user drags the handle outward (which is
+                  // what `w-full`/`width: 100%` did — it snapped the
+                  // textarea back to parent width every render, so the
+                  // horizontal drag appeared to do nothing).
+                  className="min-h-[160px] min-w-full resize rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
                   onChange={(event) =>
                     setEditingImagingReferral((current) =>
                       current ? { ...current, findings: event.target.value } : current,
