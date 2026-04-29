@@ -9,12 +9,19 @@
  * preview rules and patient-case-file's inline style block for the PDF.
  */
 
-/** Strip leading whitespace from each line if the content contains HTML
- *  tags. Prevents pre-wrap from indenting AI-generated narrative HTML
- *  while leaving plain-text templates with tabs intact. */
+/** Strip leading whitespace from each line ONLY IF the line is HTML
+ *  source-formatting whitespace (line begins with whitespace followed by
+ *  `<`). Lines whose first non-whitespace char is text content (e.g. a
+ *  user-aligned column like `                          818-548-0022`)
+ *  keep their leading whitespace so `white-space: pre-wrap` rendering
+ *  preserves the alignment the template author intended.
+ *
+ *  Original behaviour was `^[ \t]+` (strip ALL leading whitespace per
+ *  line). That destroyed manually-aligned templates while still helping
+ *  AI-generated narrative HTML where the indent is just nesting. */
 export function stripHtmlIndentation(html: string): string {
   if (!/<[a-z][\s\S]*>/i.test(html)) return html; // plain text — keep tabs
-  return html.replace(/^[ \t]+/gm, "");
+  return html.replace(/^[ \t]+(?=<)/gm, "");
 }
 
 /**
@@ -55,24 +62,12 @@ export function applyLabelValueHangingIndent(html: string): string {
   // -- the "derangements econdary" artifact we kept seeing.
   let next = html.replace(/[­​‌‍﻿]/g, "");
 
-  // Pre-process: split <p|div>A<br>B<br>C</p|div> into three separate
-  // blocks so each line can be analysed independently. Some templates
-  // pack the patient header (Name / DOB / DOI / Phone) into a single
-  // block separated by <br>, which then becomes one giant kv-row with
-  // every "Date of Birth: ..." line glued to the value column instead
-  // of being its own kv-row at the left margin.
-  next = next.replace(
-    new RegExp(`${blockOpen}([^>]*)>([\\s\\S]*?)${blockClose}`, "gi"),
-    (match, attrs: string, inner: string) => {
-      // Only split if the inner content contains a <br>. Otherwise leave
-      // the block alone so we don't perturb structure unnecessarily.
-      if (!/<br\s*\/?>/i.test(inner)) return match;
-      const parts = inner.split(/<br\s*\/?>/i);
-      // Drop trailing empty parts that come from a terminal <br>.
-      while (parts.length > 1 && parts[parts.length - 1].trim() === "") parts.pop();
-      return parts.map((part) => `<p${attrs}>${part}</p>`).join("");
-    },
-  );
+  // (Removed an earlier pre-process that split <p|div>A<br>B</p|div>
+  // into separate blocks. It tore through nested elements — e.g. the
+  // title <div><span><u><br></u></span></div> ended up as orphaned
+  // `<p><span><u></p>` / `<p></u></span></p>` halves with the open/
+  // close tags split across paragraphs. Instead we now guard Phase 1
+  // and Phase 2 against multi-line blocks below.)
 
   // Helper: is this a "blank spacer" block — i.e. nothing but
   // whitespace, &nbsp; and / or <br>? Used to BREAK the kv-cont chain
@@ -85,6 +80,19 @@ export function applyLabelValueHangingIndent(html: string): string {
       .replace(/&nbsp;/gi, "")
       .replace(/\s+/g, "");
     return stripped.length === 0;
+  };
+
+  // Helper: does the content of a block contain its own internal line
+  // breaks (literal `\n` between text content, not just decorative
+  // whitespace at the very start/end)? Multi-line blocks indicate the
+  // template uses pre-wrap + manual whitespace alignment for layout —
+  // we MUST NOT convert those to kv-rows because Phase 1's lazy
+  // `[\s\S]*?</block>` will swallow every line into the first label's
+  // value, gluing DOB / DOI / Phone into "Name:"'s value column and
+  // pushing Attorney Information into Clinical Impression's value.
+  const hasInnerLineBreak = (inner: string): boolean => {
+    const stripped = inner.replace(/^\s+|\s+$/g, "");
+    return /\n/.test(stripped) || /<br\s*\/?>/i.test(stripped);
   };
 
   // Helper: take an attrs string from the original block and merge our
@@ -103,14 +111,20 @@ export function applyLabelValueHangingIndent(html: string): string {
     return ` ${replaced}`;
   };
 
-  // Phase 1: turn "Label:  value" rows into .kv rows. Handles both
-  // <p> and <div> as the wrapping block.
+  // Phase 1: turn single-line "Label: value" blocks into .kv rows.
+  // Handles both <p> and <div> as the wrapping block. Multi-line
+  // blocks (literal `\n` or <br> inside the content) are LEFT ALONE
+  // — those rely on `white-space: pre-wrap` + manual whitespace for
+  // their own column alignment, and the regex's lazy quantifier would
+  // otherwise swallow every following line into the first label's
+  // value column.
   next = next.replace(
     new RegExp(
       `${blockOpen}([^>]*)>\\s*(${labelPatternSource})(?:&nbsp;|\\s)+([\\s\\S]*?)${blockClose}`,
       "gi",
     ),
-    (_match, attrs: string, label: string, rest: string) => {
+    (match, attrs: string, label: string, rest: string) => {
+      if (hasInnerLineBreak(rest)) return match;
       const mergedAttrs = mergeClassAttr(attrs, "kv");
       return `<div${mergedAttrs}><span class="kv-label">${label}</span><span class="kv-value">${rest.trim()}</span></div>`;
     },
