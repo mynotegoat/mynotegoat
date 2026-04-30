@@ -4758,7 +4758,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                       </span>
                     )}
                   </div>
-                  <p>Sent: {entry.sentDate || "-"} | Completed: {entry.completedDate || "-"}</p>
+                  <p>Sent: {entry.sentDate || "-"} | Scheduled: {entry.scheduledDate || "-"} | Completed: {entry.completedDate || "-"}</p>
                   {entry.recommendations.trim() && (
                     <p className="mt-1 text-[var(--text-muted)]">{entry.recommendations}</p>
                   )}
@@ -6879,23 +6879,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                     }
                     placeholder="MM/DD/YYYY"
                     value={editingSpecialist.reportReceivedDate}
-                  />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-sm font-semibold text-[var(--text-muted)]">Reviewed</span>
-                  <input
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                    inputMode="numeric"
-                    maxLength={10}
-                    onChange={(event) =>
-                      setEditingSpecialist((current) =>
-                        current
-                          ? { ...current, reportReviewedDate: formatUsDateInput(event.target.value) }
-                          : current,
-                      )
-                    }
-                    placeholder="MM/DD/YYYY"
-                    value={editingSpecialist.reportReviewedDate ?? ""}
                   />
                 </label>
               </div>
