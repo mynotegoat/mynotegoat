@@ -476,6 +476,7 @@ export function NewAppointmentModal({
   const [quickNewPatientDraft, setQuickNewPatientDraft] = useState({
     firstName: "",
     lastName: "",
+    dob: "",
     phone: "",
     attorney: "",
     dateOfLoss: "",
@@ -502,6 +503,7 @@ export function NewAppointmentModal({
     setQuickNewPatientDraft({
       firstName: "",
       lastName: "",
+      dob: "",
       phone: "",
       attorney: "",
       dateOfLoss: "",
@@ -580,17 +582,23 @@ export function NewAppointmentModal({
       .slice(0, 12);
   }, [patientSearchDraft]);
 
+  // Providers / Locations come from Office Settings — the single source of
+  // truth for "who works here" and "where they work". The previous version
+  // also scanned every past appointment for unique provider / location
+  // strings, which meant any historical typo or format variation
+  // ("Galstyan, Mike (Dr. Mike)" vs "Dr. Mike Galstyan") stuck around in
+  // the dropdown forever with no way to remove it. Office Settings is
+  // editable from Settings → Office, so the user has a clear place to
+  // manage the value.
   const providers = useMemo(() => {
-    const values = new Set<string>([defaultScheduleProvider]);
-    scheduleAppointments.forEach((appointment) => values.add(appointment.provider));
-    return Array.from(values);
-  }, [scheduleAppointments]);
+    const canonical = officeSettings.doctorName.trim();
+    return canonical ? [canonical] : [];
+  }, [officeSettings.doctorName]);
 
   const locations = useMemo(() => {
-    const values = new Set<string>([defaultScheduleLocation]);
-    scheduleAppointments.forEach((appointment) => values.add(appointment.location));
-    return Array.from(values);
-  }, [scheduleAppointments]);
+    const canonical = officeSettings.officeName.trim();
+    return canonical ? [canonical] : [];
+  }, [officeSettings.officeName]);
 
   const configuredRooms = useMemo(
     () =>
@@ -669,9 +677,19 @@ export function NewAppointmentModal({
       }
       dolIso = `${match[3]}-${match[1]}-${match[2]}`;
     }
+    let dobIso = "";
+    if (quickNewPatientDraft.dob.trim()) {
+      const match = quickNewPatientDraft.dob.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!match) {
+        setQuickNewPatientError("Date of Birth must be MM/DD/YYYY.");
+        return;
+      }
+      dobIso = `${match[3]}-${match[1]}-${match[2]}`;
+    }
     const created = createPatientRecord({
       firstName,
       lastName,
+      dob: dobIso || undefined,
       attorney: isCash ? "Self" : (quickNewPatientDraft.attorney.trim() || undefined),
       phone: quickNewPatientDraft.phone.trim() || undefined,
       dateOfLoss: isCash ? "" : dolIso,
@@ -1017,7 +1035,7 @@ export function NewAppointmentModal({
                   </span>
                 </span>
               </label>
-              <div className="mt-3 grid gap-3 md:grid-cols-5">
+              <div className="mt-3 grid gap-3 md:grid-cols-6">
                 <label className="grid gap-1">
                   <span className="text-xs font-semibold text-[var(--text-muted)]">Last Name *</span>
                   <input
@@ -1036,6 +1054,16 @@ export function NewAppointmentModal({
                       setQuickNewPatientDraft((c) => ({ ...c, firstName: e.target.value }))
                     }
                     value={quickNewPatientDraft.firstName}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">Date of Birth</span>
+                  <UsDateInput
+                    className="w-full rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
+                    onChange={(formatted) =>
+                      setQuickNewPatientDraft((c) => ({ ...c, dob: formatted }))
+                    }
+                    value={quickNewPatientDraft.dob}
                   />
                 </label>
                 <label className="grid gap-1">
@@ -1155,6 +1183,9 @@ export function NewAppointmentModal({
                 <option key={`provider-option-${provider}`} value={provider} />
               ))}
             </datalist>
+            <span className="text-xs text-[var(--text-muted)]">
+              Change in Settings → Office (doctor name).
+            </span>
           </label>
 
           <label className="grid gap-1">
@@ -1172,6 +1203,9 @@ export function NewAppointmentModal({
                 <option key={`location-option-${location}`} value={location} />
               ))}
             </datalist>
+            <span className="text-xs text-[var(--text-muted)]">
+              Change in Settings → Office (office name).
+            </span>
           </label>
 
           <label className="grid gap-1">
