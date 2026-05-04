@@ -931,6 +931,18 @@ export default function PatientsPage() {
   );
 
   const sortedFollowUpItems = useMemo(() => {
+    // Category sort follows the office workflow, not the alphabet:
+    // paperwork (Lien) first, then initial imaging (X-Ray), advanced
+    // imaging (MRI/CT), then specialist referral. Anything unexpected
+    // sorts after the known ones.
+    const categoryOrder: Record<string, number> = {
+      "Lien / LOP": 0,
+      "X-Ray": 1,
+      "MRI / CT": 2,
+      Specialist: 3,
+    };
+    const categoryRank = (value: string) =>
+      value in categoryOrder ? categoryOrder[value] : 99;
     const compareBy = (
       a: (typeof followUpItems)[number],
       b: (typeof followUpItems)[number],
@@ -939,7 +951,7 @@ export default function PatientsPage() {
       if (column === "patient") return a.patientName.localeCompare(b.patientName);
       if (column === "caseNumber") return (a.caseNumber || "").localeCompare(b.caseNumber || "");
       if (column === "attorney") return (a.attorney || "").localeCompare(b.attorney || "");
-      if (column === "category") return a.category.localeCompare(b.category);
+      if (column === "category") return categoryRank(a.category) - categoryRank(b.category);
       if (column === "followUp") return a.stage.localeCompare(b.stage);
       if (column === "anchorDate") return (a.anchorDate || "").localeCompare(b.anchorDate || "");
       if (column === "age") return (a.daysFromAnchor ?? -99999) - (b.daysFromAnchor ?? -99999);
