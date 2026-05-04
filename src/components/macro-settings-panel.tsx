@@ -85,6 +85,8 @@ export function MacroSettingsPanel() {
     updateQuestion,
     removeQuestion,
     moveQuestion,
+    moveOption,
+    reorderMacroInSection,
     resetToDefaults,
   } = useMacroTemplates();
 
@@ -152,6 +154,14 @@ export function MacroSettingsPanel() {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [newFolderDraft, setNewFolderDraft] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  // Drag state for the macro list. Tracks the macro id currently being
+  // dragged so onDragOver knows what to splice in. Reorder is constrained
+  // to same-section + same-folder by reorderMacroInSection itself.
+  const [dragMacroId, setDragMacroId] = useState<string | null>(null);
+  // Drag state for the option pills inside a question. Keyed by both
+  // questionId and the source index so we can drop on a sibling pill and
+  // splice it in at the new position via moveOption.
+  const [dragOption, setDragOption] = useState<{ questionId: string; index: number } | null>(null);
 
   const sectionMacros = useMemo(
     () => macroLibrary.templates.filter((template) => template.section === activeSection),
@@ -530,18 +540,35 @@ export function MacroSettingsPanel() {
                     </button>
                   )}
 
-                  {/* Macro buttons */}
+                  {/* Macro buttons — draggable to reorder within the same
+                      section + folder. reorderMacroInSection enforces the
+                      same-folder constraint, so dragging across folders is
+                      a silent no-op (use the Folder field to move). */}
                   {!isCollapsed && (
                     <div className="grid gap-2 sm:grid-cols-2">
                       {group.macros.map((macro) => (
                         <button
                           key={macro.id}
-                          className={`rounded-xl border px-3 py-2 text-left font-semibold text-sm ${
+                          className={`cursor-grab rounded-xl border px-3 py-2 text-left font-semibold text-sm transition-opacity ${
                             selectedMacroId === macro.id
                               ? "border-[var(--brand-primary)] bg-[var(--bg-soft)]"
                               : "border-[var(--line-soft)] bg-white"
-                          }`}
+                          } ${dragMacroId === macro.id ? "opacity-50" : ""}`}
+                          draggable
                           onClick={() => setSelectedMacroId(macro.id)}
+                          onDragEnd={() => setDragMacroId(null)}
+                          onDragOver={(e) => {
+                            if (!dragMacroId || dragMacroId === macro.id) return;
+                            e.preventDefault();
+                          }}
+                          onDragStart={() => setDragMacroId(macro.id)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (!dragMacroId || dragMacroId === macro.id) return;
+                            reorderMacroInSection(dragMacroId, macro.id);
+                            setDragMacroId(null);
+                          }}
+                          title="Drag to reorder; click to edit"
                           type="button"
                         >
                           {macro.buttonName}
@@ -874,18 +901,36 @@ export function MacroSettingsPanel() {
                           const pickerOpen =
                             chargePickerFor?.questionId === question.id &&
                             chargePickerFor?.option === option;
+                          const isDragging =
+                            dragOption?.questionId === question.id &&
+                            dragOption?.index === optIndex;
                           return (
                             <span
                               key={`${question.id}-opt-${optIndex}`}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs ${
+                              className={`inline-flex cursor-grab items-center gap-1 rounded-lg border px-2 py-0.5 text-xs transition-opacity ${
                                 linked
                                   ? "border-emerald-400 bg-emerald-50"
                                   : "border-[var(--line-soft)] bg-[var(--bg-soft)]"
-                              }`}
+                              } ${isDragging ? "opacity-50" : ""}`}
+                              draggable
+                              onDragEnd={() => setDragOption(null)}
+                              onDragOver={(e) => {
+                                if (!dragOption || dragOption.questionId !== question.id) return;
+                                if (dragOption.index === optIndex) return;
+                                e.preventDefault();
+                              }}
+                              onDragStart={() => setDragOption({ questionId: question.id, index: optIndex })}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                if (!dragOption || dragOption.questionId !== question.id) return;
+                                if (dragOption.index === optIndex) return;
+                                moveOption(selectedMacro.id, question.id, dragOption.index, optIndex);
+                                setDragOption(null);
+                              }}
                               title={
                                 linked
-                                  ? `Linked charge: ${linked.procedureCode} ${linked.name} — $${linked.unitPrice.toFixed(2)}`
-                                  : "No linked charge"
+                                  ? `Linked charge: ${linked.procedureCode} ${linked.name} — $${linked.unitPrice.toFixed(2)} • drag to reorder`
+                                  : "Drag to reorder"
                               }
                             >
                               {option}

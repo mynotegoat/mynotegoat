@@ -149,6 +149,38 @@ export function useMacroTemplates() {
   );
 
   /**
+   * Move a question's option from `fromIndex` to land immediately before
+   * `toIndex` in the options array. Used by drag-to-reorder of the option
+   * pills under each prompt. optionCharges links live on the option label,
+   * so reordering does NOT touch optionCharges — the linked CPT follows
+   * the option to its new position automatically.
+   */
+  const moveOption = useCallback(
+    (macroId: string, questionId: string, fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return;
+      updateMacro(macroId, (current) => ({
+        ...current,
+        questions: current.questions.map((question) => {
+          if (question.id !== questionId) return question;
+          if (
+            fromIndex < 0 ||
+            fromIndex >= question.options.length ||
+            toIndex < 0 ||
+            toIndex >= question.options.length
+          ) {
+            return question;
+          }
+          const next = [...question.options];
+          const [moved] = next.splice(fromIndex, 1);
+          next.splice(toIndex, 0, moved);
+          return { ...question, options: next };
+        }),
+      }));
+    },
+    [updateMacro],
+  );
+
+  /**
    * Move macro `sourceId` so it sits immediately before `targetId` in the
    * templates array. Only reorders within the same section + folder —
    * cross-folder drags are ignored (those need a folder reassignment,
@@ -212,6 +244,7 @@ export function useMacroTemplates() {
     updateQuestion,
     removeQuestion,
     moveQuestion,
+    moveOption,
     reorderMacroInSection,
     resetToDefaults,
   };
