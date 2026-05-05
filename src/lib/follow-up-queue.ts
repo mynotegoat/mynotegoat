@@ -249,7 +249,10 @@ export function buildFollowUpItems(
   const xrayNoReportDays = options.xrayNoReportWarningDays ?? 14;
   const mriNoReportDays = options.mriNoReportWarningDays ?? 14;
   const mriNoScheduleDays = options.mriNoScheduleWarningDays ?? 3;
-  const specialistNoReportDays = options.specialistNoReportWarningDays ?? 14;
+  // specialistNoReportWarningDays is intentionally unused: Stage 3
+  // ("Report Not Received") now fires the day the scheduled visit
+  // passes, not after a grace period. The setting still exists in
+  // dashboard-workspace-settings for back-compat with persisted data.
   const specialistNoScheduleDays = options.specialistNoScheduleWarningDays ?? 3;
 
   const xrayClearedBySet = new Set<string>(options.xrayClearedBy ?? ["patientRefused", "completedPriorCare", "reviewed", "noXray"]);
@@ -632,7 +635,19 @@ export function buildFollowUpItems(
           }
         }
 
+        // Three-stage progression, mutually exclusive — each stage gates
+        // on the previous date being filled, so a patient can only ever
+        // appear at one stage at a time. Previously the queue piled on
+        // separate "warning" rows whose preconditions overlapped (e.g.
+        // "Appt not scheduled" and "No report received" both fired off
+        // hasSent), so a single patient could show both rows even though
+        // no appointment had been scheduled. The user feedback that
+        // surfaced this: "Smith, John → Appt Not Scheduled" + "Smith,
+        // John → Report Not Received" appearing simultaneously.
         if (specialistShouldAppear && !hasSent) {
+          // Stage 1: Needs Referral. Anchor falls back to MRI sent date,
+          // then DOL, so the row's age reflects how long we've been
+          // waiting to act on the referral.
           const anchorDate = extractLeadingDatePart(mriSentRaw) || toUsDateCanonical(patient.dateOfLoss);
           rows.push({
             id: `${patient.id}-specialist-needs-sent`,
@@ -642,81 +657,58 @@ export function buildFollowUpItems(
             attorney: cleanAttorneyLabel(patient.attorney),
             caseStatus: patient.caseStatus,
             category: "Specialist",
-            stage: "Referral needs to be sent",
+            stage: "Needs Referral",
             anchorDate,
             daysFromAnchor: getDaysFromToday(anchorDate),
             note: "",
           });
         } else if (hasSent && !hasScheduled) {
-          const sentDate = extractLeadingDatePart(specialistSentRaw);
-          rows.push({
-            id: `${patient.id}-specialist-scheduled`,
-            patientId: patient.id,
-            patientName: patient.fullName,
-            caseNumber,
-            attorney: cleanAttorneyLabel(patient.attorney),
-            caseStatus: patient.caseStatus,
-            category: "Specialist",
-            stage: "Referral sent, waiting for scheduled date",
-            anchorDate: sentDate,
-            daysFromAnchor: getDaysFromToday(sentDate),
-            note: stripLeadingDatePart(specialistSentRaw),
-          });
-        } else if (hasScheduled && !hasMatrixValue(specialistReportRaw)) {
-          const scheduledDate = extractLeadingDatePart(specialistScheduledRaw);
-          rows.push({
-            id: `${patient.id}-specialist-report`,
-            patientId: patient.id,
-            patientName: patient.fullName,
-            caseNumber,
-            attorney: cleanAttorneyLabel(patient.attorney),
-            caseStatus: patient.caseStatus,
-            category: "Specialist",
-            stage: "Scheduled, waiting for specialist report",
-            anchorDate: scheduledDate,
-            daysFromAnchor: getDaysFromToday(scheduledDate),
-            note: stripLeadingDatePart(specialistSentRaw),
-          });
-        }
-
-        // No report received warning
-        if (specialistNoReportDays > 0 && hasSent && !hasMatrixValue(specialistReportRaw)) {
+          // Stage 2: Appt Not Scheduled. Honors the existing
+          // specialistNoScheduleWarningDays grace (default 3) so the row
+          // doesn't pop up the second the referral leaves the office.
           const sentDate = extractLeadingDatePart(specialistSentRaw);
           const daysSinceSent = getDaysFromToday(sentDate);
-          if (daysSinceSent !== null && daysSinceSent >= specialistNoReportDays) {
+          const passedGrace =
+            daysSinceSent === null
+              ? true // unparseable sent date → don't suppress
+              : daysSinceSent >= specialistNoScheduleDays;
+          if (passedGrace) {
             rows.push({
-              id: `${patient.id}-specialist-no-report`,
+              id: `${patient.id}-specialist-scheduled`,
               patientId: patient.id,
               patientName: patient.fullName,
               caseNumber,
               attorney: cleanAttorneyLabel(patient.attorney),
               caseStatus: patient.caseStatus,
               category: "Specialist",
-              stage: `No report received (${daysSinceSent} days since sent)`,
+              stage: "Appt Not Scheduled",
               anchorDate: sentDate,
               daysFromAnchor: daysSinceSent,
-              note: "",
+              note: stripLeadingDatePart(specialistSentRaw),
             });
           }
-        }
-
-        // No schedule date warning
-        if (specialistNoScheduleDays > 0 && hasSent && !hasScheduled) {
-          const sentDate = extractLeadingDatePart(specialistSentRaw);
-          const daysSinceSent = getDaysFromToday(sentDate);
-          if (daysSinceSent !== null && daysSinceSent >= specialistNoScheduleDays) {
+        } else if (hasScheduled && !hasMatrixValue(specialistReportRaw)) {
+          // Stage 3: Report Not Received. Only fires once the scheduled
+          // appointment date has passed — if the visit is in the future,
+          // there's nothing to chase. Unparseable scheduled date falls
+          // back to showing the row so the user notices.
+          const scheduledDate = extractLeadingDatePart(specialistScheduledRaw);
+          const daysSinceScheduled = getDaysFromToday(scheduledDate);
+          const visitHasPassed =
+            daysSinceScheduled === null ? true : daysSinceScheduled >= 0;
+          if (visitHasPassed) {
             rows.push({
-              id: `${patient.id}-specialist-no-schedule`,
+              id: `${patient.id}-specialist-report`,
               patientId: patient.id,
               patientName: patient.fullName,
               caseNumber,
               attorney: cleanAttorneyLabel(patient.attorney),
               caseStatus: patient.caseStatus,
               category: "Specialist",
-              stage: `Appt not scheduled (${daysSinceSent} days since sent)`,
-              anchorDate: sentDate,
-              daysFromAnchor: daysSinceSent,
-              note: "",
+              stage: "Report Not Received",
+              anchorDate: scheduledDate,
+              daysFromAnchor: daysSinceScheduled,
+              note: stripLeadingDatePart(specialistSentRaw),
             });
           }
         }
