@@ -3985,7 +3985,6 @@ export default function SettingsPage() {
                       {([
                         ["patientRefused", "Patient Refused"],
                         ["completedPriorCare", "Completed Prior Care"],
-                        ["reviewed", "Reviewed"],
                         ["noXray", "No X-Ray"],
                       ] as const).map(([val, label]) => (
                         <label key={val} className="inline-flex items-center gap-1.5 text-sm">
@@ -4084,7 +4083,6 @@ export default function SettingsPage() {
                       {([
                         ["patientRefused", "Patient Refused"],
                         ["completedPriorCare", "Completed Prior Care"],
-                        ["reviewed", "Reviewed"],
                         ["noMri", "No MRI"],
                       ] as const).map(([val, label]) => (
                         <label key={val} className="inline-flex items-center gap-1.5 text-sm">
