@@ -473,10 +473,17 @@ export function buildFollowUpItems(
             daysFromAnchor: getDaysFromToday(anchorDate),
             note: "",
           });
-        } else if (hasSent && !hasScheduled) {
+        } else if (hasSent && !hasScheduled && !hasReceived) {
           // Stage 2: Appt Not Scheduled. Honors the existing
           // mriNoScheduleWarningDays grace (default 3) so the row
           // doesn't pop up the moment the referral leaves the office.
+          //
+          // The !hasReceived guard handles the real-world flow where
+          // the office sometimes never bothers to record the scheduled
+          // date — they just go straight from "sent" → "report in
+          // hand". Without this guard, Case Flow would keep nagging
+          // about a missing schedule date even though the MRI is
+          // already done.
           const sentDate = extractLeadingDatePart(mriSentRaw);
           const daysSinceSent = getDaysFromToday(sentDate);
           const passedGrace =
@@ -587,10 +594,15 @@ export function buildFollowUpItems(
             daysFromAnchor: getDaysFromToday(anchorDate),
             note: "",
           });
-        } else if (hasSent && !hasScheduled) {
+        } else if (hasSent && !hasScheduled && !hasMatrixValue(specialistReportRaw)) {
           // Stage 2: Appt Not Scheduled. Honors the existing
           // specialistNoScheduleWarningDays grace (default 3) so the row
           // doesn't pop up the second the referral leaves the office.
+          //
+          // The !hasMatrixValue(specialistReportRaw) guard mirrors MRI
+          // Stage 2: if the report is already in hand, the workflow
+          // is effectively done — don't keep nagging about a missing
+          // scheduled date that the office never bothered to record.
           const sentDate = extractLeadingDatePart(specialistSentRaw);
           const daysSinceSent = getDaysFromToday(sentDate);
           const passedGrace =
