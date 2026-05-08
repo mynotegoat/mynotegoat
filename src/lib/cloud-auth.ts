@@ -137,9 +137,24 @@ export async function runBatched<T>(
 
 function isLockStealError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
+  // Older supabase-js / older Web Locks polyfill variant.
   if (message.includes("Lock broken by another request with the 'steal' option")) {
     return true;
   }
+  // Newer supabase-js phrasing seen in the wild — same root cause
+  // (auth-token lock contested across concurrent requests / tabs),
+  // different error string. Without this branch the retry path
+  // didn't fire and the user got a "Cloud sync failed" toast on
+  // bursts like the 1067-op schedule-appointments hydrate.
+  if (
+    message.includes("was released because another request stole it") ||
+    message.includes("was released because another request stole") ||
+    (message.includes("Lock") && message.includes("stole"))
+  ) {
+    return true;
+  }
+  // Generic AbortError with "Lock" in the message — catch-all for
+  // future supabase-js wording shifts.
   if (err instanceof Error && err.name === "AbortError" && message.includes("Lock")) {
     return true;
   }
@@ -193,9 +208,15 @@ export async function withLockStealRetry<T>(op: () => Promise<T>): Promise<T> {
         return await op();
       } catch (retryErr) {
         lastError = retryErr;
-        // Fall through to the network-retry loop in case the lock-steal
-        // retry also hit a network blip.
-        if (!isTransientNetworkError(retryErr)) throw retryErr;
+        // Fall through to the network-retry loop on EITHER a network
+        // blip OR another lock-steal. Bursts like the 1067-op
+        // schedule-appointments hydrate can re-contest the auth lock
+        // back-to-back; throwing on the second contest left the user
+        // staring at a red toast even though the next backoff would
+        // have succeeded.
+        if (!isTransientNetworkError(retryErr) && !isLockStealError(retryErr)) {
+          throw retryErr;
+        }
       }
     } else if (!isTransientNetworkError(err)) {
       throw err;
