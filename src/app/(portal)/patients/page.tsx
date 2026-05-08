@@ -54,6 +54,41 @@ const CF_SORT_LEVELS_KEY = "casemate.cf-sort-levels.v1";
 const CF_MAX_SORT_LEVELS = 3;
 type CfSortLevel = { column: CfColumnId; asc: boolean };
 const defaultCfSortLevels: CfSortLevel[] = [{ column: "age", asc: false }];
+// Per-user "hide this category from Case Flow today" toggle. Persisted
+// as a JSON array of category labels — empty array (default) means show
+// everything. Used by chip toggles above the table so the user can
+// focus on e.g. "everything except Lien" without going into Settings.
+const CF_HIDDEN_CATEGORIES_KEY = "casemate.cf-hidden-categories.v1";
+type CfFollowUpCategory = "Lien / LOP" | "X-Ray" | "MRI / CT" | "Specialist";
+// Workflow order — same ranking as the Category column sort comparator
+// so chips read left-to-right in the order Lien → X-Ray → MRI → Specialist.
+const cfFollowUpCategoryOrder: CfFollowUpCategory[] = [
+  "Lien / LOP",
+  "X-Ray",
+  "MRI / CT",
+  "Specialist",
+];
+
+function loadCfHiddenCategories(): Set<CfFollowUpCategory> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(CF_HIDDEN_CATEGORIES_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    const valid = parsed.filter((entry): entry is CfFollowUpCategory =>
+      typeof entry === "string" && cfFollowUpCategoryOrder.includes(entry as CfFollowUpCategory),
+    );
+    return new Set(valid);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCfHiddenCategories(hidden: Set<CfFollowUpCategory>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CF_HIDDEN_CATEGORIES_KEY, JSON.stringify(Array.from(hidden)));
+}
 type CfColumnId = "patient" | "caseNumber" | "attorney" | "category" | "followUp" | "anchorDate" | "age" | "caseStatus";
 const defaultCfColumnOrder: CfColumnId[] = ["patient", "caseNumber", "attorney", "category", "followUp", "anchorDate", "age", "caseStatus"];
 const cfColumnLabels: Record<CfColumnId, string> = {
@@ -437,6 +472,25 @@ export default function PatientsPage() {
   const persistCfSortLevels = (next: CfSortLevel[]) => {
     setCfSortLevels(next);
     saveCfSortLevels(next);
+  };
+  // Per-user "hide this category" set — toggled by the chip row above
+  // the Case Flow table. Click a chip to gray it out and remove all of
+  // that category's rows from the list; click again to bring them back.
+  // Persisted across sessions.
+  const [cfHiddenCategories, setCfHiddenCategories] = useState<Set<CfFollowUpCategory>>(
+    () => loadCfHiddenCategories(),
+  );
+  const toggleCfCategoryVisibility = (category: CfFollowUpCategory) => {
+    setCfHiddenCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      saveCfHiddenCategories(next);
+      return next;
+    });
   };
   const [cfColumnOrder, setCfColumnOrder] = useState<CfColumnId[]>(() => loadCfColumnOrder());
   const [cfDragColumnId, setCfDragColumnId] = useState<CfColumnId | null>(null);
@@ -958,7 +1012,14 @@ export default function PatientsPage() {
       if (column === "caseStatus") return a.caseStatus.localeCompare(b.caseStatus);
       return 0;
     };
-    const items = [...followUpItems];
+    // Apply per-user category hide BEFORE sorting so the count of rows
+    // shown matches the chip toggles exactly. Hidden categories don't
+    // contribute to followUpCounts deliberately — the count badges
+    // above the table reflect the underlying queue, not the filtered
+    // view, so the user can still see "you have 3 lien items hidden".
+    const items = followUpItems.filter(
+      (entry) => !cfHiddenCategories.has(entry.category as CfFollowUpCategory),
+    );
     items.sort((a, b) => {
       for (const level of cfSortLevels) {
         const cmp = compareBy(a, b, level.column);
@@ -968,7 +1029,7 @@ export default function PatientsPage() {
       return 0;
     });
     return items;
-  }, [followUpItems, cfSortLevels]);
+  }, [followUpItems, cfSortLevels, cfHiddenCategories]);
 
   // --- To Do helpers ---
   const filteredTasks = useMemo(() => {
@@ -1457,7 +1518,33 @@ export default function PatientsPage() {
                 </p>
               </div>
             </div>
-            <div className="mt-3 flex flex-col gap-1.5 text-xs">
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="w-24 font-semibold text-[var(--text-muted)]">Show:</span>
+              {cfFollowUpCategoryOrder.map((category) => {
+                const isHidden = cfHiddenCategories.has(category);
+                // Display label for the lien chip honors the user's
+                // configured lienLabel ("Lien / LOP" by default but
+                // some offices call it "LOP", "Lien", etc.). Underlying
+                // category string in the queue is always "Lien / LOP".
+                const label = category === "Lien / LOP" ? lienLabel : category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                      isHidden
+                        ? "border-[var(--line-soft)] bg-white text-[var(--text-muted)] line-through"
+                        : "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
+                    }`}
+                    onClick={() => toggleCfCategoryVisibility(category)}
+                    title={isHidden ? `Show ${label} rows` : `Hide ${label} rows`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex flex-col gap-1.5 text-xs">
               {cfSortLevels.map((level, index) => (
                 <div key={index} className="flex flex-wrap items-center gap-2">
                   <span className="w-24 font-semibold text-[var(--text-muted)]">
