@@ -16,7 +16,6 @@ import { useOfficeSettings } from "@/hooks/use-office-settings";
 import { usePatientDiagnoses } from "@/hooks/use-patient-diagnoses";
 import { usePatientBilling } from "@/hooks/use-patient-billing";
 import { usePatientFollowUpOverrides } from "@/hooks/use-patient-follow-up-overrides";
-import { useQuickStatsSettings } from "@/hooks/use-quick-stats-settings";
 import { useReportTemplates } from "@/hooks/use-report-templates";
 import { useScheduleAppointments } from "@/hooks/use-schedule-appointments";
 import { useScheduleAppointmentTypes } from "@/hooks/use-schedule-appointment-types";
@@ -92,7 +91,6 @@ type SectionPanelKey =
   | "notes"
   | "reExam"
   | "relatedCases"
-  | "quickStats"
   | "appointments"
   | "diagnosis"
   | "letters"
@@ -1246,7 +1244,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const { contacts, addContact } = useContactDirectory();
   const { documentTemplates } = useDocumentTemplates();
   const { reportTemplates } = useReportTemplates();
-  const { quickStatsSettings } = useQuickStatsSettings();
   const { getRecord: getPatientBillingRecord, setCoreFields: setPatientBillingCoreFields } = usePatientBilling();
   const { scheduleAppointments, updateAppointment, removeAppointment } = useScheduleAppointments();
   const { appointmentTypes } = useScheduleAppointmentTypes();
@@ -1432,7 +1429,6 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     notes: false,
     reExam: false,
     relatedCases: false,
-    quickStats: false,
     appointments: false,
     diagnosis: false,
     letters: false,
@@ -2087,69 +2083,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setBilledAmount(encounterChargesTotal.toFixed(2));
   }
   const currentBillTotal = Number.parseFloat(billedAmount) || 0;
-  // Quick Stats rolls up to THREE consolidated boxes per user request:
-  //   1. Appointments — total count + "In · Out · Canceled" breakdown
-  //   2. Encounters    — total count + "Open · Closed" breakdown
-  //   3. Current Bill  — total encounter charges
-  // The per-metric visibility settings are retained for backwards
-  // compatibility but no longer render individual cards; if every
-  // metric inside a group is toggled off in Settings, the group box
-  // is hidden too so the user can still collapse sections if they want.
-  const quickStatRows = useMemo(
-    () => {
-      const appointmentsVisible =
-        quickStatsSettings.visibleStats.checkedInOut ||
-        quickStatsSettings.visibleStats.canceled ||
-        quickStatsSettings.visibleStats.noShow;
-      const encountersVisible =
-        quickStatsSettings.visibleStats.openEncounters ||
-        quickStatsSettings.visibleStats.closedEncounters;
-
-      const rows: Array<{
-        key: "appointments" | "encounters" | "currentBill";
-        label: string;
-        value: string;
-        helper?: string;
-      }> = [];
-
-      if (appointmentsVisible) {
-        const totalAppointments = checkedInOutCount + canceledCount;
-        rows.push({
-          key: "appointments",
-          label: "Appointments",
-          value: `${totalAppointments}`,
-          helper: `In ${checkedInCount} · Out ${checkedOutCount} · Canceled ${canceledCount}`,
-        });
-      }
-      if (encountersVisible) {
-        const openCount = openPatientEncounterRecords.length;
-        rows.push({
-          key: "encounters",
-          label: "Encounters",
-          value: `${openCount + closedEncounterCount}`,
-          helper: `Open ${openCount} · Closed ${closedEncounterCount}`,
-        });
-      }
-      if (quickStatsSettings.visibleStats.currentBill) {
-        rows.push({
-          key: "currentBill",
-          label: "Current Bill",
-          value: formatUsdCurrency(currentBillTotal),
-        });
-      }
-      return rows;
-    },
-    [
-      canceledCount,
-      checkedInCount,
-      checkedInOutCount,
-      checkedOutCount,
-      closedEncounterCount,
-      currentBillTotal,
-      openPatientEncounterRecords.length,
-      quickStatsSettings.visibleStats,
-    ],
-  );
+  // Quick Stats box used to live here — removed from the patient page
+  // per user request. The corresponding Settings → Quick Stats panel
+  // is left in place for other consumers (dashboard, etc.) but the
+  // patient-page rollup no longer renders.
 
   const matchedAttorneyContact = useMemo(
     () =>
@@ -4828,7 +4765,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         )}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      {/* 2-col on xl since Quick Stats was removed — Case Flow & To-Do
+          and Related Cases share the row. */}
+      <section className="grid gap-4 xl:grid-cols-2">
         <article className="panel-card p-4">
           <button
             className="flex w-full items-center justify-between rounded-xl bg-[#72bdcf] px-3 py-2 text-center text-lg font-semibold text-white"
@@ -5003,43 +4942,13 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           )}
         </article>
 
-        <article className="panel-card p-4">
-          <button
-            className="flex w-full items-center justify-between rounded-xl bg-[#72bdcf] px-3 py-2 text-center text-lg font-semibold text-white"
-            onClick={() => toggleSectionPanel("quickStats")}
-            type="button"
-          >
-            <span>Quick Stats</span>
-            <span className="text-xl">{sectionPanelsOpen.quickStats ? "−" : "+"}</span>
-          </button>
-          {sectionPanelsOpen.quickStats && (
-            <>
-              <p className="mt-2 text-xs text-[var(--text-muted)]">Configure visible items in Settings → Quick Stats.</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                {quickStatRows.map((row) => (
-                  <div
-                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2"
-                    key={`quick-stat-${row.key}`}
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      {row.label}
-                    </p>
-                    <p className="mt-1 text-xl font-semibold text-[var(--text-main)]">{row.value}</p>
-                    {row.helper && <p className="text-xs text-[var(--text-muted)]">{row.helper}</p>}
-                  </div>
-                ))}
-                {quickStatRows.length === 0 && (
-                  <p className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm text-[var(--text-muted)]">
-                    All quick stats are hidden. Enable them in Settings → Quick Stats.
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-        </article>
       </section>
 
-      <section className="panel-card p-4">
+      {/* 2-col pair on xl: Appointments / Encounters + Diagnosis Codes
+          sit side by side so the user can see scheduling at a glance
+          while building / verifying dx codes. */}
+      <section className="grid gap-4 xl:grid-cols-2">
+        <section className="panel-card p-4">
         <button
           className="flex w-full items-center justify-between gap-3 rounded-xl bg-[#72bdcf] px-3 py-2 text-lg font-semibold text-white"
           onClick={() => toggleSectionPanel("appointments")}
@@ -5654,8 +5563,15 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           </>
         )}
       </section>
+      </section>
 
-      <section className="panel-card p-4">
+      {/* 2-col pair: Letters + Reports (formerly "Full Narrative
+          Report"). Side-by-side so the user can decide which output
+          path they want — single template letter vs. full multi-
+          section narrative — without scrolling between two full-width
+          panels. */}
+      <section className="grid gap-4 xl:grid-cols-2">
+        <section className="panel-card p-4">
         <button
           className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-center text-lg font-semibold text-white ${isCompletePlan ? "bg-[#72bdcf]" : "bg-gray-400"}`}
           onClick={() => isCompletePlan && toggleSectionPanel("letters")}
@@ -5727,7 +5643,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           onClick={() => isCompletePlan && toggleSectionPanel("narrative")}
           type="button"
         >
-          <span>Full Narrative Report{!isCompletePlan ? " — Complete Plan" : ""}</span>
+          <span>Reports{!isCompletePlan ? " — Complete Plan" : ""}</span>
           {isCompletePlan ? (
             <span className="text-xl">{sectionPanelsOpen.narrative ? "−" : "+"}</span>
           ) : (
@@ -5785,6 +5701,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
             )}
           </>
         )}
+      </section>
       </section>
 
       {/* ── Patient Files ──────────────────────────────────────────────── */}
