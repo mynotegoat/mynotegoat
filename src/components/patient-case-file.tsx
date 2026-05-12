@@ -4555,6 +4555,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                   <p>Regions: {formatImagingRegionsSummary(entry, "mri")}</p>
                   <p>
                     Sent: {entry.sentDate || "-"}
+                    {" | Scheduled: "}{entry.scheduledDate || "-"}
                     {" | Completed: "}{entry.doneDate || "-"}
                     {" | Reviewed: "}{entry.reportReviewedDate || "-"}
                   </p>
