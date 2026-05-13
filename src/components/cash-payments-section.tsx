@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useCashPayments } from "@/hooks/use-cash-payments";
+import { useEncounterNotes } from "@/hooks/use-encounter-notes";
 import {
   cashPaymentTypeOptions,
   createCashPayment,
@@ -16,6 +17,7 @@ type Props = {
   patientId: string;
 };
 
+
 function getTodayUsDate(): string {
   const now = new Date();
   const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -26,7 +28,30 @@ function getTodayUsDate(): string {
 
 export function CashPaymentsSection({ patientId }: Props) {
   const { paymentsByPatient, updatePatientPayments } = useCashPayments();
+  // Pull encounter notes so we can auto-show "Owed" per payment row
+  // (sum of unitPrice × units on that date's encounter charges) and
+  // auto-fill the Amount when the office is adding a new row.
+  const { encounters } = useEncounterNotes();
   const entries = paymentsByPatient[patientId] ?? [];
+
+  // Map: US-date string → owed dollars, scoped to THIS patient.
+  // Memoized so the table doesn't recompute on every keystroke.
+  const owedByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const enc of encounters) {
+      if (enc.patientId !== patientId) continue;
+      const date = enc.encounterDate;
+      if (!date) continue;
+      const dayTotal = enc.charges.reduce(
+        (sum, c) => sum + (Number(c.unitPrice) || 0) * (Number(c.units) || 0),
+        0,
+      );
+      map.set(date, (map.get(date) ?? 0) + dayTotal);
+    }
+    return map;
+  }, [encounters, patientId]);
+
+  const draftOwed = (date: string) => owedByDate.get(date) ?? 0;
   const [draft, setDraft] = useState<{
     date: string;
     amount: string;
@@ -107,13 +132,33 @@ export function CashPaymentsSection({ patientId }: Props) {
           <UsDateInput
             className="w-full rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
             onChange={(formatted) =>
-              setDraft((current) => ({ ...current, date: formatted }))
+              setDraft((current) => {
+                // Auto-fill Amount from that date's encounter charges,
+                // but ONLY when the user hasn't already typed an
+                // amount — never override their input. They can still
+                // edit the auto-filled value after.
+                const next = { ...current, date: formatted };
+                if (!current.amount.trim()) {
+                  const owed = draftOwed(formatted);
+                  if (owed > 0) {
+                    next.amount = owed.toFixed(2);
+                  }
+                }
+                return next;
+              })
             }
             value={draft.date}
           />
         </label>
         <label className="grid gap-1">
-          <span className="text-xs font-semibold text-[var(--text-muted)]">Amount</span>
+          <span className="text-xs font-semibold text-[var(--text-muted)]">
+            Amount
+            {draftOwed(draft.date) > 0 && (
+              <span className="ml-1 text-[10px] font-normal text-emerald-700">
+                (owed {formatCashAmount(draftOwed(draft.date))})
+              </span>
+            )}
+          </span>
           <input
             className="rounded-lg border border-[var(--line-soft)] bg-white px-2 py-1 text-sm"
             inputMode="decimal"
@@ -187,6 +232,7 @@ export function CashPaymentsSection({ patientId }: Props) {
             <thead className="bg-[var(--bg-soft)] text-xs uppercase tracking-wider text-[var(--text-muted)]">
               <tr>
                 <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-right">Owed</th>
                 <th className="px-3 py-2 text-right">Amount</th>
                 <th className="px-3 py-2 text-right">Discount</th>
                 <th className="px-3 py-2 text-left">Payment</th>
@@ -195,38 +241,59 @@ export function CashPaymentsSection({ patientId }: Props) {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
-                <tr
-                  className="border-t border-[var(--line-soft)]"
-                  key={entry.id}
-                >
-                  <td className="px-3 py-2 font-mono">{entry.date}</td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    {formatCashAmount(entry.amount)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-[var(--text-muted)]">
-                    {entry.discount ? formatCashAmount(entry.discount) : "—"}
-                  </td>
-                  <td className="px-3 py-2">{entry.paymentType}</td>
-                  <td className="px-3 py-2 text-[var(--text-muted)]">
-                    {entry.note ?? ""}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700"
-                      onClick={() => handleDelete(entry.id)}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {entries.map((entry) => {
+                const owed = owedByDate.get(entry.date) ?? 0;
+                return (
+                  <tr
+                    className="border-t border-[var(--line-soft)]"
+                    key={entry.id}
+                  >
+                    <td className="px-3 py-2 font-mono">{entry.date}</td>
+                    <td className="px-3 py-2 text-right text-[var(--text-muted)]">
+                      {owed > 0 ? formatCashAmount(owed) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold">
+                      {formatCashAmount(entry.amount)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-[var(--text-muted)]">
+                      {entry.discount ? formatCashAmount(entry.discount) : "—"}
+                    </td>
+                    <td className="px-3 py-2">{entry.paymentType}</td>
+                    <td className="px-3 py-2 text-[var(--text-muted)]">
+                      {entry.note ?? ""}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700"
+                        onClick={() => handleDelete(entry.id)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="bg-[var(--bg-soft)]">
               <tr>
                 <td className="px-3 py-2 text-right font-semibold" colSpan={1}>
                   Total
+                </td>
+                <td className="px-3 py-2 text-right font-semibold text-[var(--text-muted)]">
+                  {(() => {
+                    // Sum owed across each UNIQUE entry date — don't
+                    // double-count if the office logged two cash rows
+                    // for the same encounter day.
+                    const seen = new Set<string>();
+                    let sum = 0;
+                    for (const e of entries) {
+                      if (seen.has(e.date)) continue;
+                      seen.add(e.date);
+                      sum += owedByDate.get(e.date) ?? 0;
+                    }
+                    return sum > 0 ? formatCashAmount(sum) : "—";
+                  })()}
                 </td>
                 <td className="px-3 py-2 text-right font-bold">
                   {formatCashAmount(total)}
