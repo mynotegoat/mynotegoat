@@ -51,10 +51,12 @@ function normalizeEntry(value: unknown): CashPaymentEntry | null {
   const id = normalizeText(row.id).trim();
   const date = normalizeText(row.date).trim();
   if (!id || !date) return null;
+  const discount = normalizeAmount(row.discount);
   return {
     id,
     date,
     amount: normalizeAmount(row.amount),
+    discount: discount > 0 ? discount : undefined,
     paymentType: normalizePaymentType(row.paymentType),
     note: normalizeText(row.note) || undefined,
     createdAt: normalizeText(row.createdAt) || nowIso(),
@@ -98,13 +100,16 @@ export function saveCashPayments(payments: CashPaymentsByPatient) {
 export function createCashPayment(input: {
   date: string;
   amount: number;
+  discount?: number;
   paymentType: CashPaymentEntry["paymentType"];
   note?: string;
 }): CashPaymentEntry {
+  const normalizedDiscount = normalizeAmount(input.discount);
   return {
     id: createId(),
     date: input.date,
     amount: normalizeAmount(input.amount),
+    discount: normalizedDiscount > 0 ? normalizedDiscount : undefined,
     paymentType: input.paymentType,
     note: input.note?.trim() || undefined,
     createdAt: nowIso(),
@@ -114,6 +119,11 @@ export function createCashPayment(input: {
 export function sumCashPayments(entries: CashPaymentEntry[] | undefined): number {
   if (!entries || entries.length === 0) return 0;
   return entries.reduce((sum, entry) => sum + entry.amount, 0);
+}
+
+export function sumCashDiscounts(entries: CashPaymentEntry[] | undefined): number {
+  if (!entries || entries.length === 0) return 0;
+  return entries.reduce((sum, entry) => sum + (entry.discount ?? 0), 0);
 }
 
 export function formatCashAmount(amount: number): string {

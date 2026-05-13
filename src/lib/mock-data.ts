@@ -75,6 +75,11 @@ export interface CashPaymentEntry {
   id: string;
   date: string; // US format MM/DD/YYYY
   amount: number;
+  /** Optional dollar discount applied alongside this payment. Tracked
+   *  separately from `amount` so the table shows "$80 paid, $20 off"
+   *  instead of having to back-calculate. Defaults to 0 / undefined
+   *  for existing rows that pre-date the field. */
+  discount?: number;
   paymentType: "Cash" | "Venmo" | "Zelle" | "Cash App" | "Credit Card" | "Check" | "Other";
   note?: string;
   createdAt: string;
