@@ -5295,6 +5295,41 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
                                 >
                                   <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 7-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" /></svg>
                                 </button>
+                              ) : linkedEncounter ? (
+                                // Encounter-only rows (no parent
+                                // appointment) — happens when an
+                                // encounter exists but the appointment
+                                // it was created from was deleted or
+                                // never existed. The row used to have
+                                // NO delete button, leaving the user
+                                // stuck with an orphan they couldn't
+                                // remove. Now the trash icon deletes
+                                // the encounter directly after a
+                                // confirm that mentions any attached
+                                // charges so it's never silent.
+                                <button
+                                  className="rounded-lg p-1.5 text-[#b43b34] hover:bg-red-50 transition-colors"
+                                  onClick={() => {
+                                    const chargeCount = linkedEncounter.charges.length;
+                                    const status = linkedEncounter.signed ? " (CLOSED)" : "";
+                                    const proceed = window.confirm(
+                                      `Delete this encounter${status} on ${linkedEncounter.encounterDate}${
+                                        chargeCount > 0
+                                          ? ` and its ${chargeCount} charge${chargeCount === 1 ? "" : "s"}`
+                                          : ""
+                                      }?\n\nThis cannot be undone.`,
+                                    );
+                                    if (!proceed) return;
+                                    deleteEncounter(linkedEncounter.id);
+                                    setEncounterMessage(
+                                      `Encounter on ${linkedEncounter.encounterDate} deleted.`,
+                                    );
+                                  }}
+                                  title="Delete encounter"
+                                  type="button"
+                                >
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m19 7-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" /></svg>
+                                </button>
                               ) : null}
                             </td>
                           </tr>
