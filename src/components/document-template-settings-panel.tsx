@@ -465,6 +465,19 @@ export function DocumentTemplateSettingsPanel({
                 <p className="mt-1 text-xs text-[var(--text-muted)]">
                   Click any field to insert it at the current cursor position.
                 </p>
+                {/* Help text for runtime prompt tokens. The user can
+                    type [[token_id]] anywhere in the body; on PDF
+                    generation a modal pops up asking for a value for
+                    each unique token. Token id becomes a humanized
+                    label (work_order_number → "Work Order Number"). */}
+                <p className="mt-2 rounded-lg border border-dashed border-[var(--line-soft)] bg-white px-2 py-1.5 text-xs text-[var(--text-muted)]">
+                  <strong>Tip:</strong> need a value you fill in each
+                  time? Type <code className="font-mono text-[var(--text-main)]">[[work_order_number]]</code> or{" "}
+                  <code className="font-mono text-[var(--text-main)]">[[days_off]]</code> directly into the body. When
+                  you generate the document a small modal asks for
+                  each value, then drops it into the letter. Use
+                  underscores instead of spaces.
+                </p>
                 <div className="mt-3 space-y-3">
                   {documentTemplateFieldGroups.map((group) => (
                     <div key={`template-auto-group-${group.label}`}>

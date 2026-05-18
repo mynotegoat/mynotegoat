@@ -24,7 +24,12 @@ import { useTasks } from "@/hooks/use-tasks";
 import { getContrastTextColor, withAlpha } from "@/lib/color-utils";
 import { getFormalTitle } from "@/lib/honorifics";
 import { loadPatientPagePrefs } from "@/lib/patient-page-prefs";
-import { renderDocumentTemplate, type DocumentTemplateScope } from "@/lib/document-templates";
+import {
+  getDocumentTemplatePromptIds,
+  humanizeTemplatePromptId,
+  renderDocumentTemplate,
+  type DocumentTemplateScope,
+} from "@/lib/document-templates";
 import {
   applyLabelValueHangingIndent,
   stripHtmlIndentation,
@@ -1543,6 +1548,18 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
   const [customDxError, setCustomDxError] = useState("");
   const [letterTemplateIdDraft, setLetterTemplateIdDraft] = useState("");
   const [letterMessage, setLetterMessage] = useState("");
+  // Runtime prompts for document templates. When a letter / referral
+  // / imaging template contains [[prompt_id]] tokens, the user gets a
+  // modal asking for each value before the PDF is generated. Use case:
+  // a subpoena invoice needs "Work Order Number"; a school excuse note
+  // needs "Days Off". Same mental model as the SOAP-macro [[prompts]]
+  // but a generic one-shot text input — no per-template schema.
+  const [docPromptState, setDocPromptState] = useState<{
+    title: string;
+    promptIds: string[];
+    answers: Record<string, string>;
+    onSubmit: (answers: Record<string, string>) => void;
+  } | null>(null);
   const [narrativeTemplateIdDraft, setNarrativeTemplateIdDraft] = useState("");
   const [narrativeMessage, setNarrativeMessage] = useState("");
   const [narrativePromptValues, setNarrativePromptValues] = useState<Record<string, string>>({});
@@ -2659,7 +2676,10 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     autoSavePatientFile({ specialistReferrals: nextSpecialists });
   };
 
-  const generateSpecialistReferralPdf = (entry: SpecialistReferral) => {
+  const generateSpecialistReferralPdf = (
+    entry: SpecialistReferral,
+    promptAnswers?: Record<string, string>,
+  ) => {
     if (!specialistReferralTemplate) {
       setSpecialistMessage("NO PDF. Create Template?");
       const shouldCreate = window.confirm("NO PDF. Create Template?");
@@ -2667,6 +2687,27 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         openTemplateSettings("specialistReferral");
       }
       return;
+    }
+
+    if (!promptAnswers) {
+      const headerBody = documentTemplates.header.active ? documentTemplates.header.body : "";
+      const seen = new Set<string>();
+      const promptIds: string[] = [];
+      for (const id of getDocumentTemplatePromptIds(specialistReferralTemplate.body)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      for (const id of getDocumentTemplatePromptIds(headerBody)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      if (promptIds.length > 0) {
+        setDocPromptState({
+          title: `Generate ${specialistReferralTemplate.name}`,
+          promptIds,
+          answers: Object.fromEntries(promptIds.map((id) => [id, ""])),
+          onSubmit: (answers) => generateSpecialistReferralPdf(entry, answers),
+        });
+        return;
+      }
     }
 
     const specialistContact =
@@ -2689,9 +2730,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     };
 
     const renderedHeader = documentTemplates.header.active
-      ? renderDocumentTemplate(documentTemplates.header.body, context)
+      ? renderDocumentTemplate(documentTemplates.header.body, context, undefined, promptAnswers)
       : "";
-    const renderedBody = renderDocumentTemplate(specialistReferralTemplate.body, context);
+    const renderedBody = renderDocumentTemplate(specialistReferralTemplate.body, context, undefined, promptAnswers);
     const docTitle = buildDocumentTitle(caseNumber, lastName, firstName, `${specialistReferralTemplate.name} - ${entry.specialist}`);
     const printableHtml = buildPrintableDocumentHtml({
       title: docTitle,
@@ -2714,7 +2755,11 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setSpecialistMessage(`Generated ${specialistReferralTemplate.name} for ${entry.specialist}. Use Save as PDF in the print dialog.`);
   };
 
-  const generateImagingRequestPdf = (mode: ImagingMode, entry: ImagingReferral) => {
+  const generateImagingRequestPdf = (
+    mode: ImagingMode,
+    entry: ImagingReferral,
+    promptAnswers?: Record<string, string>,
+  ) => {
     const setMessage = mode === "xray" ? setXrayMessage : setMriMessage;
     if (!imagingRequestTemplate) {
       setMessage("NO PDF. Create Template?");
@@ -2723,6 +2768,27 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
         openTemplateSettings("imagingRequest");
       }
       return;
+    }
+
+    if (!promptAnswers) {
+      const headerBody = documentTemplates.header.active ? documentTemplates.header.body : "";
+      const seen = new Set<string>();
+      const promptIds: string[] = [];
+      for (const id of getDocumentTemplatePromptIds(imagingRequestTemplate.body)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      for (const id of getDocumentTemplatePromptIds(headerBody)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      if (promptIds.length > 0) {
+        setDocPromptState({
+          title: `Generate ${imagingRequestTemplate.name}`,
+          promptIds,
+          answers: Object.fromEntries(promptIds.map((id) => [id, ""])),
+          onSubmit: (answers) => generateImagingRequestPdf(mode, entry, answers),
+        });
+        return;
+      }
     }
 
     // Look up the imaging center in the contacts directory so the
@@ -2749,9 +2815,9 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     };
 
     const renderedHeader = documentTemplates.header.active
-      ? renderDocumentTemplate(documentTemplates.header.body, context)
+      ? renderDocumentTemplate(documentTemplates.header.body, context, undefined, promptAnswers)
       : "";
-    const renderedBody = renderDocumentTemplate(imagingRequestTemplate.body, context);
+    const renderedBody = renderDocumentTemplate(imagingRequestTemplate.body, context, undefined, promptAnswers);
     const imgDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, `${imagingRequestTemplate.name} - ${entry.modalityLabel}`);
     const printableHtml = buildPrintableDocumentHtml({
       title: imgDocTitle,
@@ -2774,7 +2840,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
     setMessage(`Generated ${imagingRequestTemplate.name} for ${entry.modalityLabel}. Use Save as PDF in the print dialog.`);
   };
 
-  const generateLetterPdf = () => {
+  const generateLetterPdf = (promptAnswers?: Record<string, string>) => {
     if (!selectedLetterTemplate) {
       setLetterMessage("NO PDF. Create Template?");
       const shouldCreate = window.confirm("NO PDF. Create Template?");
@@ -2784,14 +2850,39 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
       return;
     }
 
+    // Collect [[prompt_id]] tokens from the body (and the header if
+    // it's active). If any exist and we don't have answers yet, defer
+    // generation behind the prompt modal — it re-invokes this
+    // function with the answers once the user fills them in.
+    if (!promptAnswers) {
+      const headerBody = documentTemplates.header.active ? documentTemplates.header.body : "";
+      const seen = new Set<string>();
+      const promptIds: string[] = [];
+      for (const id of getDocumentTemplatePromptIds(selectedLetterTemplate.body)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      for (const id of getDocumentTemplatePromptIds(headerBody)) {
+        if (!seen.has(id)) { seen.add(id); promptIds.push(id); }
+      }
+      if (promptIds.length > 0) {
+        setDocPromptState({
+          title: `Generate ${selectedLetterTemplate.name}`,
+          promptIds,
+          answers: Object.fromEntries(promptIds.map((id) => [id, ""])),
+          onSubmit: (answers) => generateLetterPdf(answers),
+        });
+        return;
+      }
+    }
+
     const context: Record<string, string> = {
       ...getCommonDocumentContext(),
     };
 
     const renderedHeader = documentTemplates.header.active
-      ? renderDocumentTemplate(documentTemplates.header.body, context)
+      ? renderDocumentTemplate(documentTemplates.header.body, context, undefined, promptAnswers)
       : "";
-    const renderedBody = renderDocumentTemplate(selectedLetterTemplate.body, context);
+    const renderedBody = renderDocumentTemplate(selectedLetterTemplate.body, context, undefined, promptAnswers);
     const letterDocTitle = buildDocumentTitle(caseNumber, lastName, firstName, selectedLetterTemplate.name);
     const printableHtml = buildPrintableDocumentHtml({
       title: letterDocTitle,
@@ -5686,7 +5777,7 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
 
               <button
                 className="rounded-lg border border-[var(--line-soft)] bg-white px-2.5 py-1 text-xs font-semibold transition-all active:scale-[0.97] active:shadow-inner"
-                onClick={generateLetterPdf}
+                onClick={() => generateLetterPdf()}
                 type="button"
               >
                 Generate PDF
@@ -6174,6 +6265,80 @@ export function PatientCaseFile({ patient }: { patient: PatientRecord }) {
           </button>
         </div>
       </div>
+
+      {/* Document-template prompt modal. Pops up when a letter /
+          referral / imaging request template body contains
+          [[prompt_id]] tokens that need user input before the PDF
+          can be generated. Same look + feel as the narrative-report
+          prompt modal below. */}
+      {docPromptState && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-8">
+          <form
+            className="panel-card max-h-[85vh] w-full max-w-md overflow-auto p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const submitted = docPromptState.onSubmit;
+              const answers = docPromptState.answers;
+              setDocPromptState(null);
+              submitted(answers);
+            }}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold">{docPromptState.title}</h3>
+              <button
+                className="rounded-lg border border-[var(--line-soft)] px-3 py-1 text-sm"
+                onClick={() => setDocPromptState(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-[var(--text-muted)]">
+              Fill in the values used by this template, then click Generate.
+            </p>
+            <div className="grid gap-3">
+              {docPromptState.promptIds.map((id) => (
+                <label className="grid gap-1" key={id}>
+                  <span className="text-sm font-semibold text-[var(--text-muted)]">
+                    {humanizeTemplatePromptId(id)}
+                  </span>
+                  <input
+                    autoFocus={id === docPromptState.promptIds[0]}
+                    className="rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
+                    onChange={(event) =>
+                      setDocPromptState((state) =>
+                        state
+                          ? {
+                              ...state,
+                              answers: { ...state.answers, [id]: event.target.value },
+                            }
+                          : null,
+                      )
+                    }
+                    placeholder="Type a value…"
+                    value={docPromptState.answers[id] ?? ""}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 text-sm font-semibold"
+                onClick={() => setDocPromptState(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-[var(--brand-primary)] px-3 py-1.5 text-sm font-semibold text-white"
+                type="submit"
+              >
+                Generate
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showNarrativePromptModal && narrativePromptTemplate && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/45 px-4 py-8">

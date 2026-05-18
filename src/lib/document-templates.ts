@@ -438,11 +438,47 @@ export function renderDocumentTemplate(
   body: string,
   context: Record<string, string>,
   rawHtmlTokens?: Set<string>,
+  /** Optional answers for [[prompt_id]] tokens collected at run-time
+   *  (e.g., "Work Order Number" on a subpoena invoice). Tokens with
+   *  no matching answer render as empty so the document doesn't
+   *  contain literal "[[token_id]]" strings. */
+  promptAnswers?: Record<string, string>,
 ) {
-  return body.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_match, tokenRaw: string) => {
+  let result = body.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_match, tokenRaw: string) => {
     const token = tokenRaw.toUpperCase();
     const value = context[token];
     if (typeof value !== "string") return "";
     return rawHtmlTokens?.has(token) ? value : escapeHtml(value);
   });
+  result = result.replace(/\[\[\s*([a-zA-Z0-9_]+)\s*\]\]/g, (_match, idRaw: string) => {
+    const id = idRaw.trim();
+    const value = promptAnswers?.[id];
+    return typeof value === "string" && value ? escapeHtml(value) : "";
+  });
+  return result;
+}
+
+/** Extract the set of [[prompt_id]] tokens used inside a template
+ *  body. Returns unique ids in first-seen order so the prompt modal
+ *  can render its inputs in the same sequence the user typed them. */
+export function getDocumentTemplatePromptIds(body: string): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  const matches = body.matchAll(/\[\[\s*([a-zA-Z0-9_]+)\s*\]\]/g);
+  for (const m of matches) {
+    const id = m[1].trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  return order;
+}
+
+/** Turn a token id like "work_order_number" into a human label like
+ *  "Work Order Number" so the prompt modal doesn't need a separate
+ *  label-storage schema. Underscores/dashes become spaces; each word
+ *  capitalizes. */
+export function humanizeTemplatePromptId(id: string): string {
+  const cleaned = id.replace(/[_-]+/g, " ").trim();
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
 }
