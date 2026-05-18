@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCashPayments } from "@/hooks/use-cash-payments";
 import { useEncounterNotes } from "@/hooks/use-encounter-notes";
 import {
@@ -153,21 +153,27 @@ export function CashPaymentsSection({ patientId }: Props) {
   };
 
   /** Commit the draft to storage. Creates the entry if it's the first
-   *  edit on this encounter; updates the entry otherwise. */
+   *  edit on this encounter; updates the entry otherwise. The
+   *  existing-entry lookup happens INSIDE the updater so two
+   *  back-to-back commits (e.g., blurring Discount then immediately
+   *  blurring Paid) don't both see "no existing" from stale closure
+   *  state and create duplicate entries — which is what produced the
+   *  inflated totals row (Owed × 1 but Discount/Paid × N entries). */
   const commitRow = (encounterId: string, encounterDate: string) => {
     const draft = rowDrafts[encounterId];
     if (!draft) return;
-    const existing = entries.find((e) => e.encounterId === encounterId) ?? null;
-    const nextAmount = draft.amount !== undefined ? parseMoney(draft.amount) : existing?.amount ?? 0;
-    const nextDiscountRaw = draft.discount !== undefined ? parseMoney(draft.discount) : existing?.discount ?? 0;
-    const nextNote = draft.note !== undefined ? draft.note : existing?.note ?? "";
+    const nextAmount = parseMoney(draft.amount);
+    const nextDiscountRaw = parseMoney(draft.discount);
+    const nextNote = draft.note;
 
-    if (existing) {
-      // Update in place. If amount=0 and discount=0 and no note, we
-      // intentionally leave the row stored (so the office can record
-      // "paid $0 today, defer to next visit"). Use Delete to remove.
-      updatePatientPayments(patientId, (current) =>
-        current.map((e) =>
+    updatePatientPayments(patientId, (current) => {
+      // Atomic check against the FRESH list inside the updater. If a
+      // duplicate somehow already exists for this encounterId, the
+      // .find returns the first one and we'll update it; subsequent
+      // duplicates get cleaned up by the dedup effect below.
+      const existing = current.find((e) => e.encounterId === encounterId);
+      if (existing) {
+        return current.map((e) =>
           e.id === existing.id
             ? {
                 ...e,
@@ -176,20 +182,12 @@ export function CashPaymentsSection({ patientId }: Props) {
                 note: nextNote.trim() || undefined,
               }
             : e,
-        ),
-      );
-    } else {
-      // Brand-new: only create if at least one field is non-empty so
-      // an accidental tab-through doesn't litter rows. Amount > 0 OR
-      // discount > 0 OR note has content qualifies.
+        );
+      }
+      // No existing entry — only create one if at least one field is
+      // non-empty so an accidental tab-through doesn't litter rows.
       if (nextAmount <= 0 && nextDiscountRaw <= 0 && !nextNote.trim()) {
-        // Nothing to save — clear the buffer.
-        setRowDrafts((current) => {
-          const next = { ...current };
-          delete next[encounterId];
-          return next;
-        });
-        return;
+        return current;
       }
       const entry = createCashPayment({
         date: encounterDate,
@@ -199,8 +197,8 @@ export function CashPaymentsSection({ patientId }: Props) {
         paymentType: "Cash",
         note: nextNote || undefined,
       });
-      updatePatientPayments(patientId, (current) => [entry, ...current]);
-    }
+      return [entry, ...current];
+    });
     // Clear the draft for this row once committed.
     setRowDrafts((current) => {
       const next = { ...current };
@@ -208,6 +206,45 @@ export function CashPaymentsSection({ patientId }: Props) {
       return next;
     });
   };
+
+  // One-time dedup pass for any duplicate entries already in storage
+  // (created before the race fix above). For each encounterId, keep
+  // exactly one entry — the one with the highest non-zero amount, or
+  // the most-recently-created if amounts tie. Runs once per patient
+  // load; the dedupedRef guards against re-running on every render.
+  const dedupedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (dedupedRef.current.has(patientId)) return;
+    const byEncounter = new Map<string, CashPaymentEntry[]>();
+    for (const entry of entries) {
+      if (!entry.encounterId) continue;
+      const list = byEncounter.get(entry.encounterId) ?? [];
+      list.push(entry);
+      byEncounter.set(entry.encounterId, list);
+    }
+    const duplicateIdsToRemove: string[] = [];
+    for (const [, list] of byEncounter) {
+      if (list.length < 2) continue;
+      // Pick the keeper: highest amount, then highest discount, then
+      // latest createdAt. The losers go in the remove list.
+      const sorted = [...list].sort((a, b) => {
+        if (b.amount !== a.amount) return b.amount - a.amount;
+        const ad = a.discount ?? 0;
+        const bd = b.discount ?? 0;
+        if (bd !== ad) return bd - ad;
+        return (b.createdAt || "").localeCompare(a.createdAt || "");
+      });
+      for (const loser of sorted.slice(1)) {
+        duplicateIdsToRemove.push(loser.id);
+      }
+    }
+    dedupedRef.current.add(patientId);
+    if (duplicateIdsToRemove.length === 0) return;
+    const toRemove = new Set(duplicateIdsToRemove);
+    updatePatientPayments(patientId, (current) =>
+      current.filter((e) => !toRemove.has(e.id)),
+    );
+  }, [entries, patientId, updatePatientPayments]);
 
   const handleSetRowPaymentType = (encounterId: string, paymentType: CashPaymentEntry["paymentType"]) => {
     const existing = entries.find((e) => e.encounterId === encounterId);
