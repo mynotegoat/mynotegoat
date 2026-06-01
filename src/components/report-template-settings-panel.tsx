@@ -356,6 +356,15 @@ export function ReportTemplateSettingsPanel() {
   }, [selectedTemplate, showLivePreview]);
 
   const [insertFlash, setInsertFlash] = useState<string | null>(null);
+  // Conditional wrap mode. When ON, clicking an auto-field button
+  // wraps the editor's current selection in {{#if FIELD}}...{{/if}}
+  // instead of inserting the {{FIELD}} token at the cursor. The
+  // renderer (renderDocumentTemplate) drops conditional blocks
+  // entirely when the field has no value, so a paragraph like
+  // "A second re-evaluation was performed on..." can be tied to the
+  // second re-exam date — patients without that date never see the
+  // paragraph in their generated narrative.
+  const [conditionalWrapMode, setConditionalWrapMode] = useState(false);
 
   const insertTextAtCursor = (text: string) => {
     if (!selectedTemplate) {
@@ -369,6 +378,29 @@ export function ReportTemplateSettingsPanel() {
     // Flash feedback
     setInsertFlash(text);
     setTimeout(() => setInsertFlash(null), 1200);
+  };
+
+  /** Wrap the editor's current selection in {{#if FIELD}}...{{/if}}.
+   *  Falls back to inserting an empty conditional block at the cursor
+   *  if no text is selected (the user can then type into it). */
+  const wrapSelectionConditional = (fieldOrPromptToken: string) => {
+    if (!selectedTemplate) return;
+    const upper = fieldOrPromptToken.toUpperCase();
+    let selectedText = "";
+    if (typeof window !== "undefined") {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+        selectedText = sel.toString();
+      }
+    }
+    const wrapped = `{{#if ${upper}}}${selectedText}{{/if}}`;
+    if (bodyEditorRef.current) {
+      bodyEditorRef.current.insertText(wrapped);
+    } else {
+      updateTemplate(selectedTemplate.id, { body: `${selectedTemplate.body}${wrapped}` });
+    }
+    setInsertFlash(wrapped.length > 40 ? `${wrapped.slice(0, 37)}...` : wrapped);
+    setTimeout(() => setInsertFlash(null), 1500);
   };
 
   const getPromptDraftKey = (templateId: string, promptId: string) => `${templateId}::${promptId}`;
@@ -592,6 +624,33 @@ export function ReportTemplateSettingsPanel() {
               </span>
             </div>
 
+            {/* Conditional wrap toggle. When ON, clicking any field
+                wraps the editor's current selection in
+                {{#if FIELD}}...{{/if}} instead of inserting the
+                token. The renderer drops conditional blocks entirely
+                when the field has no value, so paragraphs like "A
+                second re-evaluation was performed on..." can be tied
+                to PERSONAL_INJURY_RE_EXAM_2_DATE — patients without
+                that re-exam never see the paragraph in their PDF. */}
+            <div className="mb-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-2">
+              <label className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+                <input
+                  checked={conditionalWrapMode}
+                  onChange={(event) => setConditionalWrapMode(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Conditional wrap mode</span>
+                {conditionalWrapMode && (
+                  <span className="ml-2 rounded-md bg-amber-950 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-50">
+                    ACTIVE
+                  </span>
+                )}
+              </label>
+              <p className="mt-1 text-[11px] text-amber-900">
+                Highlight a sentence in the editor, flip this on, then click any field (including from the Encounter Section Picker below). The selection gets wrapped in <code className="font-mono">{`{{#if FIELD}}...{{/if}}`}</code> so it only appears in the generated narrative when that field has a value. Remember to turn it back OFF for normal inserts.
+              </p>
+            </div>
+
             <input
               className="mb-3 w-full rounded-xl border border-[var(--line-soft)] bg-white px-3 py-2 text-sm"
               onChange={(event) => setAutoFieldSearch(event.target.value)}
@@ -648,7 +707,11 @@ export function ReportTemplateSettingsPanel() {
                                   : "border-[var(--line-soft)] bg-white hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.04)]"
                               }`}
                               key={token}
-                              onClick={() => insertTextAtCursor(insertionTokenForField(token))}
+                              onClick={() =>
+                                conditionalWrapMode
+                                  ? wrapSelectionConditional(token)
+                                  : insertTextAtCursor(insertionTokenForField(token))
+                              }
                               title={label}
                               type="button"
                             >
@@ -677,7 +740,11 @@ export function ReportTemplateSettingsPanel() {
                                   : "border-[var(--line-soft)] bg-white hover:border-[var(--brand-primary)] hover:bg-[rgba(13,121,191,0.04)]"
                               }`}
                               key={prompt.id}
-                              onClick={() => insertTextAtCursor(insertionTokenForField(prompt.token))}
+                              onClick={() =>
+                                conditionalWrapMode
+                                  ? wrapSelectionConditional(prompt.token)
+                                  : insertTextAtCursor(insertionTokenForField(prompt.token))
+                              }
                               title={prompt.label}
                               type="button"
                             >
@@ -755,7 +822,15 @@ export function ReportTemplateSettingsPanel() {
                   const prefix = appointmentTypeToTokenPrefix(encounterPickerType);
                   if (!prefix) return;
                   const token = `${prefix}_${encounterPickerNumber}_${encounterPickerSection}`;
-                  insertTextAtCursor(insertionTokenForField(token));
+                  // Respect the conditional-wrap toggle here too —
+                  // the user's primary request was conditional blocks
+                  // gated by a computed encounter-section token like
+                  // PERSONAL_INJURY_RE_EXAM_2_DATE.
+                  if (conditionalWrapMode) {
+                    wrapSelectionConditional(token);
+                  } else {
+                    insertTextAtCursor(insertionTokenForField(token));
+                  }
                 }}
                 type="button"
               >
@@ -904,7 +979,11 @@ export function ReportTemplateSettingsPanel() {
                     </label>
                     <button
                       className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1.5 font-semibold"
-                      onClick={() => insertTextAtCursor(insertionTokenForField(prompt.token))}
+                      onClick={() =>
+                                conditionalWrapMode
+                                  ? wrapSelectionConditional(prompt.token)
+                                  : insertTextAtCursor(insertionTokenForField(prompt.token))
+                              }
                       type="button"
                     >
                       Insert Token
