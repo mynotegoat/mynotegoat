@@ -88,6 +88,13 @@ export default function KeyDatesPage() {
   const [draft, setDraft] = useState<KeyDateDraft>(() => createDraft());
   const [formError, setFormError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Inline delete confirmation. The previous implementation used
+  // window.confirm, but Chrome / Safari can suppress those dialogs
+  // entirely (per-site "Block dialogs" toggle, or after the user has
+  // dismissed too many). A blocked confirm returns undefined → the
+  // `if (confirm(...))` short-circuits and the Delete button looks
+  // dead. Two-click inline confirm is browser-proof.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const allWarningRows = useMemo(() => {
     const rows: ConflictRow[] = [];
@@ -353,13 +360,35 @@ export default function KeyDatesPage() {
                       >
                         Edit
                       </button>
-                      <button
-                        className="rounded-lg border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-3 py-1 font-semibold text-[#b43b34]"
-                        onClick={() => { if (window.confirm(`Delete key date "${row.reason}"?`)) removeKeyDate(row.id); }}
-                        type="button"
-                      >
-                        Delete
-                      </button>
+                      {pendingDeleteId === row.id ? (
+                        <>
+                          <button
+                            className="rounded-lg bg-[#b43b34] px-3 py-1 font-semibold text-white"
+                            onClick={() => {
+                              removeKeyDate(row.id);
+                              setPendingDeleteId(null);
+                            }}
+                            type="button"
+                          >
+                            Confirm Delete
+                          </button>
+                          <button
+                            className="rounded-lg border border-[var(--line-soft)] bg-white px-3 py-1 font-semibold"
+                            onClick={() => setPendingDeleteId(null)}
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="rounded-lg border border-[rgba(201,66,58,0.4)] bg-[rgba(201,66,58,0.08)] px-3 py-1 font-semibold text-[#b43b34]"
+                          onClick={() => setPendingDeleteId(row.id)}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
