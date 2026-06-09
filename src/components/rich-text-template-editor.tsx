@@ -426,22 +426,31 @@ export const RichTextTemplateEditor = forwardRef<
         onKeyUp={captureSelection}
         onMouseUp={captureSelection}
         onKeyDown={(event) => {
-          // Override the browser's default Enter behavior in
-          // contentEditable, which inserts a <p> block. Because
-          // .rich-text-editor p has a 0.7em bottom margin, every Enter
-          // press visually adds one line-height PLUS the margin — feels
-          // like two lines of jump, especially right after a macro
-          // insertion where the previous block is already a <p>.
+          // Enter / Shift+Enter handling.
           //
-          // Switch to a single <br> on plain Enter (consistent single-
-          // line spacing, matches user expectations for "next line").
-          // Shift+Enter still falls through to the default paragraph
-          // behavior for the occasional user who wants the bigger gap.
-          if (event.key === "Enter" && !event.shiftKey) {
+          // Previously this was inverted — plain Enter inserted a <br>
+          // (no visible gap) and Shift+Enter let the browser create a
+          // <p>. The intent was to avoid a "two-line jump" between
+          // paragraphs, but the actual UX consequence was that users
+          // typing notes one section per line ended up with everything
+          // glued onto the same line/paragraph. The only way to get
+          // proper section separation was to click the Paragraph
+          // toolbar button by hand on every break — which is exactly
+          // what the user complained about.
+          //
+          // Flipped to the conventional word-processor mapping:
+          //   - Plain Enter   → new paragraph (visible gap, same as
+          //                     clicking the Paragraph toolbar button)
+          //   - Shift+Enter   → soft line break (<br>, no gap) for the
+          //                     occasional case where you want the
+          //                     next line tucked tight against this one
+          //
+          // For the plain-Enter case we let the browser's default
+          // contentEditable behavior run — it produces a clean <p>
+          // block and places the caret inside the new paragraph,
+          // which is what every word processor / Gmail / Notion does.
+          if (event.key === "Enter" && event.shiftKey) {
             event.preventDefault();
-            // insertLineBreak is the standard execCommand for the
-            // Shift+Enter semantic. Fall back to insertHTML("<br>") on
-            // browsers that don't support it.
             const supportsLineBreak =
               typeof document.queryCommandSupported === "function" &&
               document.queryCommandSupported("insertLineBreak");
