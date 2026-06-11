@@ -1,4 +1,7 @@
 import { appointments as legacyAppointments } from "@/lib/mock-data";
+import { notifyChange } from "@/lib/local-sync";
+
+const SYNC_KEY_FOR_NOTIFY = "casemate.schedule-appointments.v1";
 
 export type AppointmentStatus =
   | "Scheduled"
@@ -402,6 +405,18 @@ export function replaceAppointmentsFromCloud(records: ScheduleAppointmentRecord[
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
   // Update the diff baseline so the next save doesn't re-push everything.
   previousAppointmentsById = new Map(sorted.map((a) => [a.id, a]));
+  // Fire the same in-tab change notification that saveScheduleAppointments
+  // uses, so any already-mounted useScheduleAppointments hook re-reads
+  // localStorage and React state catches up to the cloud-loaded data.
+  // Without this, the hook's state (initialized synchronously on mount
+  // from localStorage BEFORE the bootstrap ran) stays stale forever:
+  // localStorage and cloud both have the appointment, but React only
+  // sees the snapshot it captured on mount — so the patient page
+  // appointments table renders without the cloud-only rows until the
+  // user hard-refreshes. Symptom: "my 04/02/2026 appointment is in
+  // cloud but it's not showing on the patient page." Fix is to wake
+  // the hook the same way an explicit save would.
+  notifyChange(SYNC_KEY_FOR_NOTIFY);
 }
 
 export function createAppointmentId() {
