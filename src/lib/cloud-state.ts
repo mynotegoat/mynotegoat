@@ -2,6 +2,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { clearAllWorkspaceCaches, clearForeignWorkspaceCaches } from "@/lib/workspace-storage";
+import { notifyChange } from "@/lib/local-sync";
 
 type LocalSnapshot = Record<string, string>;
 
@@ -810,6 +811,20 @@ async function bootstrapTableBackedEntities() {
               try {
                 window.localStorage.setItem(key, JSON.stringify(value));
                 replacedCount += 1;
+                // Fire the same in-tab notification that an explicit save
+                // does, so any hook listening on this storage key
+                // (use-patient-follow-up-overrides, use-key-dates,
+                // use-office-settings, etc.) re-reads localStorage and
+                // React state catches up to the cloud-loaded data. Without
+                // this, hooks that initialized synchronously on mount —
+                // BEFORE the async bootstrap finished — never see the
+                // updated value. User-visible symptom: a checkbox/toggle
+                // was set on another device (or earlier session), the
+                // override IS in cloud and IS now in localStorage, but the
+                // current page renders unchecked until a hard refresh.
+                // Same exact bug pattern that was just fixed for the
+                // appointments bootstrap.
+                notifyChange(key);
               } catch (storageErr) {
                 // localStorage quota exceeded — skip this key but don't crash bootstrap
                 console.warn(`[Cloud Sync] Could not write "${key}" to localStorage (quota?):`, storageErr);

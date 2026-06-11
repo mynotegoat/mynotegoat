@@ -1,5 +1,6 @@
 import { encounters as seedEncounters } from "@/lib/mock-data";
 import { type MacroAnswerMap } from "@/lib/macro-templates";
+import { notifyChange } from "@/lib/local-sync";
 
 export const encounterSections = [
   "subjective",
@@ -739,6 +740,12 @@ export function replaceEncounterNotesFromCloud(cloudRecords: EncounterNoteRecord
     console.warn("[encounter-notes] localStorage quota exceeded during cloud merge");
   }
   previousNotesById = new Map(deduped.map((n) => [n.id, n]));
+  // Notify any mounted useEncounterNotes hook to re-read localStorage.
+  // Without this, the hook's React state stays frozen at whatever was
+  // cached when the component mounted — cloud-loaded encounters never
+  // surface until a hard refresh. Same bug pattern that was wiping the
+  // appointments hook's view of cloud-loaded data.
+  notifyChange(STORAGE_KEY);
 }
 
 /**
