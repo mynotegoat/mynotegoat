@@ -97,16 +97,34 @@ export async function fetchAllAppointmentsFromTable(): Promise<ScheduleAppointme
   const workspaceId = getActiveWorkspaceOrNull();
   if (!workspaceId) return null;
 
-  const { data, error } = await supabase
-    .from("schedule_appointments")
-    .select("*")
-    .eq("workspace_id", workspaceId);
-
-  if (error) {
-    console.error("[appointments-cloud] fetchAll failed:", error.message);
-    return null;
+  // Paginate. Supabase PostgREST caps a single response at 1000 rows
+  // by default, even when no .limit() is set. A workspace with >1000
+  // appointments would silently get the first 1000 only — and the
+  // bootstrap's "local has more than cloud → skip overwrite" safety
+  // check would then preserve a stale local cache forever because
+  // cloud LOOKS smaller than local. That's the exact failure mode
+  // behind "[Cloud Sync] SKIPPING appointment overwrite — local has
+  // 1726, cloud has only 1000". Loop with .range() until we get a
+  // short page (<1000 rows back).
+  const pageSize = 1000;
+  const all: AppointmentRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("schedule_appointments")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error("[appointments-cloud] fetchAll failed:", error.message);
+      return null;
+    }
+    const rows = (data ?? []) as AppointmentRow[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
   }
-  return ((data ?? []) as AppointmentRow[]).map(rowToAppointment);
+  return all.map(rowToAppointment);
 }
 
 export async function bulkUpsertAppointmentsToTable(

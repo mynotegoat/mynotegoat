@@ -149,16 +149,31 @@ export async function fetchAllPatientsFromTable(): Promise<PatientRecord[] | nul
   const workspaceId = getActiveWorkspaceOrNull();
   if (!workspaceId) return null;
 
-  const { data, error } = await supabase
-    .from("patients")
-    .select("*")
-    .eq("workspace_id", workspaceId);
-
-  if (error) {
-    console.error("[patients-cloud] fetchAll failed:", error.message);
-    return null;
+  // Paginate. Supabase PostgREST caps a single response at 1000 rows.
+  // Today's workspace has 583 patients so this is fine, but the cap
+  // will silently truncate future growth and the bootstrap safety
+  // check would then preserve a stale local cache (same failure mode
+  // we just hit on schedule_appointments). Loop with .range() so the
+  // fetch is correct at every workspace size.
+  const pageSize = 1000;
+  const all: PatientRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error("[patients-cloud] fetchAll failed:", error.message);
+      return null;
+    }
+    const rows = (data ?? []) as PatientRow[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
   }
-  return ((data ?? []) as PatientRow[]).map(rowToPatient);
+  return all.map(rowToPatient);
 }
 
 /**

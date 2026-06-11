@@ -104,16 +104,31 @@ export async function fetchAllEncounterNotesFromTable(): Promise<EncounterNoteRe
   const workspaceId = getActiveWorkspaceOrNull();
   if (!workspaceId) return null;
 
-  const { data, error } = await supabase
-    .from("encounter_notes")
-    .select("*")
-    .eq("workspace_id", workspaceId);
-
-  if (error) {
-    console.error("[encounter-notes-cloud] fetchAll failed:", error.message);
-    return null;
+  // Paginate. Supabase PostgREST caps a single response at 1000 rows.
+  // Without pagination, any workspace with >1000 encounters returns
+  // only the first 1000 — and the "Loaded 1000 encounter note(s) from
+  // table." console line is a giveaway that cloud actually has more.
+  // Same shape as the fix in fetchAllAppointmentsFromTable: loop
+  // with .range() until a short page comes back.
+  const pageSize = 1000;
+  const all: EncounterNoteRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("encounter_notes")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error("[encounter-notes-cloud] fetchAll failed:", error.message);
+      return null;
+    }
+    const rows = (data ?? []) as EncounterNoteRow[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
   }
-  return ((data ?? []) as EncounterNoteRow[]).map(rowToNote);
+  return all.map(rowToNote);
 }
 
 export async function bulkUpsertEncounterNotesToTable(
